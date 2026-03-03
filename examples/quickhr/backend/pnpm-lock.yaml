@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       '@agentified/mastra':
-        specifier: file:../../../src/ts-packages/mastra
-        version: file:../../../src/ts-packages/mastra(@ag-ui/client@0.0.47)(@ag-ui/mastra@1.0.0(ed62f4303e938a7355a023b9abf9d73d))(@agentified/sdk@file:../../../src/ts-packages/sdk)(@mastra/core@1.8.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@4.3.6))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@4.3.6))(zod@4.3.6)
+        specifier: ^0.0.3
+        version: 0.0.3(@ag-ui/client@0.0.47)(@ag-ui/mastra@1.0.0(ed62f4303e938a7355a023b9abf9d73d))(@agentified/sdk@0.0.3)(@mastra/core@1.8.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@4.3.6))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@4.3.6))(zod@4.3.6)
       '@agentified/sdk':
-        specifier: file:../../../src/ts-packages/sdk
-        version: file:../../../src/ts-packages/sdk
+        specifier: ^0.0.3
+        version: 0.0.3
       '@ai-sdk/google':
         specifier: ^3.0.31
-        version: 3.0.36(zod@4.3.6)
+        version: 3.0.37(zod@4.3.6)
       '@fastify/cors':
         specifier: ^10.0.2
         version: 10.1.0
@@ -85,17 +85,17 @@ packages:
   '@ag-ui/proto@0.0.47':
     resolution: {integrity: sha512-+KCrkeVeR6MulWoYUq9Fwm22gFlI9aKG50eKYRtbTM/Yuei/Che5vjbF297XfSnGUunzScrOmdnTeTCprrtb7A==}
 
-  '@agentified/mastra@file:../../../src/ts-packages/mastra':
-    resolution: {directory: ../../../src/ts-packages/mastra, type: directory}
+  '@agentified/mastra@0.0.3':
+    resolution: {integrity: sha512-SdffhAyuN529P7xJFVzJrIoC9sZTdItCAx4grxfU2lD9Fmv//LW49KmdyR8aQ8vlpIEvX+rycKs8uHejkXTnaQ==}
     peerDependencies:
       '@ag-ui/client': '>=0.0.45'
       '@ag-ui/mastra': '>=1.0.0'
-      '@agentified/sdk': workspace:*
+      '@agentified/sdk': 0.0.3
       '@mastra/core': '>=1.0.0'
       zod: '>=3.0.0'
 
-  '@agentified/sdk@file:../../../src/ts-packages/sdk':
-    resolution: {directory: ../../../src/ts-packages/sdk, type: directory}
+  '@agentified/sdk@0.0.3':
+    resolution: {integrity: sha512-oD3EZHx42GRCiKiuJ8DqPbRGOtqb20ejYDPyETPUAP/phHTKeimpXX/YdJzgVRDS/48kG59CRGflo70uJ5argw==}
 
   '@ai-sdk/anthropic@2.0.67':
     resolution: {integrity: sha512-hGtsfU1Dh1r9oBfctZy9+Wb8nSPiD8hBYIVYLGbFSPRrfliyBysJFaenHOGYR0Rd2R8O9ow2dxi05Qk5awerBw==}
@@ -103,8 +103,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@2.0.48':
-    resolution: {integrity: sha512-cvBOSfyd2MM5SyOygMX3MK96ZHdYDptYZ7WVum3VGyFKDm1Eb2YJI1KfS/XL7ccxta/GFZrWO4Ll3QD0jEodtw==}
+  '@ai-sdk/gateway@2.0.49':
+    resolution: {integrity: sha512-z/+aR/5y0d6Bp7K96hTraKGNt2ltypzpH/Kr6+JzGEZ2hYLYy5mKFg0Xi7Tne6MqKy8kjl4MiiqlGqFEPixpUw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -115,8 +115,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/google@3.0.36':
-    resolution: {integrity: sha512-Bex79zKP9dxCTjKMR+uiS3EUNd7I812zdsFGAV+FD38Oa6S8savFn1PoIEhSH/x+bxWDfp2dR5IuZP51bePUpQ==}
+  '@ai-sdk/google@3.0.37':
+    resolution: {integrity: sha512-hZ7nO55+GfQEWJe2B5XRoLNeEubMTuk6OjJJUDS+XCtjKLCd973rRkc62vS86rHw5VuCGITwn3gUZRhSbuX5vw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -941,8 +941,8 @@ packages:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
     engines: {node: '>= 0.6'}
 
-  ai@5.0.142:
-    resolution: {integrity: sha512-Esx0GhEavWffxwWL9gHAgfM7LaPMQ1vo+qf+sZDTiQaJCj3x52hnV9WsYW/j+rWuf//+p6dAIrF/t7YSa+HNVQ==}
+  ai@5.0.143:
+    resolution: {integrity: sha512-kThdoS70rwR7ilFZqm4BX5dEGz8frDR1TH0REdOVKlVCuO8PxzZ44eJ8kmIrbPdRiY2rx7hGE5jlLuD9j9zo2A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -2232,16 +2232,16 @@ snapshots:
       '@bufbuild/protobuf': 2.11.0
       '@protobuf-ts/protoc': 2.11.1
 
-  '@agentified/mastra@file:../../../src/ts-packages/mastra(@ag-ui/client@0.0.47)(@ag-ui/mastra@1.0.0(ed62f4303e938a7355a023b9abf9d73d))(@agentified/sdk@file:../../../src/ts-packages/sdk)(@mastra/core@1.8.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@4.3.6))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@4.3.6))(zod@4.3.6)':
+  '@agentified/mastra@0.0.3(@ag-ui/client@0.0.47)(@ag-ui/mastra@1.0.0(ed62f4303e938a7355a023b9abf9d73d))(@agentified/sdk@0.0.3)(@mastra/core@1.8.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@4.3.6))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@4.3.6))(zod@4.3.6)':
     dependencies:
       '@ag-ui/client': 0.0.47
       '@ag-ui/mastra': 1.0.0(ed62f4303e938a7355a023b9abf9d73d)
-      '@agentified/sdk': file:../../../src/ts-packages/sdk
+      '@agentified/sdk': 0.0.3
       '@mastra/core': 1.8.0(@cfworker/json-schema@4.1.1)(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(quansync@0.2.11)(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(openapi-types@12.1.3)(zod@4.3.6))(@types/json-schema@7.0.15)(openapi-types@12.1.3)(zod@4.3.6)
       rxjs: 7.8.2
       zod: 4.3.6
 
-  '@agentified/sdk@file:../../../src/ts-packages/sdk': {}
+  '@agentified/sdk@0.0.3': {}
 
   '@ai-sdk/anthropic@2.0.67(zod@3.25.76)':
     dependencies:
@@ -2249,7 +2249,7 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.21(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/gateway@2.0.48(zod@3.25.76)':
+  '@ai-sdk/gateway@2.0.49(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
       '@ai-sdk/provider-utils': 3.0.21(zod@3.25.76)
@@ -2262,7 +2262,7 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.21(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/google@3.0.36(zod@4.3.6)':
+  '@ai-sdk/google@3.0.37(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.17(zod@4.3.6)
@@ -2368,7 +2368,7 @@ snapshots:
       '@hono/node-server': 1.19.10(hono@4.12.4)
       '@langchain/core': 0.3.80(@opentelemetry/api@1.9.0)
       '@scarf/scarf': 1.4.0
-      ai: 5.0.142(zod@3.25.76)
+      ai: 5.0.143(zod@3.25.76)
       class-transformer: 0.5.1
       class-validator: 0.14.4
       graphql: 16.13.0
@@ -2415,7 +2415,7 @@ snapshots:
       '@ai-sdk/mcp': 0.0.8(zod@3.25.76)
       '@ai-sdk/openai': 2.0.95(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)
-      ai: 5.0.142(zod@3.25.76)
+      ai: 5.0.143(zod@3.25.76)
       rxjs: 7.8.1
       zod: 3.25.76
     transitivePeerDependencies:
@@ -3083,9 +3083,9 @@ snapshots:
       mime-types: 3.0.2
       negotiator: 1.0.0
 
-  ai@5.0.142(zod@3.25.76):
+  ai@5.0.143(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 2.0.48(zod@3.25.76)
+      '@ai-sdk/gateway': 2.0.49(zod@3.25.76)
       '@ai-sdk/provider': 2.0.1
       '@ai-sdk/provider-utils': 3.0.21(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
