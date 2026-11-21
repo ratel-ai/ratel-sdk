@@ -344,7 +344,7 @@ jobs:
     if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'rankers-py'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Resolve spec
@@ -414,7 +414,7 @@ jobs:
             python_arch: x64
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           architecture: ${{ matrix.python_arch }}
@@ -509,7 +509,7 @@ jobs:
     if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry-py'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Resolve spec
