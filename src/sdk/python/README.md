@@ -4,14 +4,14 @@
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
-    <a href="https://github.com/ratel-ai/ratel">GitHub</a> •
+    <a href="https://github.com/ratel-ai/ratel-sdk">GitHub</a> •
     <a href="https://discord.gg/75vAPdjYqT">Discord</a>
   </p>
 
   <p>
     <a href="https://pypi.org/project/ratel-ai/"><img src="https://img.shields.io/pypi/v/ratel-ai?label=pypi&color=3775a9" alt="PyPI" /></a>
-    <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
-    <a href="https://github.com/ratel-ai/ratel/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
+    <a href="https://github.com/ratel-ai/ratel-sdk/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel-sdk?style=social" alt="GitHub stars" /></a>
+    <a href="https://github.com/ratel-ai/ratel-sdk/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
   </p>
 </div>
 
@@ -165,7 +165,7 @@ await catalog.invoke("read_github_issues", {}, turn_id)  # pairs with the first
 await catalog.invoke("create_linear_task", {}, turn_id)  # pairs with the second
 ```
 
-Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel/tree/main/examples/pydantic-ai).
+Continue with the [Python guide](https://docs.ratel.sh/docs/sdks/python), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-python), or the [Pydantic AI example](https://github.com/ratel-ai/ratel-sdk/tree/main/examples/pydantic-ai).
 
 ## Your own retriever or reranker (experimental)
 

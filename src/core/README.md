@@ -4,15 +4,15 @@
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
-    <a href="https://github.com/ratel-ai/ratel">GitHub</a> •
+    <a href="https://github.com/ratel-ai/ratel-sdk">GitHub</a> •
     <a href="https://discord.gg/75vAPdjYqT">Discord</a>
   </p>
 
   <p>
     <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
     <a href="https://docs.rs/ratel-ai-core"><img src="https://img.shields.io/docsrs/ratel-ai-core?label=docs.rs" alt="docs.rs" /></a>
-    <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
-    <a href="https://github.com/ratel-ai/ratel/blob/main/LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0 license" /></a>
+    <a href="https://github.com/ratel-ai/ratel-sdk/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel-sdk?style=social" alt="GitHub stars" /></a>
+    <a href="https://github.com/ratel-ai/ratel-sdk/blob/main/LICENSE-APACHE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0 license" /></a>
   </p>
 </div>
 
@@ -60,4 +60,4 @@ fn main() {
 Package layout: `src/` holds the retrieval and trace engine, including `embedding_artifact.rs` (wire format / merge) and `artifact_warm.rs` (miss policy and warm errors) for build-time dense-cache warming ([ADR 0018](../../docs/adr/0018-build-time-embedding-artifacts.md)); artifact persistence is host-owned and the core artifact APIs accept/return bytes with no artifact filesystem I/O. `rerank.rs` holds the two-stage search options (`SearchOptions`, `Reranker`, `SearchError`) behind `search_with_options`, and the phases a caller-supplied ranking function plugs into (`RankCandidate`, `StageOne`, `RerankOutcome`): `rank_candidates` → `complete_custom_search` and `stage_one` → `complete_rerank` ([ADR 0027](../../docs/adr/0027-custom-retriever-and-reranker-functions.md)). Vendor clients for such functions are not in core; they live in [`src/rankers`](../rankers/README.md) ([ADR 0028](../../docs/adr/0028-vendor-rankers-as-plugin-packages.md)). `examples/` contains runnable demos, and `tests/` covers integration behavior.
 From a repository checkout, run `cargo test -p ratel-ai-core` or `cargo run -p ratel-ai-core --example search_demo`.
 
-Continue with [tool retrieval](https://docs.ratel.sh/docs/tool-retrieval), the [Rust API reference](https://docs.rs/ratel-ai-core/latest/ratel_ai_core/), or the [source repository](https://github.com/ratel-ai/ratel). Benchmark results are maintained separately in [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench).
+Continue with [tool retrieval](https://docs.ratel.sh/docs/tool-retrieval), the [Rust API reference](https://docs.rs/ratel-ai-core/latest/ratel_ai_core/), or the [source repository](https://github.com/ratel-ai/ratel-sdk). Benchmark results are maintained separately in [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench).

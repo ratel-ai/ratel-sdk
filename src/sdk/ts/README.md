@@ -4,14 +4,14 @@
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
-    <a href="https://github.com/ratel-ai/ratel">GitHub</a> •
+    <a href="https://github.com/ratel-ai/ratel-sdk">GitHub</a> •
     <a href="https://discord.gg/75vAPdjYqT">Discord</a>
   </p>
 
   <p>
     <a href="https://www.npmjs.com/package/@ratel-ai/sdk"><img src="https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837" alt="npm" /></a>
-    <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
-    <a href="https://github.com/ratel-ai/ratel/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
+    <a href="https://github.com/ratel-ai/ratel-sdk/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel-sdk?style=social" alt="GitHub stars" /></a>
+    <a href="https://github.com/ratel-ai/ratel-sdk/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
   </p>
 </div>
 
@@ -305,7 +305,7 @@ the standard OTel/local trace funnel. `adaptTo` infers the framework's tool and 
 app code needs no casts. A framework tool registered on the un-adapted core throws an error
 pointing at the adapter package to install. See ADR-0013.
 
-Continue with the [TypeScript guide](https://docs.ratel.sh/docs/sdks/typescript), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-typescript), or the [Vercel AI SDK example](https://github.com/ratel-ai/ratel/tree/main/examples/ai-sdk).
+Continue with the [TypeScript guide](https://docs.ratel.sh/docs/sdks/typescript), [capability tools](https://docs.ratel.sh/docs/capability-tools), [API reference](https://docs.ratel.sh/docs/api/sdk-typescript), or the [Vercel AI SDK example](https://github.com/ratel-ai/ratel-sdk/tree/main/examples/ai-sdk).
 
 ## Facts (experimental)
 

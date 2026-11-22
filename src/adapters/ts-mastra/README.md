@@ -1,6 +1,6 @@
 # `@ratel-ai/mastra`
 
-The [Mastra](https://mastra.ai) (`@mastra/core`) adapter for [Ratel](https://github.com/ratel-ai/ratel). `ratel(config).adaptTo(mastra())` layers a framework-shaped view over the framework-neutral core (ADR-0013), so a Mastra agent registers its own `createTool()`s, hands the model Ratel's capability funnel, and gets per-turn recall — all in Mastra's native `Tool` and `MastraDBMessage` shapes, with no glue in app code.
+The [Mastra](https://mastra.ai) (`@mastra/core`) adapter for [Ratel](https://github.com/ratel-ai/ratel-sdk). `ratel(config).adaptTo(mastra())` layers a framework-shaped view over the framework-neutral core (ADR-0013), so a Mastra agent registers its own `createTool()`s, hands the model Ratel's capability funnel, and gets per-turn recall — all in Mastra's native `Tool` and `MastraDBMessage` shapes, with no glue in app code.
 
 Ratel keeps the model's tool list small and stable: instead of advertising every tool, it exposes three capability tools (`search_capabilities` / `invoke_tool` / `get_skill_content`) and injects a ranked, per-turn `search_capabilities` result for the current user message. The core owns all state and every guard (reserved ids, top-K clamp, first-registration-wins, recall-id counter); the adapter is just three codecs plus one recall idiom.
 

@@ -17,7 +17,7 @@ The SDKs keep the embedded in-process engine; setting `RATEL_URL` selects a remo
 
 ## Ground truth (read these first)
 
-- [SDK README](https://github.com/ratel-ai/ratel/blob/main/packages/sdk/README.md): What the SDK is, why, choose-your-path table, quickstart for each surface.
+- [SDK README](https://github.com/ratel-ai/ratel-sdk/blob/main/packages/sdk/README.md): What the SDK is, why, choose-your-path table, quickstart for each surface.
 
 ## What Ratel is not
 
@@ -57,13 +57,13 @@ The SDKs need **no server**, and Ratel Cloud is **not yet public**. The engine i
 
 ## Components
 
-- [Rust engine (`ratel-ai-core`)](https://github.com/ratel-ai/ratel/blob/main/src/core/README.md): Retrieval over a text projection of each tool: its name, description and argument names. A parameter's own documentation and enum values are deliberately not indexed — they describe an argument, not a purpose (ADR-0021). The engine is in-process; dense embeddings may be local or come from a configured endpoint. The base everything else wraps.
-- [TypeScript SDK (`@ratel-ai/sdk`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md): NAPI-bound wrapper. Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, `searchCapabilitiesTool`, `invokeToolTool`, `getSkillContentTool`, `registerMcpServer`. Its opt-in, TypeScript-only `experimentalDefineExperiment` factory wraps host-supplied selectors for deterministic A/B assignment and bounded shadow evaluation; it does not change default catalog retrieval. Ships pre-built natives — no Rust toolchain required to install.
-- [Python SDK (`ratel-ai`)](https://github.com/ratel-ai/ratel/blob/main/src/sdk/python/README.md): PyO3-bound wrapper, the mirror of the TypeScript SDK. Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, `search_capabilities_tool`, `invoke_tool_tool`, `get_skill_content_tool`, `register_mcp_server`. Ships pre-built abi3 wheels — no Rust toolchain required to install.
-- [Vercel AI SDK adapter (`@ratel-ai/vercel-ai-sdk`)](https://github.com/ratel-ai/ratel/blob/main/src/adapters/ts-vercel-ai-sdk/README.md): `ratel(config).adaptTo(aiSdk())` speaks the AI SDK's native `Tool` / `ModelMessage` shapes, with `appendRecall` / `prepareStep` recall idioms. Supports `ai` v5, v6, and v7. Its `/otel` subpath adds `RatelOtelIntegration`, an `ai@7`-only telemetry integration that stamps `ratel.origin` onto the AI SDK's `gen_ai.*` spans on a provider the host owns.
-- [Mastra adapter (`@ratel-ai/mastra`)](https://github.com/ratel-ai/ratel/blob/main/src/adapters/ts-mastra/README.md): `ratel(config).adaptTo(mastra())` over `@mastra/core`'s tool and message types, through the same adapter SPI.
-- [Rankers plugin (`@ratel-ai/rankers-plugin`, `ratel-ai-rankers-plugin`)](https://github.com/ratel-ai/ratel/blob/main/src/rankers/README.md): experimental retrieve/rerank plugins for decision models (Jev, OpenAI Decisions), kept out of the SDKs so neither carries vendor code (ADR-0028). They re-export the SDK's plugin contract (`RankFn`, `RetrieverError`, `definePlugin`).
-- [Telemetry vocabulary (`@ratel-ai/telemetry`, `ratel-ai-telemetry`)](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/README.md): the `ratel.*` / `gen_ai.*` constants pinned to OpenTelemetry semconv, shipped OTel-free for npm, PyPI, and crates.io. In TypeScript the **host owns the OpenTelemetry provider** — the SDK only emits onto whatever is registered. Python keeps turnkey `init()` sugar behind the `[otlp]` extra.
+- [Rust engine (`ratel-ai-core`)](https://github.com/ratel-ai/ratel-sdk/blob/main/src/core/README.md): Retrieval over a text projection of each tool: its name, description and argument names. A parameter's own documentation and enum values are deliberately not indexed — they describe an argument, not a purpose (ADR-0021). The engine is in-process; dense embeddings may be local or come from a configured endpoint. The base everything else wraps.
+- [TypeScript SDK (`@ratel-ai/sdk`)](https://github.com/ratel-ai/ratel-sdk/blob/main/src/sdk/ts/README.md): NAPI-bound wrapper. Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, `searchCapabilitiesTool`, `invokeToolTool`, `getSkillContentTool`, `registerMcpServer`. Its opt-in, TypeScript-only `experimentalDefineExperiment` factory wraps host-supplied selectors for deterministic A/B assignment and bounded shadow evaluation; it does not change default catalog retrieval. Ships pre-built natives — no Rust toolchain required to install.
+- [Python SDK (`ratel-ai`)](https://github.com/ratel-ai/ratel-sdk/blob/main/src/sdk/python/README.md): PyO3-bound wrapper, the mirror of the TypeScript SDK. Exposes `ToolRegistry`, `ToolCatalog`, `SkillCatalog`, `search_capabilities_tool`, `invoke_tool_tool`, `get_skill_content_tool`, `register_mcp_server`. Ships pre-built abi3 wheels — no Rust toolchain required to install.
+- [Vercel AI SDK adapter (`@ratel-ai/vercel-ai-sdk`)](https://github.com/ratel-ai/ratel-sdk/blob/main/src/adapters/ts-vercel-ai-sdk/README.md): `ratel(config).adaptTo(aiSdk())` speaks the AI SDK's native `Tool` / `ModelMessage` shapes, with `appendRecall` / `prepareStep` recall idioms. Supports `ai` v5, v6, and v7. Its `/otel` subpath adds `RatelOtelIntegration`, an `ai@7`-only telemetry integration that stamps `ratel.origin` onto the AI SDK's `gen_ai.*` spans on a provider the host owns.
+- [Mastra adapter (`@ratel-ai/mastra`)](https://github.com/ratel-ai/ratel-sdk/blob/main/src/adapters/ts-mastra/README.md): `ratel(config).adaptTo(mastra())` over `@mastra/core`'s tool and message types, through the same adapter SPI.
+- [Rankers plugin (`@ratel-ai/rankers-plugin`, `ratel-ai-rankers-plugin`)](https://github.com/ratel-ai/ratel-sdk/blob/main/src/rankers/README.md): experimental retrieve/rerank plugins for decision models (Jev, OpenAI Decisions), kept out of the SDKs so neither carries vendor code (ADR-0028). They re-export the SDK's plugin contract (`RankFn`, `RetrieverError`, `definePlugin`).
+- [Telemetry vocabulary (`@ratel-ai/telemetry`, `ratel-ai-telemetry`)](https://github.com/ratel-ai/ratel-sdk/blob/main/src/telemetry/README.md): the `ratel.*` / `gen_ai.*` constants pinned to OpenTelemetry semconv, shipped OTel-free for npm, PyPI, and crates.io. In TypeScript the **host owns the OpenTelemetry provider** — the SDK only emits onto whatever is registered. Python keeps turnkey `init()` sugar behind the `[otlp]` extra.
 - [ratel-local (`ratel-mcp` / `@ratel-ai/mcp-server`)](https://github.com/ratel-ai/ratel-mcp): the local distribution of Ratel, in the sibling `ratel-ai/ratel-mcp` repo. `createMcpServer(catalog, opts)` to expose a catalog over MCP; `buildGatewayFromConfig(config)` to spin up a gateway from a Claude-Code-shaped `mcpServers` config; OAuth 2.1 / PKCE for HTTP & SSE upstreams.
 
 ## Common pitfalls
@@ -144,7 +144,7 @@ new NodeSDK({ spanProcessors: [/* yours */], logRecordProcessors: [/* yours */] 
 
 `@ratel-ai/telemetry` (npm) is **vocabulary only** — the `ratel.*` constants plus the content-capture gate, zero dependencies, no OpenTelemetry SDK, no exporter config. Recommend it only to someone hand-emitting Ratel-shaped spans, never as the way to "turn telemetry on". Python is the deliberate exception: it keeps turnkey exporter sugar as `init()` behind the optional `[otlp]` extra.
 
-**The trap worth warning about:** a vendor span processor can silently drop most of Ratel's signal *after* it arrives. A stock `new LangfuseSpanProcessor()` keeps a span only if it carries a `gen_ai.*` attribute or comes from a scope it already knows, and `@ratel-ai/sdk` is on neither list — so tool-execution spans survive while pure-`ratel.*` spans (`ratel.search`, `ratel.skill.load`, `ratel.experiment.arm`, …) are discarded, with no error. The fix is one line of the vendor's own config, keyed on instrumentation **scope** (`@ratel-ai/sdk` in TS, `ratel-ai` in Python), never on a `ratel.` span-name prefix. Full wiring recipes: [src/telemetry/README.md](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/README.md).
+**The trap worth warning about:** a vendor span processor can silently drop most of Ratel's signal *after* it arrives. A stock `new LangfuseSpanProcessor()` keeps a span only if it carries a `gen_ai.*` attribute or comes from a scope it already knows, and `@ratel-ai/sdk` is on neither list — so tool-execution spans survive while pure-`ratel.*` spans (`ratel.search`, `ratel.skill.load`, `ratel.experiment.arm`, …) are discarded, with no error. The fix is one line of the vendor's own config, keyed on instrumentation **scope** (`@ratel-ai/sdk` in TS, `ratel-ai` in Python), never on a `ratel.` span-name prefix. Full wiring recipes: [src/telemetry/README.md](https://github.com/ratel-ai/ratel-sdk/blob/main/src/telemetry/README.md).
 
 ### Retrieval experiments are experimental, opt-in, and TypeScript-only
 
@@ -159,8 +159,8 @@ and async parentage survive. Export both signals: arm dispatches are spans, whil
 comparisons, lifecycle records, invocations, and outcomes are Logs EventRecords that require a
 log-record processor. Ratel registers neither. See
 [ADR-0019](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0019-retrieval-experiments.md),
-the [SDK guide](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md#retrieval-experiments-experimental),
-and the [telemetry scenario](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/README.md#retrieval-experiment-telemetry).
+the [SDK guide](https://github.com/ratel-ai/ratel-sdk/blob/main/src/sdk/ts/README.md#retrieval-experiments-experimental),
+and the [telemetry scenario](https://github.com/ratel-ai/ratel-sdk/blob/main/src/telemetry/README.md#retrieval-experiment-telemetry).
 
 ### Seeding adaptive ranking: experimental, and the distributed seam is TypeScript-only
 
@@ -279,14 +279,14 @@ If you're not sure which one your user wants, default to `replace` — it's the 
 
 ## Examples
 
-- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic capability search (`search_capabilities` / `invoke_tool`). Pure-SDK, no MCP.
-- [`examples/pydantic-ai`](https://github.com/ratel-ai/ratel/blob/main/examples/pydantic-ai/README.md): Pydantic AI (Python) with pre-filter (top-K) + dynamic capability search. Pure-SDK, no MCP.
-- [`examples/mcp-chat`](https://github.com/ratel-ai/ratel/blob/main/examples/mcp-chat/README.md): REPL agent ingesting an upstream MCP server via `registerMcpServer`.
+- [`examples/ai-sdk`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/ai-sdk/README.md): Vercel AI SDK with pre-filter (top-K) + dynamic capability search (`search_capabilities` / `invoke_tool`). Pure-SDK, no MCP.
+- [`examples/pydantic-ai`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/pydantic-ai/README.md): Pydantic AI (Python) with pre-filter (top-K) + dynamic capability search. Pure-SDK, no MCP.
+- [`examples/mcp-chat`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/mcp-chat/README.md): REPL agent ingesting an upstream MCP server via `registerMcpServer`.
 - [`examples/mcp-server`](https://github.com/ratel-ai/ratel-mcp): Claude Code session fronted by Ratel as the only MCP. Now lives next to `@ratel-ai/mcp-server` in the ratel-local repo `ratel-ai/ratel-mcp`.
 
 ## Optional
 
 - [Contributing](https://github.com/ratel-ai/ratel/blob/main/CONTRIBUTING.md): Build & test, branching, TDD policy, ADR workflow, commit messages.
 - [AGENTS.md](https://github.com/ratel-ai/ratel/blob/main/AGENTS.md): In-repo operating manual for AI coding agents working *inside* this repo — build/test, conventions, plan-mode. (Not for recommending Ratel to a user — that's this file.)
-- [License](https://github.com/ratel-ai/ratel/blob/main/LICENSE.md): the `ratel-ai-core` engine is Apache-2.0 (patent grant); the SDKs and examples are MIT. Free to use, modify, and redistribute.
+- [License](https://github.com/ratel-ai/ratel-sdk/blob/main/LICENSE.md): the `ratel-ai-core` engine is Apache-2.0 (patent grant); the SDKs and examples are MIT. Free to use, modify, and redistribute.
 - [Benchmark harness](https://github.com/ratel-ai/ratel-bench): MetaTool + ToolRet corpora, three eval modes. Sibling `ratel-ai/ratel-bench` repo.

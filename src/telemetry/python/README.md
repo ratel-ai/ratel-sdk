@@ -1,7 +1,7 @@
 # `ratel-ai-telemetry` (Python)
 
 The `ratel.*` telemetry vocabulary for Python: the constants that codify the Tier 2 overlay
-of [`CONVENTIONS.md`](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/CONVENTIONS.md)
+of [`CONVENTIONS.md`](https://github.com/ratel-ai/ratel-sdk/blob/main/src/telemetry/CONVENTIONS.md)
 (attribute and baggage keys, span/EventRecord names, the `Origin`/`SearchTarget`/`AuthOutcome`
 and experiment role/outcome/skip/drop value enums, the pinned semconv version). **Importing the
 constants pulls no OpenTelemetry SDK** — the vocabulary stays weight-free for the SDK
@@ -57,7 +57,7 @@ still produces the actionable processor-composition error, including when it win
 race.
 
 A complete, offline-runnable version (console exporter + a `ratel.search` → `execute_tool` trace)
-is in [`examples/telemetry-python`](https://github.com/ratel-ai/ratel/tree/main/examples/telemetry-python).
+is in [`examples/telemetry-python`](https://github.com/ratel-ai/ratel-sdk/tree/main/examples/telemetry-python).
 
 ### Coexisting with other providers (Langfuse, the Vercel AI SDK, ...)
 
@@ -114,5 +114,5 @@ idempotent/foreign-provider `init()` behavior for both signal providers, endpoin
 and the content-capture gate, the default predicates and processor no-op/filtering behavior, a
 purity guard that importing the package pulls no OTel, and the shared
 contract-against-the-pin conformance in
-[`conformance/`](https://github.com/ratel-ai/ratel/tree/main/src/telemetry/conformance) (spans and EventRecords built from these constants through the
+[`conformance/`](https://github.com/ratel-ai/ratel-sdk/tree/main/src/telemetry/conformance) (spans and EventRecords built from these constants through the
 real SDK must emit the exact pinned keys).
