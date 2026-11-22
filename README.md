@@ -41,12 +41,17 @@ Add a Trusted Publisher (repo `ratel-ai/ratel-sdk`, workflow `release.yml`, envi
 
 Then dispatch verify-install for telemetry-core 0.4.1, core 0.12.0-rc.7 and rankers-py 0.1.0rc2.
 
-## Retry 2026-11-22 20:30 UTC (RP-159)
+## Retries (RP-159, RP-161): publishers still refused
 
-RP-158 was marked done, so both failed jobs were re-run (attempt 2). Both failed again with the same errors:
+The owner reported the three Trusted Publishers as added (20:30 UTC) and then as fixed (20:45 UTC, RP-160). Each time, both failed jobs were re-run, and both failed again with the same registry errors:
 
-- [45059139947 attempt 2](https://github.com/ratel-ai/ratel-sdk/actions/runs/45059139947/attempts/2): crates.io `No Trusted Publishing config found for repository ratel-ai/ratel-sdk` (ratel-ai-telemetry 0.4.1).
-- [45063048237 attempt 2](https://github.com/ratel-ai/ratel-sdk/actions/runs/45063048237/attempts/2): PyPI 403 `OIDC scoped token is not valid for project 'ratel-ai-rankers-plugin'` (0.1.0rc2).
-- `core-v0.12.0-rc.7` stays unpushed.
+| Run | Attempt | Time (UTC) | Exact registry error |
+|---|---|---|---|
+| [45059139947](https://github.com/ratel-ai/ratel-sdk/actions/runs/45059139947/attempts/2) (telemetry-core 0.4.1, crates.io) | 2 | 20:30 | `Failed to retrieve token from Cargo registry. Status: 400. Error: No Trusted Publishing config found for repository \`ratel-ai/ratel-sdk\`.` |
+| [45059139947](https://github.com/ratel-ai/ratel-sdk/actions/runs/45059139947/attempts/3) (telemetry-core 0.4.1, crates.io) | 3 | 20:46 | same as attempt 2 |
+| [45063048237](https://github.com/ratel-ai/ratel-sdk/actions/runs/45063048237/attempts/2) (rankers-py 0.1.0rc2, PyPI) | 2 | 20:31 | `403 Invalid API Token: OIDC scoped token is not valid for project 'ratel-ai-rankers-plugin'` |
+| [45063048237](https://github.com/ratel-ai/ratel-sdk/actions/runs/45063048237/attempts/3) (rankers-py 0.1.0rc2, PyPI) | 3 | 20:47 | same as attempt 2 |
 
-The owner chose "Not now". The three units stay unpublished until the Trusted Publishers above exist. Then re-run both jobs again and push the core tag.
+`core-v0.12.0-rc.7` stays unpushed: it waits for telemetry-core on crates.io, and its crate uses the same publisher setup.
+
+Status: the three units are still unpublished. crates.io still finds no config for this repository. Check that the entry is on the crate's own Settings > Trusted Publishing page, under the `ratel-ai` GitHub owner, and not on a different crate. On PyPI, check that the entry is on the existing project `ratel-ai-rankers-plugin`, not a pending publisher, with the same repo, workflow and environment values.
