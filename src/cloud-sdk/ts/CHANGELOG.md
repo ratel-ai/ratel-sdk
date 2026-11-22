@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0-rc.5] - 2026-11-22
+
 ### Added
 
 - **Consume mode for `attachIntentGraphSync`.** `mode: "consume"` reads a graph Ratel Cloud
@@ -14,6 +16,10 @@
 
 ### Changed
 
+- **The source moved to
+  [github.com/ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk).** The package's
+  repository, homepage and issues links point there. No code changes from the move; the other
+  entries in this version are the unreleased changes it also ships.
 - **`attach()` forwards the adaptive-ranking usage/status events.** `usage_boost`,
   `usage_model_mismatch`, `usage_cluster_policy_changed`, and `usage_ranking_status` now
   leave the process alongside the existing runtime event set (ADR-0020 amendment); none

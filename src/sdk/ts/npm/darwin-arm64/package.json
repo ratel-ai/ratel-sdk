@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/sdk-darwin-arm64",
-  "version": "0.13.0-rc.12",
+  "version": "0.13.0-rc.13",
   "cpu": [
     "arm64"
   ],

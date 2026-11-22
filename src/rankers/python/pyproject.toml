@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "ratel-ai-rankers-plugin"
-version = "0.1.0rc1"
+version = "0.1.0rc2"
 description = "Decision-model rankers (Jev, OpenAI Decisions) as retrieve/rerank plugins for the Ratel Python SDK."
 readme = "README.md"
 license = { file = "LICENSE.md" }

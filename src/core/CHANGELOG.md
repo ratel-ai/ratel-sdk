@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.12.0-rc.7] - 2026-11-22
+
 ### Added
 
 - `TraceEvent::Search` / `TraceEvent::SkillSearch` carry `base_hits`: the top-k the search would have returned without the usage arm, same shape as `hits`. Present whenever an intent graph matched the query, as `[]` if the base ranking was empty; absent from the JSON otherwise. Ranking is unchanged (ADR-0014)
@@ -13,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The source moved to [github.com/ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk).** The crate's repository, homepage and issues links point there. No code changes from the move; the other entries in this version are the unreleased changes it also ships.
 - `TraceEvent::UsageRankingStatus`'s `status` and `reason` are typed enums, `UsageRankingState` (`active`/`inactive`/`unknown`/`paused`) and `UsageRankingReason` (`enabled`/`disabled`/`rebuilt`), instead of free strings. The wire values are unchanged; a value outside the contract no longer deserializes. Rust code constructing the variant must use the enums
 
 ### Fixed

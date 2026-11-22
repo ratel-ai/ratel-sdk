@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.13.0-rc.13] - 2026-11-22
+
+### Changed
+
+- **The source moved to [github.com/ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk).** The package's repository, homepage and issues links point there. No code changes from the move; the other entries in this version are the unreleased changes it also ships.
+
+### Fixed
+
+- **`register_mcp_server` keeps upstream tool schemas on `mcp>=2.0`.** mcp 2.0 renamed `Tool.inputSchema` / `outputSchema` to `input_schema` / `output_schema`, so every ingested tool fell back to an empty input schema and `{"type": "object"}` output schema: the model lost the argument list and BM25 lost the parameter names. Both spellings are read now, so `mcp` 1.x is unchanged.
+
 ## [0.13.0-rc.12] - 2026-10-16
 
 ### Added

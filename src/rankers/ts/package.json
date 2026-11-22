@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/rankers-plugin",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Decision-model rankers (Jev, OpenAI Decisions) as retrieve/rerank plugins for the Ratel TypeScript SDK.",
   "private": false,
   "type": "module",

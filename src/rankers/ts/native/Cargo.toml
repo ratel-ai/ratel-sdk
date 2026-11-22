@@ -1,6 +1,6 @@
 [package]
 name = "ratel-rankers-ts-native"
-version = "0.1.0-rc.1" # locked to @ratel-ai/rankers-plugin; ships in the rankers-ts-v* unit (ADR-0008)
+version = "0.1.0-rc.2" # locked to @ratel-ai/rankers-plugin; ships in the rankers-ts-v* unit (ADR-0008)
 edition.workspace = true
 license = "MIT"
 repository.workspace = true
