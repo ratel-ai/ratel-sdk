@@ -1,0 +1,15 @@
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:22.5413674Z Found and verified trusted root
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2159158Z          403 Forbidden                                                          
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2176774Z            <title>403 Invalid API Token: OIDC scoped token is not valid for     
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2178125Z          project 'ratel-ai-rankers-plugin', project-scoped token is not valid   
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2179522Z          for project: 'ratel-ai-rankers-plugin', OIDC scoped token is not valid 
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2181359Z          for project 'ratel-ai-rankers-plugin', project-scoped token is not     
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2185659Z            <h1>403 Invalid API Token: OIDC scoped token is not valid for project
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2186707Z          'ratel-ai-rankers-plugin', project-scoped token is not valid for       
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2187918Z          project: 'ratel-ai-rankers-plugin', OIDC scoped token is not valid for 
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2189421Z          project 'ratel-ai-rankers-plugin', project-scoped token is not valid   
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2193059Z          Invalid API Token: OIDC scoped token is not valid for project          
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2194229Z          &#x27;ratel-ai-rankers-plugin&#x27;, project-scoped token is not valid 
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2196378Z          not valid for project &#x27;ratel-ai-rankers-plugin&#x27;,             
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2197345Z          project-scoped token is not valid for project:                         
+Publish ratel-ai-rankers-plugin to PyPI	Publish	2026-11-22T19:53:26.2203037Z ^[[31mERROR   ^[[0m HTTPError: 403 Forbidden from https://upload.pypi.org/legacy/          

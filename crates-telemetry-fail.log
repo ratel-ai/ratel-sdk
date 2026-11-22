@@ -1,0 +1,12 @@
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	﻿2026-11-22T19:09:59.9809515Z ##[group]Run rust-lang/crates-io-auth-action@v1
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:09:59.9809889Z with:
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:09:59.9810114Z   url: https://crates.io
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:09:59.9810369Z env:
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:09:59.9810566Z   CARGO_HOME: /home/runner/.cargo
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:09:59.9810852Z   CARGO_INCREMENTAL: 0
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:09:59.9811084Z   CARGO_TERM_COLOR: always
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:09:59.9811312Z ##[endgroup]
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:10:00.0661891Z Retrieving GitHub Actions JWT token with audience: crates.io
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:10:00.2419677Z Retrieved JWT token successfully
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:10:00.2420395Z Requesting token from: https://crates.io/api/v1/trusted_publishing/tokens. User agent: crates-io-auth-action/1.0.1
+Publish ratel-ai-telemetry to crates.io	Authenticate to crates.io via Trusted Publishing	2026-11-22T19:10:00.3823733Z ##[error]Failed to retrieve token from Cargo registry. Status: 400. Error: No Trusted Publishing config found for repository `ratel-ai/ratel-sdk`.
