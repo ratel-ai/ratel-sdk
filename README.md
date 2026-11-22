@@ -40,3 +40,13 @@ Add a Trusted Publisher (repo `ratel-ai/ratel-sdk`, workflow `release.yml`, envi
 - PyPI `ratel-ai-rankers-plugin`: then `gh run rerun 45063048237 --failed`
 
 Then dispatch verify-install for telemetry-core 0.4.1, core 0.12.0-rc.7 and rankers-py 0.1.0rc2.
+
+## Retry 2026-11-22 20:30 UTC (RP-159)
+
+RP-158 was marked done, so both failed jobs were re-run (attempt 2). Both failed again with the same errors:
+
+- [45059139947 attempt 2](https://github.com/ratel-ai/ratel-sdk/actions/runs/45059139947/attempts/2): crates.io `No Trusted Publishing config found for repository ratel-ai/ratel-sdk` (ratel-ai-telemetry 0.4.1).
+- [45063048237 attempt 2](https://github.com/ratel-ai/ratel-sdk/actions/runs/45063048237/attempts/2): PyPI 403 `OIDC scoped token is not valid for project 'ratel-ai-rankers-plugin'` (0.1.0rc2).
+- `core-v0.12.0-rc.7` stays unpushed.
+
+The owner chose "Not now". The three units stay unpublished until the Trusted Publishers above exist. Then re-run both jobs again and push the core tag.
