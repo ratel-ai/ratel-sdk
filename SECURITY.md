@@ -2,10 +2,11 @@
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for a security problem. Report it privately through
-GitHub's vulnerability reporting on this repository: **Security › Report a vulnerability**
-(`https://github.com/ratel-ai/ratel/security/advisories/new`). Include the package and version,
-what the problem is, and how to reproduce it; a proof of concept helps.
+Please do not put the details of a security problem in a public issue.
+[Open an issue](https://github.com/ratel-ai/ratel-sdk/issues/new) titled **Security contact request** with
+no details, not even the affected package. A maintainer then opens a private draft security advisory
+and invites you to it. Put the package and version, what the problem is, and how to reproduce it
+there; a proof of concept helps.
 
 What to expect:
 
@@ -30,15 +31,14 @@ release line of each package tag family; older lines are not patched.
 | `ratel-ai-rankers-plugin` | `rankers-py-v*` | latest minor |
 | Telemetry (Rust core, TypeScript, OTLP exporter, Python) | `telemetry-core-v*`, `telemetry-ts-v*`, `telemetry-ts-otlp-v*`, `telemetry-py-v*` | latest minor |
 | Framework adapters | `mastra-v*`, `vercel-ai-sdk-v*` | latest minor |
-| Ratel Platform (`apps/web`) | unreleased | `main` |
 
 A release candidate (`-rc.N`) is supported until the release it precedes ships.
 
 ## Scope
 
-In scope: the packages above, the platform at `apps/web`, and the repository's build and release
-tooling. A self-hosted platform is operated by whoever deploys it: putting the console behind
-authentication or binding it to localhost is the operator's job (see `apps/web/README.md`).
+In scope: the packages above, and the repository's build and release tooling. Report a problem in
+the self-hosted platform in [ratel-ai/ratel](https://github.com/ratel-ai/ratel); its `SECURITY.md`
+says how.
 
-Out of scope: the hosted Ratel Cloud service and its private modules, which have their own
+Out of scope: the hosted Ratel service and its private modules, which have their own
 reporting channel.
