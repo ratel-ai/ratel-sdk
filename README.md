@@ -42,6 +42,10 @@ cargo test --workspace           # Rust crates
 
 The Python packages build with `maturin`; see `.github/workflows/ci.yml` for the exact steps.
 
+## Contribute
+
+PR titles are conventional commits: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 See `LICENSE.md` and `LICENSE-APACHE`.
