@@ -2,13 +2,16 @@
   "name": "@ratel-ai/sandbox",
   "version": "0.0.0",
   "private": true,
-  "description": "Define a Ratel sandbox for a TypeScript agent: the definition file and the runner in the instance.",
+  "description": "Define a Ratel sandbox for a TypeScript agent: the definition file, the runner in the instance and `ratel sandbox push`.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "license": "MIT",
   "author": "Agentified",
@@ -17,8 +20,14 @@
     "url": "git+https://github.com/ratel-ai/ratel-sdk.git",
     "directory": "src/sandbox/ts"
   },
-  "engines": { "node": ">=22.18.0" },
-  "files": ["dist", "LICENSE.md", "README.md"],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -32,5 +41,8 @@
     "ajv-formats": "^3.0.1",
     "typescript": "^5.6.0",
     "vitest": "^4.1.5"
+  },
+  "bin": {
+    "ratel": "./dist/cli.js"
   }
 }

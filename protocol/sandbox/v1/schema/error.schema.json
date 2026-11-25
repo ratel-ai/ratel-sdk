@@ -2,35 +2,43 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ratel.sh/protocol/sandbox/v1/error.schema.json",
   "title": "Error",
-  "description": "The body of each refused call. A refusal over a limit names it.",
+  "description": "The body of each refused call: a code and a sentence. A refusal over a limit names it.",
   "type": "object",
   "required": [
     "error"
   ],
   "properties": {
     "error": {
-      "type": "object",
-      "required": [
-        "code",
-        "message"
-      ],
-      "properties": {
-        "code": {
-          "type": "string"
-        },
-        "message": {
-          "type": "string"
-        },
-        "limit": {
-          "type": "string"
-        },
-        "max": {
-          "type": "number"
-        },
-        "current": {
-          "type": "number"
-        }
+      "type": "string",
+      "minLength": 1,
+      "description": "A stable code, e.g. limit_reached, not_configured, not_found, invalid."
+    },
+    "message": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "string"
+    },
+    "max": {
+      "type": "number"
+    },
+    "current": {
+      "type": "number"
+    }
+  },
+  "if": {
+    "properties": {
+      "error": {
+        "const": "limit_reached"
       }
     }
+  },
+  "then": {
+    "required": [
+      "message",
+      "limit",
+      "max",
+      "current"
+    ]
   }
 }

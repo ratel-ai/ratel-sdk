@@ -20,6 +20,9 @@ versions and runs. It does not know why a run starts.
 2. `PUT <upload.url>` with `upload.headers` sends the tar.gz.
 3. `POST /api/v1/sandboxes/versions/{id}/finalize` queues the build and answers 202.
 
+The bundle is a gzip tar of files and folders only (no links), with the runner of
+`@ratel-ai/sandbox` in `.ratel-sandbox-runner/`.
+
 Each push creates a version. A version keeps its manifest, git commit and bundle hash.
 
 ## Run
@@ -33,6 +36,8 @@ Each run has a new instance. Ratel sets these variables in it:
 | `RATEL_RUN_INPUT` | base64 of the gzip of the `run-input` JSON |
 | `RATEL_SECRET_NAMES` | The names of the declared secrets, with commas |
 | each declared secret | Its value |
+
+The instance runs `node .ratel-sandbox-runner/run.js` in the project folder.
 
 A tool with `sideEffect: false` runs for real. A tool with `sideEffect: true` never runs for real.
 It answers from a fixture with the same tool name and normalized arguments, else from the fake

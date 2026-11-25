@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { SandboxDefinition } from "./define.js";
 
@@ -38,7 +38,7 @@ export function registerLoader(): void {
 
 export async function loadDefinition(projectDir: string): Promise<SandboxDefinition> {
   registerLoader();
-  const file = join(projectDir, DEFINITION_FILE);
+  const file = resolve(projectDir, DEFINITION_FILE);
   if (!existsSync(file)) throw new Error(`There is no ${DEFINITION_FILE} in ${projectDir}.`);
   const module = (await import(pathToFileURL(file).href)) as { default?: SandboxDefinition };
   if (!module.default) throw new Error(`${DEFINITION_FILE} has no default export.`);

@@ -1,9 +1,7 @@
 {
-  "error": {
-    "code": "limit_reached",
-    "message": "The limit sandbox_versions_per_day (2) is reached.",
-    "limit": "sandbox_versions_per_day",
-    "max": 2,
-    "current": 2
-  }
+  "error": "limit_reached",
+  "message": "The limit sandbox_versions_per_day (2) is reached.",
+  "limit": "sandbox_versions_per_day",
+  "max": 2,
+  "current": 2
 }

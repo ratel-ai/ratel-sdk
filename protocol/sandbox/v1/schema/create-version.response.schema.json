@@ -32,6 +32,10 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "authorize": {
+          "type": "boolean",
+          "description": "Whether the upload goes to Ratel and needs the project key. Never send the key otherwise."
         }
       }
     }

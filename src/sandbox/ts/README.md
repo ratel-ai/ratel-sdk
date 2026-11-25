@@ -50,9 +50,27 @@ export default async function run({ input, params, tools }: RunContext) {
 The policy applies to the calls through `tools`. A tool that the agent imports and calls itself is
 not under the policy.
 
+## `ratel sandbox push`
+
+```bash
+RATEL_URL=https://cloud.ratel.sh RATEL_API_KEY=... ratel sandbox push [folder] [--json]
+```
+
+Makes one new version from the project folder. The bundle has the files that git lists (tracked, and
+untracked that are not ignored) and the runner of this package in `.ratel-sandbox-runner/`. It never
+has `.env*` files or `node_modules`. A link inside the project becomes its file. A push records the
+commit, and whether the folder has changes that are not committed. The key needs the permission
+`sandboxes:write`.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Ratel has the version. The output has its id |
+| 1 | The push failed or Ratel refused it. The error output has the reason |
+| 2 | The command or a setting is wrong |
+
 ## The runner
 
-`node <package>/dist/run.js`, in the project folder, is the main process of an instance. It:
+`node .ratel-sandbox-runner/run.js`, in the project folder, is the main process of an instance. It:
 
 1. reads `RATEL_URL`, `RATEL_RUN_TOKEN`, `RATEL_RUN_INPUT` and `RATEL_SECRET_NAMES`,
 2. starts the agent in its own process and records each tool call,
