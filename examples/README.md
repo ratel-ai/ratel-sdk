@@ -19,6 +19,7 @@ ai-sdk/           Ratel + Vercel AI SDK — top-K filtering + capability tools i
 mastra/           Ratel + Mastra — capability tools + per-turn recall processor via @ratel-ai/mastra
 mcp-chat/         Interactive REPL against an MCP-backed agent (Vercel AI SDK + OpenAI)
 pydantic-ai/      Ratel + Pydantic AI (Python) — top-K filtering + capability tools in the agent loop
+sandbox-demo-agent/ A support agent that runs on a Ratel sandbox, with one read-only and one side-effect tool (TS)
 telemetry-ts/     Ratel telemetry — emit ratel.* spans via the OpenTelemetry JS SDK
 telemetry-python/ Ratel telemetry — emit ratel.* spans via the OpenTelemetry Python SDK
 ```

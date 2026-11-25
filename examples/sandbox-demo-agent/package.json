@@ -1,0 +1,28 @@
+{
+  "name": "@ratel-ai/example-sandbox-demo-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "push": "node ../../src/sandbox/ts/dist/cli.js sandbox push",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/core": "^2.9.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@ratel-ai/telemetry": "^0.5.1"
+  },
+  "devDependencies": {
+    "@ratel-ai/sandbox": "workspace:*",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0"
+  }
+}
