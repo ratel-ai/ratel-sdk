@@ -23,10 +23,12 @@ let server: Server;
 let url: string;
 let posts: Post[];
 let answers: number[];
+let tracesHang: boolean;
 
 beforeEach(async () => {
   posts = [];
   answers = [];
+  tracesHang = false;
   server = createServer((req, res) => {
     let text = "";
     req.on("data", (chunk) => {
@@ -34,6 +36,7 @@ beforeEach(async () => {
     });
     req.on("end", () => {
       posts.push({ path: req.url ?? "", auth: req.headers.authorization, body: JSON.parse(text) });
+      if (tracesHang && req.url === "/v1/traces") return;
       res.statusCode = (req.url?.endsWith("/result") ? answers.shift() : undefined) ?? 202;
       if (res.statusCode === 307) res.setHeader("location", "/elsewhere");
       res.end("{}");
@@ -42,7 +45,10 @@ beforeEach(async () => {
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 });
-afterEach(() => new Promise((done) => server.close(done)));
+afterEach(() => {
+  server.closeAllConnections();
+  return new Promise((done) => server.close(done));
+});
 
 async function run(
   project: string,
@@ -182,6 +188,20 @@ describe("the runner", () => {
   it("a message that the agent sends itself is not the answer", async () => {
     await run("crash-agent", { input: "message" });
     expect(posted()).toMatchObject({ status: "completed", output: "after" });
+  });
+
+  it("a trace endpoint that does not answer delays the result for a short time only", async () => {
+    tracesHang = true;
+    const started = Date.now();
+    await run("crash-agent", { input: "x" });
+    expect(posted().status).toBe("completed");
+    expect(Date.now() - started).toBeLessThan(15_000);
+  }, 90_000);
+
+  it("a negative usage does not change the sum", async () => {
+    await run("crash-agent", { input: "usage" });
+    expect(posted().usage).toMatchObject({ inputTokens: 5 });
+    expect(posted().usage.outputTokens).toBeUndefined();
   });
 
   it("the post of the result does not follow a redirect", async () => {

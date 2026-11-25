@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolCall } from "../src/contract.js";
-import { createRedactor } from "../src/redact.js";
+import { createRedactor, redactLines } from "../src/redact.js";
 import { normalize, policyTools } from "../src/tools.js";
 import { typeScriptFlags } from "../src/typescript.js";
 
@@ -72,5 +72,22 @@ describe("createRedactor", () => {
       expect(text(`<${form}>`)).not.toContain("w0rd");
     }
     expect(createRedactor(["123456"]).json({ pin: 123456 })).toEqual({ pin: "[redacted]" });
+  });
+});
+
+describe("redactLines", () => {
+  it("takes a long output with no newline in linear time, and redacts a secret in it", () => {
+    const secret = "secret-value-1234";
+    const written: string[] = [];
+    const lines = redactLines(createRedactor([secret]), (line) => written.push(line));
+    const chunk = "x".repeat(16 * 1024);
+    const started = performance.now();
+    for (let i = 0; i < 2_560; i++) lines.push(chunk);
+    lines.push(secret.slice(0, 5));
+    lines.push(secret.slice(5));
+    lines.end();
+    // 40 MB: the old code scanned all of it again for each chunk, which took many seconds.
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(written.join("").endsWith("x[redacted]")).toBe(true);
   });
 });

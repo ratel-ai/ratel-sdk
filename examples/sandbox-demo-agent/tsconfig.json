@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["ratel.sandbox.ts", "src/**/*"]
+  "include": ["ratel.sandbox.ts", "src/**/*", "test/**/*"]
 }

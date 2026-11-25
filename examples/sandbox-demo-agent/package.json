@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx src/main.ts",
     "push": "node ../../src/sandbox/ts/dist/cli.js sandbox push",
+    "test": "tsx --test test/flush.test.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
