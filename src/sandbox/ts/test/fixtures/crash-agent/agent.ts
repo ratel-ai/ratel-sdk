@@ -22,7 +22,8 @@ export default async function run({ input, tools }: RunContext) {
     return "left";
   }
   if (input === "message") {
-    for (const message of ["ready", null, { type: "ready" }]) process.send?.(message);
+    for (const message of ["ready", null, { type: "ready" }, { type: "call" }, { type: "error" }])
+      process.send?.(message);
     await new Promise((done) => setTimeout(done, 300));
     return "after";
   }

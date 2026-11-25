@@ -117,9 +117,9 @@ function runAgent(
       // Code of the host can send its own messages on this channel.
       const message = sent as FromAgent | null;
       if (message?.type === "name") outcome.name = message.name;
-      else if (message?.type === "call") outcome.toolCalls.push(message.call);
+      else if (message?.type === "call" && message.call) outcome.toolCalls.push(message.call);
       else if (message?.type === "usage") outcome.usage = addUsage(outcome.usage, message.usage);
-      else if (message?.type === "output" || message?.type === "error") {
+      else if (message?.type === "output" || (message?.type === "error" && message.error)) {
         answered = true;
         if (message.type === "output") outcome.output = message.output;
         else outcome.error = message.error;
