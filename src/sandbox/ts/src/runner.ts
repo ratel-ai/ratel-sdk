@@ -23,6 +23,13 @@ export type RunnerOptions = {
 /** Ratel refuses a larger result. */
 export const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 
+/** The depth of the output and of the tool calls. Ratel does not store a much deeper value. */
+const MAX_DEPTH = 500;
+const TOO_DEEP = {
+  type: "ResultTooDeep",
+  message: `The output or a tool call has more than ${MAX_DEPTH} levels.`,
+};
+
 /** How long the agent process has to flush and exit after it gave its output. */
 const EXIT_GRACE_MS = 10_000;
 /** How long the output of an ended agent process can still come. */
@@ -49,22 +56,27 @@ export async function runSandbox(options: RunnerOptions): Promise<RunResult> {
 
   const agent = await runAgent(options, runInput, traceparent(ids), redactor, { url, token });
   // Only what the agent wrote is redacted: a secret can be equal to a part of a tool name.
+  const deep = isDeep([agent.output, agent.toolCalls]);
   const result = bounded({
     v: 1,
     runId: runInput.runId,
-    status: agent.error ? "failed" : "completed",
-    ...(agent.error
-      ? { error: redactor.json(agent.error) }
-      : { output: redactor.json(agent.output) }),
-    toolCalls: agent.toolCalls.map((call) => redactCall(call, redactor)),
-    usage: { ...agent.usage, durationMs: Date.now() - startMs },
+    ...(deep
+      ? { status: "failed", error: TOO_DEEP, toolCalls: [] }
+      : {
+          ...(agent.error
+            ? { status: "failed", error: redactor.json(agent.error) }
+            : { status: "completed", output: redactor.json(agent.output) }),
+          toolCalls: agent.toolCalls.map((call) => redactCall(call, redactor)),
+        }),
+    // The time until the answer. What the agent flushes after it is not its latency.
+    usage: { ...agent.usage, durationMs: agent.endMs - startMs },
     traceId: ids.traceId,
   });
 
   const span = rootSpan(ids, {
     name: agent.name,
     startMs,
-    endMs: Date.now(),
+    endMs: agent.endMs,
     input: redactor.json(runInput.input),
     output: result.output,
     runId: runInput.runId,
@@ -81,6 +93,8 @@ export async function runSandbox(options: RunnerOptions): Promise<RunResult> {
 
 type AgentOutcome = {
   name: string;
+  /** When the agent answered, or when its process ended with no answer. */
+  endMs: number;
   output?: unknown;
   error?: { type: string; message: string };
   toolCalls: ToolCall[];
@@ -95,7 +109,7 @@ function runAgent(
   ratel: { url: string; token: string },
 ): Promise<AgentOutcome> {
   return new Promise((done) => {
-    const outcome: AgentOutcome = { name: "sandbox", toolCalls: [], usage: {} };
+    const outcome: AgentOutcome = { name: "sandbox", endMs: 0, toolCalls: [], usage: {} };
     let answered = false;
     const child = fork(fileURLToPath(new URL("./agent-process.js", import.meta.url)), [], {
       cwd: options.projectDir,
@@ -117,12 +131,14 @@ function runAgent(
       // Code of the host can send its own messages on this channel.
       const message = sent as FromAgent | null;
       if (message?.type === "name") outcome.name = message.name;
-      else if (message?.type === "call" && message.call) outcome.toolCalls.push(message.call);
+      else if (message?.type === "call" && isCall(message.call))
+        outcome.toolCalls.push(message.call);
       else if (message?.type === "usage") outcome.usage = addUsage(outcome.usage, message.usage);
       else if (message?.type === "output" || (message?.type === "error" && message.error)) {
         answered = true;
+        outcome.endMs ||= Date.now();
         if (message.type === "output") outcome.output = message.output;
-        else outcome.error = message.error;
+        else outcome.error = textError(message.error);
         // The agent may flush its telemetry before it ends.
         grace ??= setTimeout(() => child.kill("SIGKILL"), EXIT_GRACE_MS);
       }
@@ -143,6 +159,7 @@ function runAgent(
       clearTimeout(drain);
       out.end();
       err.end();
+      outcome.endMs ||= Date.now();
       if (!answered) {
         outcome.error ??= {
           type: "AgentExit",
@@ -154,6 +171,32 @@ function runAgent(
     const message: ToAgent = { projectDir: options.projectDir, runInput, traceparent: parent };
     child.send(message, () => {});
   });
+}
+
+/** The agent can send its own messages, and an error can have any message. */
+function textError({ type, message }: { type: unknown; message: unknown }) {
+  return { type: textOf(type) || "Error", message: textOf(message) };
+}
+
+function textOf(value: unknown): string {
+  if (typeof value === "string") return value;
+  return value === undefined ? "" : JSON.stringify(value);
+}
+
+function isCall(call: ToolCall | undefined): call is ToolCall {
+  return typeof call?.name === "string" && ["real", "fixture", "fake"].includes(call.source);
+}
+
+/** A walk with no recursion, because the value can be deeper than the stack. */
+function isDeep(value: unknown): boolean {
+  let level: unknown[] = [value];
+  for (let depth = 0; level.length > 0; depth += 1) {
+    if (depth > MAX_DEPTH) return true;
+    level = level.flatMap((item) =>
+      item !== null && typeof item === "object" ? Object.values(item) : [],
+    );
+  }
+  return false;
 }
 
 /** Ends what the agent process left behind. */
@@ -256,7 +299,8 @@ function addUsage(a: AgentOutcome["usage"], b: AgentOutcome["usage"]): AgentOutc
   const sum = { ...a };
   for (const key of ["inputTokens", "outputTokens", "costUsd"] as const) {
     const value = b?.[key];
-    if (typeof value === "number" && value >= 0) sum[key] = (sum[key] ?? 0) + value;
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0)
+      sum[key] = (sum[key] ?? 0) + value;
   }
   return sum;
 }

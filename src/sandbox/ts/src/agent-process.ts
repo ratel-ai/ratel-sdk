@@ -55,8 +55,12 @@ function send(message: FromAgent): Promise<void> {
   });
 }
 
+function textOf(message: unknown): string {
+  return typeof message === "string" ? message : JSON.stringify(toJson(message));
+}
+
 function describe(error: unknown): { type: string; message: string } {
   return error instanceof Error
-    ? { type: error.constructor.name || "Error", message: error.message }
+    ? { type: error.constructor.name || "Error", message: textOf(error.message) }
     : { type: typeof error, message: String(error) };
 }

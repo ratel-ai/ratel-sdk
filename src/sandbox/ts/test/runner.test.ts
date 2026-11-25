@@ -204,6 +204,34 @@ describe("the runner", () => {
     expect(posted().usage.outputTokens).toBeUndefined();
   });
 
+  it("the duration ends with the answer, not with the process", async () => {
+    const started = Date.now();
+    await run("crash-agent", { input: "open" });
+    expect(Date.now() - started).toBeGreaterThan(2_000);
+    expect(posted()).toMatchObject({ status: "completed", output: "ok" });
+    expect(posted().usage.durationMs).toBeLessThan(2_000);
+  });
+
+  it.each([
+    "deep",
+    "deep-tool",
+  ])("%s: a value that is too deep becomes a failed result", async (input) => {
+    await run("crash-agent", { input });
+    expect(posted()).toMatchObject({ status: "failed", error: { type: "ResultTooDeep" } });
+  });
+
+  it("an error with a message that is no text stays a failed result", async () => {
+    await run("crash-agent", { input: "odd-error" });
+    expect(posted()).toMatchObject({ status: "failed", error: { type: "Error" } });
+    expect(typeof posted().error?.message).toBe("string");
+  });
+
+  it("messages with a wrong shape do not make the result unreadable", async () => {
+    await run("crash-agent", { input: "odd-messages" });
+    expect(posted().toolCalls.map(({ name }) => name)).toEqual(["ping"]);
+    expect(posted().error === undefined || typeof posted().error?.message === "string").toBe(true);
+  });
+
   it("the post of the result does not follow a redirect", async () => {
     answers = [307, 307, 307];
     await expect(run("crash-agent", { input: "x" })).rejects.toThrow(/result/);
