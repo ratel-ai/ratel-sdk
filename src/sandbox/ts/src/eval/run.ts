@@ -53,6 +53,8 @@ export const VERDICT_EXIT = {
   inconclusive: 2,
 } as const;
 
+const TOO_MANY_RUNNING = "too_many_running";
+
 /** Ratel refused the call (3), or did not answer it (4). */
 export class EvalCallError extends Error {
   constructor(
@@ -88,13 +90,14 @@ export async function waitForEvalRun(
   { url, apiKey }: Address,
   sleep: Sleep = wait,
 ): Promise<Experiment> {
-  const address = `${origin(url)}/api/v1/evals/experiments/${experimentId}`;
+  const address = `${origin(url)}/api/v1/evals/experiments/${encodeURIComponent(experimentId)}`;
   for (let failures = 0; ; await sleep(POLL_MS)) {
     try {
       const answer = await call("GET", address, apiKey);
       if (!Array.isArray(answer.cases) || !answer.counts) throw unreadable();
-      failures = 0;
       if (answer.state === "completed") return answer as Experiment;
+      if (answer.state !== "running") throw unreadable();
+      failures = 0;
     } catch (error) {
       failures += 1;
       if (!mayTryAgain(error) || failures >= POLL_FAILURES) throw error;
@@ -118,7 +121,7 @@ export async function compareEvalRun(
   { url, apiKey }: Address,
   sleep: Sleep = wait,
 ): Promise<Comparison> {
-  const address = `${origin(url)}/api/v1/evals/experiments/${experimentId}/comparison`;
+  const address = `${origin(url)}/api/v1/evals/experiments/${encodeURIComponent(experimentId)}/comparison`;
   for (let failures = 1; ; failures += 1) {
     try {
       const answer = await call("GET", address, apiKey);
@@ -145,7 +148,11 @@ export async function pinBaseline(
 export function exitCodeOf({ cases }: Pick<Experiment, "cases">): number {
   const complete = cases.every(
     ({ counts }) =>
-      [counts?.pass, counts?.fail, counts?.invalid].every(Number.isInteger) && counts.open === 0,
+      [counts?.pass, counts?.fail, counts?.invalid].every(
+        (count) => Number.isInteger(count) && count >= 0,
+      ) &&
+      counts.pass + counts.fail + counts.invalid > 0 &&
+      counts.open === 0,
   );
   if (cases.length === 0 || !complete) throw unreadable();
   if (cases.some(({ counts }) => counts.fail > 0)) return EVAL_EXIT.fail;
@@ -235,7 +242,10 @@ async function call(
     answer?.message ??
     answer?.error ??
     `${method} ${new URL(url).pathname} answered ${response.status}`;
-  const refused = response.status >= 400 && response.status < 500 && response.status !== 429;
+  // A 429 can also be of a proxy or of a rate limit: that one can work a moment later.
+  const refused =
+    answer?.error === TOO_MANY_RUNNING ||
+    (response.status >= 400 && response.status < 500 && response.status !== 429);
   throw new EvalCallError(
     String(message),
     refused ? EVAL_EXIT.refused : EVAL_EXIT.unavailable,

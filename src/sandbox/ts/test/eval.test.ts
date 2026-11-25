@@ -146,6 +146,12 @@ describe("exit codes", () => {
     expect((await ratel(["run"], { RATEL_URL: "http://127.0.0.1:9" })).code).toBe(4);
   });
 
+  it("3: too many experiments run already", async () => {
+    start = { status: 429, body: { error: "too_many_running", message: "Wait for one to end." } };
+    const { code, err } = await ratel(["run"]);
+    expect([code, err.includes("Wait for one to end.")]).toEqual([3, true]);
+  });
+
   it.each([500, 503, 429])("4: the server answers %s", async (status) => {
     start = { status, body: "oops" };
     expect((await ratel(["run"])).code).toBe(4);
@@ -242,6 +248,8 @@ it("4 and one document: a completed run with no readable counts, no case or an o
       ...experiment,
       cases: [{ ...experiment.cases[0], counts: { pass: 0, fail: 0, invalid: 0, open: 3 } }],
     },
+    withCounts([0, 0, 0]),
+    withCounts([4, -1, 0]),
   ]) {
     reads = [{ status: 200, body }];
     const { code, out } = await ratel(["run", "--json"]);
@@ -491,4 +499,15 @@ describe("baseline pin", () => {
     expect((await ratel(args)).code).toBe(3);
     expect(calls).toEqual([]);
   });
+});
+
+it("4: a state that the contract does not have is not waited for without an end", async () => {
+  reads = [{ status: 200, body: { ...experiment, state: "stuck" } }];
+  expect((await ratel(["run"])).code).toBe(4);
+}, 60_000);
+
+it("an experiment id with a path stays one part of the path", async () => {
+  start = { status: 201, body: { ...(start.body as object), experimentId: "../../admin?x=" } };
+  await ratel(["run"]);
+  expect(calls[1]?.path).toBe("/api/v1/evals/experiments/..%2F..%2Fadmin%3Fx%3D");
 });
