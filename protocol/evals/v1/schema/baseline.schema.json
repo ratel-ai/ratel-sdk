@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/baseline.schema.json",
+  "title": "The pinned baseline",
+  "description": "The answer of GET, PUT and DELETE /api/v1/evals/baseline (200). Null: no experiment is pinned.",
+  "type": "object",
+  "required": [
+    "baseline"
+  ],
+  "properties": {
+    "baseline": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/baseline"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "baseline": {
+      "type": "object",
+      "required": [
+        "experimentId",
+        "url",
+        "pinnedBy",
+        "pinnedAt"
+      ],
+      "properties": {
+        "experimentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "pinnedBy": {
+          "type": "string",
+          "description": "The identity of a person, or `key:<id>`."
+        },
+        "pinnedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

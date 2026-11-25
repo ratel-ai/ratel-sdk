@@ -8,6 +8,9 @@ const CLI = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const VALID = new URL("../../../../protocol/evals/v1/conformance/valid/", import.meta.url);
 const experiment = JSON.parse(readFileSync(new URL("experiment.completed.json", VALID), "utf8"));
 const ID = experiment.experimentId;
+const comparison = JSON.parse(readFileSync(new URL("comparison.regressed.json", VALID), "utf8"));
+const pinned = JSON.parse(readFileSync(new URL("baseline.pinned.json", VALID), "utf8"));
+const differ = JSON.parse(readFileSync(new URL("error.scorers-differ.json", VALID), "utf8"));
 
 type Call = { method: string; path: string; auth: string | undefined; body: string };
 type Answer = { status: number; body: unknown };
@@ -17,11 +20,16 @@ let calls: Call[];
 /** The answers of the reads, in order. The last one repeats. */
 let reads: Answer[];
 let start: Answer;
+/** The answers of `/baseline` and, in order, of `/comparison`. */
+let baseline: Answer;
+let comparisons: Answer[];
 
 beforeEach(async () => {
   calls = [];
   start = { status: 201, body: { experimentId: ID, state: "running", url: experiment.url } };
   reads = [{ status: 200, body: experiment }];
+  baseline = { status: 200, body: pinned };
+  comparisons = [{ status: 200, body: comparison }];
   server = createServer((req, res) => {
     let body = "";
     req.on("data", (chunk) => {
@@ -30,8 +38,15 @@ beforeEach(async () => {
     req.on("end", () => {
       const { method = "", url: path = "", headers } = req;
       calls.push({ method, path, auth: headers.authorization, body });
-      const answer =
-        method === "POST" ? start : ((reads.length > 1 ? reads.shift() : reads[0]) as Answer);
+      const next = (answers: Answer[]) =>
+        (answers.length > 1 ? answers.shift() : answers[0]) as Answer;
+      const answer = path.endsWith("/baseline")
+        ? baseline
+        : path.endsWith("/comparison")
+          ? next(comparisons)
+          : method === "POST"
+            ? start
+            : next(reads);
       res.statusCode = answer.status;
       res.end(typeof answer.body === "string" ? answer.body : JSON.stringify(answer.body));
     });
@@ -254,4 +269,144 @@ it("runs in one process, so a signal to it leaves no other process that waits", 
   parent.kill("SIGTERM");
   expect(stdout).toBe("");
   expect(await ended).toBe("SIGTERM");
+});
+
+describe("--compare-baseline", () => {
+  const COMPARE = ["run", "--compare-baseline"];
+  const verdict = (value: string) => {
+    comparisons = [{ status: 200, body: { ...comparison, verdict: value } }];
+  };
+
+  it.each([
+    ["improved", 0],
+    ["unchanged", 0],
+    ["regressed", 1],
+    ["inconclusive", 2],
+  ])("%s exits with %s, whatever the cases of the run are", async (value, expected) => {
+    verdict(value);
+    ended([0, 3, 0]);
+    const { code, out } = await ratel([...COMPARE, "--json"]);
+    expect(code).toBe(expected);
+    expect(out.trim().split("\n")).toHaveLength(1);
+    const document = JSON.parse(out);
+    expect(document.experimentId).toBe(ID);
+    expect(document.comparison).toEqual({ ...comparison, verdict: value });
+  });
+
+  it("reads the baseline, starts the run and reads the comparison", async () => {
+    await ratel(COMPARE);
+    expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      "GET /api/v1/evals/baseline",
+      "POST /api/v1/evals/experiments",
+      `GET /api/v1/evals/experiments/${ID}`,
+      `GET /api/v1/evals/experiments/${ID}/comparison`,
+    ]);
+  });
+
+  it("prints the verdict, the rule and the changed cases", async () => {
+    const { code, out } = await ratel(COMPARE);
+    expect(code).toBe(1);
+    expect(out).toContain(`Regressed against the baseline ${comparison.baseline.experimentId}`);
+    expect(out).toContain(comparison.rule);
+    expect(out).toContain("regressed: Late order is refused (v1 to v1): 3/3 pass to 2/3 pass");
+    expect(out).toContain(comparison.url);
+  });
+
+  it("a case of one side has no counts on the other", async () => {
+    const [row] = comparison.changedCases;
+    const changedCases = [
+      { ...row, change: "added", baseline: null },
+      { ...row, change: "removed", candidate: null },
+    ];
+    comparisons = [{ status: 200, body: { ...comparison, verdict: "unchanged", changedCases } }];
+    const { code, out } = await ratel(COMPARE);
+    expect(code).toBe(0);
+    expect(out).toContain("added: Late order is refused (v1): 2/3 pass");
+    expect(out).toContain("removed: Late order is refused (v1): 3/3 pass");
+  });
+
+  it("3: other scorers print the reason", async () => {
+    comparisons = [{ status: 409, body: differ }];
+    const text = await ratel(COMPARE);
+    expect(text.code).toBe(3);
+    expect(text.err).toContain(differ.message);
+    const json = await ratel([...COMPARE, "--json"]);
+    expect(json.code).toBe(3);
+    expect(JSON.parse(json.out)).toEqual({ ...differ, experimentId: ID, url: experiment.url });
+  });
+
+  it("3: with no baseline it starts no run", async () => {
+    baseline = { status: 200, body: { baseline: null } };
+    const { code, out } = await ratel([...COMPARE, "--json"]);
+    expect(code).toBe(3);
+    expect(JSON.parse(out).error).toBe("no_baseline");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("3: it cannot be used with --no-wait", async () => {
+    expect((await ratel([...COMPARE, "--no-wait"])).code).toBe(3);
+    expect(calls).toEqual([]);
+  });
+
+  it("a read of the comparison that fails is tried again", async () => {
+    comparisons = [
+      { status: 503, body: "" },
+      { status: 200, body: comparison },
+    ];
+    expect((await ratel(COMPARE)).code).toBe(1);
+  }, 15_000);
+
+  it.each([
+    { ...comparison, verdict: "better" },
+    { ...comparison, changedCases: null },
+    { ...comparison, changedCases: [null] },
+    { ...comparison, changedCases: [{}] },
+    { ...comparison, rule: undefined },
+    { ...comparison, baseline: null },
+  ])("4: a comparison that is not readable", async (body) => {
+    comparisons = [{ status: 200, body }];
+    const { code, out } = await ratel([...COMPARE, "--json"]);
+    expect(code).toBe(4);
+    expect(JSON.parse(out)).toMatchObject({ error: "eval_run_failed", experimentId: ID });
+  }, 30_000);
+
+  it("4: no answer about the baseline", async () => {
+    baseline = { status: 500, body: "" };
+    expect((await ratel(COMPARE)).code).toBe(4);
+  }, 30_000);
+});
+
+describe("baseline pin", () => {
+  it("0: pins the experiment", async () => {
+    const { code, out } = await ratel(["baseline", "pin", ID]);
+    expect([code, out]).toEqual([0, `${pinned.baseline.experimentId}\n`]);
+    expect(calls.map(({ method, path, auth, body }) => [method, path, auth, body])).toEqual([
+      ["PUT", "/api/v1/evals/baseline", "Bearer rtl_key", JSON.stringify({ experimentId: ID })],
+    ]);
+    const json = await ratel(["baseline", "pin", ID, "--json"]);
+    expect(JSON.parse(json.out)).toEqual(pinned);
+  });
+
+  it("3: refused, and 4: the server fails", async () => {
+    baseline = { status: 409, body: { error: "not_completed", message: "It has not ended." } };
+    const refused = await ratel(["baseline", "pin", ID]);
+    expect(refused.code).toBe(3);
+    expect(refused.err).toContain("It has not ended.");
+    baseline = { status: 500, body: "" };
+    expect((await ratel(["baseline", "pin", ID])).code).toBe(4);
+    baseline = { status: 200, body: { baseline: null } };
+    expect((await ratel(["baseline", "pin", ID])).code).toBe(4);
+  });
+
+  it.each([
+    [["baseline"]],
+    [["baseline", "pin"]],
+    [["baseline", "pin", ID, "more"]],
+    [["baseline", "pin", ID, "--compare-baseline"]],
+    [["baseline", "pin", ID, "--trials", "3"]],
+    [["baseline", "nope", ID]],
+  ])("3: wrong usage %j", async (args) => {
+    expect((await ratel(args)).code).toBe(3);
+    expect(calls).toEqual([]);
+  });
 });

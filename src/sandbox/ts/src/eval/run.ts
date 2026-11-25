@@ -21,8 +21,37 @@ export type Experiment = {
   [field: string]: unknown;
 };
 
+export type Baseline = { experimentId: string; url: string; pinnedBy: string; pinnedAt: string };
+
+export type CaseSide = { number: number; status: string; counts: Counts };
+export type Comparison = {
+  verdict: keyof typeof VERDICT_EXIT;
+  rule: string;
+  url: string;
+  baseline: Baseline;
+  changedCases: Array<{
+    caseId: string;
+    name: string;
+    change: string;
+    baseline: CaseSide | null;
+    candidate: CaseSide | null;
+  }>;
+  [field: string]: unknown;
+};
+
+type Address = Pick<EvalRunOptions, "url" | "apiKey">;
+type Sleep = (ms: number) => Promise<void>;
+
 /** The exit codes of `ratel eval run`. They are a contract: see the README. */
 export const EVAL_EXIT = { pass: 0, fail: 1, invalid: 2, refused: 3, unavailable: 4 } as const;
+
+/** With `--compare-baseline` the verdict gives the exit code. */
+export const VERDICT_EXIT = {
+  improved: 0,
+  unchanged: 0,
+  regressed: 1,
+  inconclusive: 2,
+} as const;
 
 /** Ratel refused the call (3), or did not answer it (4). */
 export class EvalCallError extends Error {
@@ -56,8 +85,8 @@ export async function startEvalRun({
 /** Reads the experiment until it is completed. */
 export async function waitForEvalRun(
   experimentId: string,
-  { url, apiKey }: Pick<EvalRunOptions, "url" | "apiKey">,
-  sleep: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms)),
+  { url, apiKey }: Address,
+  sleep: Sleep = wait,
 ): Promise<Experiment> {
   const address = `${origin(url)}/api/v1/evals/experiments/${experimentId}`;
   for (let failures = 0; ; await sleep(POLL_MS)) {
@@ -68,10 +97,49 @@ export async function waitForEvalRun(
       if (answer.state === "completed") return answer as Experiment;
     } catch (error) {
       failures += 1;
-      const again = error instanceof EvalCallError && error.exitCode === EVAL_EXIT.unavailable;
-      if (!again || failures >= POLL_FAILURES) throw error;
+      if (!mayTryAgain(error) || failures >= POLL_FAILURES) throw error;
     }
   }
+}
+
+/** Throws when no baseline is pinned: a run costs money, and it would have nothing to compare. */
+export async function requireBaseline({ url, apiKey }: Address): Promise<void> {
+  const answer = await call("GET", `${origin(url)}/api/v1/evals/baseline`, apiKey);
+  if (answer.baseline === undefined) throw unreadable();
+  if (answer.baseline === null) {
+    const message = "The project has no pinned baseline. Pin an experiment first.";
+    throw new EvalCallError(message, EVAL_EXIT.refused, { error: "no_baseline" });
+  }
+}
+
+/** The experiment against the pinned baseline. The run is paid, so a failed read is tried again. */
+export async function compareEvalRun(
+  experimentId: string,
+  { url, apiKey }: Address,
+  sleep: Sleep = wait,
+): Promise<Comparison> {
+  const address = `${origin(url)}/api/v1/evals/experiments/${experimentId}/comparison`;
+  for (let failures = 1; ; failures += 1) {
+    try {
+      const answer = await call("GET", address, apiKey);
+      if (!isComparison(answer)) throw unreadable();
+      return answer;
+    } catch (error) {
+      if (!mayTryAgain(error) || failures >= POLL_FAILURES) throw error;
+    }
+    await sleep(POLL_MS);
+  }
+}
+
+export async function pinBaseline(
+  experimentId: string,
+  { url, apiKey }: Address,
+): Promise<{ baseline: Baseline }> {
+  const body = { experimentId };
+  const answer = await call("PUT", `${origin(url)}/api/v1/evals/baseline`, apiKey, body);
+  const baseline = answer.baseline as Baseline | null | undefined;
+  if (typeof baseline?.experimentId !== "string") throw unreadable();
+  return { ...answer, baseline };
 }
 
 /** A case with a failed trial is a fail. Then a case with an invalid trial is invalid. */
@@ -84,6 +152,44 @@ export function exitCodeOf({ cases }: Pick<Experiment, "cases">): number {
   if (cases.some(({ counts }) => counts.fail > 0)) return EVAL_EXIT.fail;
   if (cases.some(({ counts }) => counts.invalid > 0)) return EVAL_EXIT.invalid;
   return EVAL_EXIT.pass;
+}
+
+function isComparison(answer: Record<string, unknown>): answer is Comparison {
+  const { verdict, rule, url, baseline, changedCases } = answer as Partial<Comparison>;
+  const side = (value: unknown) =>
+    value === null ||
+    (isObject(value) &&
+      Number.isInteger(value.number) &&
+      isObject(value.counts) &&
+      [value.counts.pass, value.counts.fail, value.counts.invalid].every(Number.isInteger));
+  return (
+    Object.hasOwn(VERDICT_EXIT, String(verdict)) &&
+    typeof rule === "string" &&
+    typeof url === "string" &&
+    isObject(baseline) &&
+    typeof baseline.experimentId === "string" &&
+    Array.isArray(changedCases) &&
+    changedCases.every(
+      (row) =>
+        isObject(row) &&
+        typeof row.name === "string" &&
+        typeof row.change === "string" &&
+        side(row.baseline) &&
+        side(row.candidate),
+    )
+  );
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function mayTryAgain(error: unknown): boolean {
+  return error instanceof EvalCallError && error.exitCode === EVAL_EXIT.unavailable;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((done) => setTimeout(done, ms));
 }
 
 async function call(

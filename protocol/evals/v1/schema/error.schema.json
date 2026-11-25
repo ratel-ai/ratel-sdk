@@ -13,6 +13,39 @@
     },
     "message": {
       "type": "string"
+    },
+    "scorers": {
+      "type": "array",
+      "description": "With `scorers_differ`: each scorer that differs.",
+      "items": {
+        "type": "object",
+        "required": [
+          "caseId",
+          "caseName",
+          "name",
+          "difference"
+        ],
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "difference": {
+            "enum": [
+              "changed",
+              "gating",
+              "added",
+              "removed"
+            ]
+          }
+        }
+      }
     }
   }
 }

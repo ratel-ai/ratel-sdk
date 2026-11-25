@@ -1,16 +1,24 @@
 import { parseArgs } from "node:util";
 import {
+  type CaseSide,
+  type Comparison,
+  compareEvalRun,
   EVAL_EXIT,
   EvalCallError,
   type Experiment,
   exitCodeOf,
+  pinBaseline,
+  requireBaseline,
   startEvalRun,
+  VERDICT_EXIT,
   waitForEvalRun,
 } from "./run.js";
 
-export const EVAL_USAGE = `Usage: ratel eval run [--sandbox-version <id|latest>] [--trials <n>] [--params <json>] [--json] [--no-wait]
+export const EVAL_USAGE = `Usage: ratel eval run [--sandbox-version <id|latest>] [--trials <n>] [--params <json>] [--json] [--no-wait] [--compare-baseline]
+       ratel eval baseline pin <experiment-id> [--json]
 
-Runs each approved case on a sandbox version and prints the counts of each case.
+Runs each approved case on a sandbox version and prints the counts of each case. With
+--compare-baseline, prints the verdict against the pinned baseline, and it gives the exit code.
 
   RATEL_API_KEY  a project key with the permissions evals:read and evals:write
   RATEL_URL      the address of Ratel
@@ -39,7 +47,15 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
   if (!isAddress(url)) return usage("RATEL_URL is not an http or https address.");
   if (!/^[\x21-\x7e]+$/.test(apiKey)) return usage("RATEL_API_KEY is not a key.");
 
+  let run: { experimentId: string; url: string } | null = null;
   try {
+    if (options.pin) {
+      const pinned = await pinBaseline(options.pin, { url, apiKey });
+      if (json) print(pinned);
+      else process.stdout.write(`${pinned.baseline.experimentId}\n`);
+      return EVAL_EXIT.pass;
+    }
+    if (options.compare) await requireBaseline({ url, apiKey });
     const started = await startEvalRun({ ...options, url, apiKey });
     if (!options.wait) {
       if (json) print(started);
@@ -48,6 +64,13 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
     }
     process.stderr.write(`ratel: experiment ${started.experimentId} started\n`);
     const experiment = await waitForEvalRun(started.experimentId, { url, apiKey });
+    if (options.compare) {
+      run = { experimentId: experiment.experimentId, url: experiment.url };
+      const comparison = await compareEvalRun(started.experimentId, { url, apiKey });
+      if (json) print({ ...experiment, comparison });
+      else process.stdout.write(report(experiment) + compared(comparison));
+      return VERDICT_EXIT[comparison.verdict];
+    }
     const exitCode = exitCodeOf(experiment);
     if (json) print(experiment);
     else process.stdout.write(report(experiment));
@@ -55,7 +78,7 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const body = error instanceof EvalCallError ? error.body : {};
-    if (json) print({ error: "eval_run_failed", ...body, message });
+    if (json) print({ error: "eval_run_failed", ...body, message, ...run });
     process.stderr.write(`ratel: ${message}\n`);
     return error instanceof EvalCallError ? error.exitCode : EVAL_EXIT.unavailable;
   }
@@ -66,6 +89,9 @@ type Options = {
   trials?: number;
   params?: Record<string, unknown>;
   wait: boolean;
+  compare: boolean;
+  /** The experiment that `baseline pin` pins. */
+  pin?: string;
   help: boolean;
 };
 
@@ -81,10 +107,18 @@ function read(argv: string[]): Options | string {
   const base = {
     sandboxVersion: values["sandbox-version"] ?? "latest",
     wait: !values["no-wait"],
+    compare: values["compare-baseline"] ?? false,
     help: values.help ?? false,
   };
   if (base.help) return base;
+  if (positionals[0] === "baseline") {
+    const [, command, pin, ...rest] = positionals;
+    if (command !== "pin" || !pin || rest.length > 0) return "Unknown command.";
+    const other = Object.keys(values).find((name) => name !== "json");
+    return other ? `--${other} is not an option of baseline pin.` : { ...base, pin };
+  }
   if (positionals.length !== 1 || positionals[0] !== "run") return "Unknown command.";
+  if (base.compare && !base.wait) return "--compare-baseline needs the end of the run.";
   const trials = values.trials === undefined ? undefined : Number(values.trials);
   if (trials !== undefined && !(Number.isInteger(trials) && trials >= 1 && trials <= MAX_TRIALS)) {
     return `--trials is a whole number from 1 to ${MAX_TRIALS}.`;
@@ -104,6 +138,7 @@ function parse(argv: string[]) {
       params: { type: "string" },
       json: { type: "boolean" },
       "no-wait": { type: "boolean" },
+      "compare-baseline": { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -132,4 +167,18 @@ function report({ cases, url }: Experiment): string {
       `${name} (v${number}): ${counts.pass} pass, ${counts.fail} fail, ${counts.invalid} invalid`,
   );
   return `${[...lines, url].join("\n")}\n`;
+}
+
+function compared({ verdict, rule, url, baseline, changedCases }: Comparison): string {
+  const word = `${verdict[0]?.toUpperCase()}${verdict.slice(1)}`;
+  const lines = changedCases.map(({ name, change, baseline: before, candidate: after }) => {
+    const sides = [before, after].filter((side) => side !== null);
+    const versions = sides.map(({ number }) => `v${number}`).join(" to ");
+    return `  ${change}: ${name} (${versions}): ${sides.map(passes).join(" to ")}`;
+  });
+  return `${[`${word} against the baseline ${baseline.experimentId}`, rule, ...lines, url].join("\n")}\n`;
+}
+
+function passes({ counts: { pass, fail, invalid } }: CaseSide): string {
+  return `${pass}/${pass + fail + invalid} pass${invalid > 0 ? `, ${invalid} invalid` : ""}`;
 }

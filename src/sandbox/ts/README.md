@@ -85,6 +85,7 @@ of each case and the address of the experiment page. The key needs the permissio
 | `--params <json>` | A JSON object that each run gets as its params |
 | `--json` | Prints one JSON document on the standard output, and nothing else there |
 | `--no-wait` | Prints the experiment id, does not wait, and exits with 0 |
+| `--compare-baseline` | Compares the run with the pinned baseline of the project. The verdict gives the exit code |
 
 The exit codes are a contract:
 
@@ -98,6 +99,27 @@ The exit codes are a contract:
 
 With `--json`, the document is the [experiment](../../../protocol/evals/v1) (exit 0, 1 and 2), the
 started experiment (`--no-wait`), or `{ "error", "message" }` (exit 3 and 4).
+
+### Compare with a baseline
+
+```bash
+ratel eval baseline pin <experiment-id> [--json]   # a completed experiment. Nothing else pins one
+ratel eval run --compare-baseline --json
+```
+
+With no pinned baseline, `--compare-baseline` starts no run and exits with 3. The exit codes with it:
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Improved or unchanged |
+| 1 | Regressed: a case went from pass to fail |
+| 2 | Inconclusive: a compared case is invalid, or no case is in both experiments |
+| 3 | Refused (also when the scorers of the two experiments differ), or the command or a setting is wrong |
+| 4 | The network or the server failed |
+
+With `--json`, the document is the experiment with a `comparison`: the `verdict`, the text of its
+`rule`, the `changedCases` and the `otherCases`. After a run, a refusal also has its `experimentId`
+and `url`, and `scorers` names each scorer that differs. `baseline pin` exits with 0, 3 or 4.
 
 ## The runner
 

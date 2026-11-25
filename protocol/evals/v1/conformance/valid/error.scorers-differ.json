@@ -1,0 +1,12 @@
+{
+  "error": "scorers_differ",
+  "message": "The scorers of the two experiments differ: \"No refund\" of \"Late order is refused\" (its definition changed).",
+  "scorers": [
+    {
+      "caseId": "33333333-3333-4333-8333-333333333333",
+      "caseName": "Late order is refused",
+      "name": "No refund",
+      "difference": "changed"
+    }
+  ]
+}
