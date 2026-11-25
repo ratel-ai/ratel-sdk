@@ -37,12 +37,42 @@
           "result": "pass",
           "reason": null,
           "traceId": "cccccccccccccccccccccccccccccccc",
+          "sandboxRunId": "66666666-7777-4777-8777-777777777777",
+          "scorers": [
+            {
+              "name": "No refund",
+              "gating": true,
+              "status": "pass"
+            }
+          ]
+        },
+        {
+          "trialId": "77777777-6666-4666-8666-666666666666",
+          "index": 1,
+          "result": "pass",
+          "reason": null,
+          "traceId": "cccccccccccccccccccccccccccccccc",
           "sandboxRunId": "77777777-7777-4777-8777-777777777777",
           "scorers": [
             {
               "name": "No refund",
               "gating": true,
               "status": "pass"
+            }
+          ]
+        },
+        {
+          "trialId": "88888888-6666-4666-8666-666666666666",
+          "index": 2,
+          "result": "fail",
+          "reason": null,
+          "traceId": "cccccccccccccccccccccccccccccccc",
+          "sandboxRunId": "88888888-7777-4777-8777-777777777777",
+          "scorers": [
+            {
+              "name": "No refund",
+              "gating": true,
+              "status": "fail"
             }
           ]
         }

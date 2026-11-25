@@ -76,6 +76,11 @@ export async function waitForEvalRun(
 
 /** A case with a failed trial is a fail. Then a case with an invalid trial is invalid. */
 export function exitCodeOf({ cases }: Pick<Experiment, "cases">): number {
+  const complete = cases.every(
+    ({ counts }) =>
+      [counts?.pass, counts?.fail, counts?.invalid].every(Number.isInteger) && counts.open === 0,
+  );
+  if (cases.length === 0 || !complete) throw unreadable();
   if (cases.some(({ counts }) => counts.fail > 0)) return EVAL_EXIT.fail;
   if (cases.some(({ counts }) => counts.invalid > 0)) return EVAL_EXIT.invalid;
   return EVAL_EXIT.pass;

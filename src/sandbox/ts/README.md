@@ -90,7 +90,7 @@ The exit codes are a contract:
 
 | Exit code | Meaning |
 |---|---|
-| 0 | All cases pass: each trial passes. Also `--no-wait` and `--help` |
+| 0 | All cases pass: each trial passes. Also `--no-wait` and `--help` (with `--json` the help goes to the error output) |
 | 1 | A case fails: one of its trials fails |
 | 2 | A case is invalid (one of its trials is) and no case fails |
 | 3 | Ratel refused the call, or the command or a setting is wrong |

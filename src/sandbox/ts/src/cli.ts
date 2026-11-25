@@ -17,8 +17,8 @@ Bundles the project folder (the present folder by default) and makes a new sandb
 
 const EXIT = { ok: 0, refused: 1, usage: 2 } as const;
 
-// The definition loads here with the same TypeScript flags as in the instance.
-const flags = typeScriptFlags();
+// A push loads the definition here with the same TypeScript flags as in the instance.
+const flags = process.argv[2] === "eval" ? [] : typeScriptFlags();
 if (flags.every((flag) => process.execArgv.includes(flag))) {
   main(process.argv.slice(2)).then((code) => {
     process.exitCode = code;

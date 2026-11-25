@@ -20,7 +20,7 @@ const MAX_TRIALS = 20;
 
 /** `ratel eval ...`. Returns the exit code. */
 export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promise<number> {
-  const json = argv.includes("--json");
+  const json = argv.some((arg) => arg === "--json" || arg.startsWith("--json="));
   const print = (value: unknown) => process.stdout.write(`${JSON.stringify(value)}\n`);
   const usage = (problem: string) => {
     if (json) print({ error: "usage", message: problem });
@@ -30,12 +30,14 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
   const options = read(argv);
   if (typeof options === "string") return usage(options);
   if (options.help) {
-    process.stdout.write(EVAL_USAGE);
+    // With --json the standard output has one document or nothing.
+    (json ? process.stderr : process.stdout).write(EVAL_USAGE);
     return EVAL_EXIT.pass;
   }
   const { RATEL_API_KEY: apiKey, RATEL_URL: url } = env;
   if (!apiKey || !url) return usage(`${apiKey ? "RATEL_URL" : "RATEL_API_KEY"} is not set.`);
-  if (!URL.canParse(url)) return usage("RATEL_URL is not an address.");
+  if (!isAddress(url)) return usage("RATEL_URL is not an http or https address.");
+  if (!/^[\x21-\x7e]+$/.test(apiKey)) return usage("RATEL_API_KEY is not a key.");
 
   try {
     const started = await startEvalRun({ ...options, url, apiKey });
@@ -46,9 +48,10 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
     }
     process.stderr.write(`ratel: experiment ${started.experimentId} started\n`);
     const experiment = await waitForEvalRun(started.experimentId, { url, apiKey });
+    const exitCode = exitCodeOf(experiment);
     if (json) print(experiment);
     else process.stdout.write(report(experiment));
-    return exitCodeOf(experiment);
+    return exitCode;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const body = error instanceof EvalCallError ? error.body : {};
@@ -104,6 +107,12 @@ function parse(argv: string[]) {
       help: { type: "boolean", short: "h" },
     },
   });
+}
+
+function isAddress(text: string): boolean {
+  if (!URL.canParse(text)) return false;
+  const { protocol, username, password } = new URL(text);
+  return ["http:", "https:"].includes(protocol) && !username && !password;
 }
 
 function object(text: string): Record<string, unknown> | null {

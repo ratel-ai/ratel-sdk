@@ -78,3 +78,21 @@ it("the contract does not know why a run starts", () => {
     expect(text).not.toMatch(/\beval(s|uation|uations)?\b|\bcases?\b|\bscorers?\b/i);
   }
 });
+
+it("the counts of an experiment vector are the counts of its trials", () => {
+  for (const name of ["completed", "running"]) {
+    const { counts, cases } = read(`evals/v1/conformance/valid/experiment.${name}.json`);
+    const count = (trials: Array<{ result: string | null }>) => {
+      const of = { pass: 0, fail: 0, invalid: 0, open: 0 };
+      for (const { result } of trials) of[(result ?? "open") as keyof typeof of] += 1;
+      return of;
+    };
+    expect(counts).toEqual(count(cases.flatMap((row: { trials: [] }) => row.trials)));
+    for (const row of cases) expect(row.counts).toEqual(count(row.trials));
+  }
+});
+
+it("a refused key has an error and no message", () => {
+  const validate = validator("error", "evals/v1");
+  expect(validate({ error: "Invalid or revoked API key." })).toBe(true);
+});

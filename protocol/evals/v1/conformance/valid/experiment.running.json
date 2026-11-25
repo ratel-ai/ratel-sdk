@@ -25,26 +25,38 @@
       "number": 1,
       "name": "Late refund",
       "counts": {
-        "pass": 2,
-        "fail": 1,
+        "pass": 0,
+        "fail": 0,
         "invalid": 0,
-        "open": 0
+        "open": 3
       },
       "trials": [
         {
           "trialId": "66666666-6666-4666-8666-666666666666",
           "index": 0,
-          "result": "pass",
+          "result": null,
           "reason": null,
-          "traceId": "cccccccccccccccccccccccccccccccc",
-          "sandboxRunId": "77777777-7777-4777-8777-777777777777",
-          "scorers": [
-            {
-              "name": "No refund",
-              "gating": true,
-              "status": "pass"
-            }
-          ]
+          "traceId": null,
+          "sandboxRunId": null,
+          "scorers": []
+        },
+        {
+          "trialId": "77777777-6666-4666-8666-666666666666",
+          "index": 1,
+          "result": null,
+          "reason": null,
+          "traceId": null,
+          "sandboxRunId": null,
+          "scorers": []
+        },
+        {
+          "trialId": "88888888-6666-4666-8666-666666666666",
+          "index": 2,
+          "result": null,
+          "reason": null,
+          "traceId": null,
+          "sandboxRunId": null,
+          "scorers": []
         }
       ]
     }

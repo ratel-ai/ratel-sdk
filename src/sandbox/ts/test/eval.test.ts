@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -118,6 +118,10 @@ describe("exit codes", () => {
     { RATEL_API_KEY: undefined },
     { RATEL_URL: undefined },
     { RATEL_URL: "not an address" },
+    { RATEL_URL: "localhost:3000" },
+    { RATEL_URL: "ftp://x" },
+    { RATEL_URL: "http://user:pass@x" },
+    { RATEL_API_KEY: "a\nb" },
   ])("3: a setting is wrong %j", async (env) => {
     expect((await ratel(["run"], env)).code).toBe(3);
   });
@@ -212,4 +216,42 @@ it("--help prints the usage", async () => {
   const { code, out } = await ratel(["run", "--help"]);
   expect(code).toBe(0);
   expect(out).toContain("--sandbox-version");
+});
+
+it("4 and one document: a completed run with no readable counts, no case or an open trial", async () => {
+  for (const body of [
+    { ...experiment, cases: [{}] },
+    { ...experiment, cases: [] },
+    {
+      ...experiment,
+      cases: [{ ...experiment.cases[0], counts: { pass: 0, fail: 0, invalid: 0, open: 3 } }],
+    },
+  ]) {
+    reads = [{ status: 200, body }];
+    const { code, out } = await ratel(["run", "--json"]);
+    expect(code).toBe(4);
+    expect(out.trim().split("\n")).toHaveLength(1);
+    expect(JSON.parse(out).error).toBe("eval_run_failed");
+  }
+}, 60_000);
+
+it("--json with a wrong value prints one document, and help goes to the error output", async () => {
+  const wrong = await ratel(["run", "--json=true"]);
+  expect([wrong.code, JSON.parse(wrong.out).error]).toEqual([3, "usage"]);
+  const help = await ratel(["run", "--json", "--help"]);
+  expect([help.code, help.out]).toEqual([0, ""]);
+});
+
+it("runs in one process, so a signal to it leaves no other process that waits", async () => {
+  reads = [{ status: 200, body: { ...experiment, state: "running" } }];
+  const parent = spawn(process.execPath, [CLI, "eval", "run"], {
+    env: { PATH: process.env.PATH, RATEL_URL: url, RATEL_API_KEY: "rtl_key" },
+    stdio: "ignore",
+  });
+  const ended = new Promise((done) => parent.on("close", (_code, signal) => done(signal)));
+  while (calls.length < 2) await new Promise((done) => setTimeout(done, 50));
+  const { stdout } = spawnSync("pgrep", ["-P", String(parent.pid)], { encoding: "utf8" });
+  parent.kill("SIGTERM");
+  expect(stdout).toBe("");
+  expect(await ended).toBe("SIGTERM");
 });
