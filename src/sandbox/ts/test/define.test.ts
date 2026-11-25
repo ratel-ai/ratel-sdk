@@ -69,6 +69,7 @@ describe("toManifest", () => {
 
   it("refuses reserved, repeated and missing parts", () => {
     expect(problem({ ...base, secrets: ["AWS_KEY"] })).toMatch(/reserved/);
+    expect(problem({ ...base, secrets: ["AWS_KEY"] })).not.toMatch(/MODAL/);
     expect(problem({ ...base, secrets: ["A_KEY", "A_KEY"] })).toMatch(/two times/);
     expect(problem({ name: "Bad Name", entry: "a.ts", tools: { x: {} } })).toMatch(
       /name must be.*execute.*sideEffect/,

@@ -41,7 +41,7 @@ export function toManifest(definition: SandboxDefinition): Manifest {
     );
     check(
       !RESERVED_SECRET_PREFIXES.some((prefix) => String(secret).startsWith(prefix)),
-      `secrets[${index}] uses a reserved prefix (${RESERVED_SECRET_PREFIXES.join(", ")})`,
+      `secrets[${index}] uses a reserved prefix. Use another name`,
     );
   }
   check(new Set(secrets).size === secrets.length, "secrets has a name two times");

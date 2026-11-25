@@ -35,7 +35,7 @@ export default async function run({ input, params, tools }: RunContext) {
 ```
 
 - `entry`, `name` and `secrets` are checked by the types and again when the file loads.
-- The prefixes `RATEL_`, `MODAL_` and `AWS_` are reserved for secret names.
+- Some prefixes are reserved for secret names, such as `RATEL_`. The types and the push refuse them.
 - A tool with `sideEffect: true` must have a `fake` handler.
 - Node removes the types of the files. Imports of `./x.js` and `./x` find `./x.ts`. `paths` of
   `tsconfig.json` are not supported.
@@ -95,7 +95,7 @@ The exit codes are a contract:
 | 1 | A case fails: one of its trials fails |
 | 2 | A case is invalid (one of its trials is) and no case fails |
 | 3 | Ratel refused the call, or the command or a setting is wrong |
-| 4 | The network or the server failed |
+| 4 | The network or the server failed, or there were too many calls |
 
 With `--json`, the document is the [experiment](../../../protocol/evals/v1) (exit 0, 1 and 2), the
 started experiment (`--no-wait`), or `{ "error", "message" }` (exit 3 and 4).
@@ -115,7 +115,7 @@ With no pinned baseline, `--compare-baseline` starts no run and exits with 3. Th
 | 1 | Regressed: a case went from pass to fail |
 | 2 | Inconclusive: a compared case is invalid, or no case is in both experiments |
 | 3 | Refused (also when the scorers of the two experiments differ), or the command or a setting is wrong |
-| 4 | The network or the server failed |
+| 4 | The network or the server failed, or there were too many calls |
 
 With `--json`, the document is the experiment with a `comparison`: the `verdict`, the text of its
 `rule`, the `changedCases` and the `otherCases`. After a run, a refusal also has its `experimentId`

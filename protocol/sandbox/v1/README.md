@@ -39,7 +39,9 @@ Each run has a new instance. Ratel sets these variables in it:
 
 The instance runs `node .ratel-sandbox-runner/run.js` in the project folder.
 
-A tool with `sideEffect: false` runs for real. A tool with `sideEffect: true` never runs for real.
+A tool with `sideEffect: false` runs for real. A tool with `sideEffect: true` never runs for real
+through the tools that the runner gives to the agent. A tool that the agent imports and calls itself
+is not under the policy.
 It answers from a fixture with the same tool name and normalized arguments, else from the fake
 handler of the definition. The result records each call with its source. The runner ends after it
 posts the result.
