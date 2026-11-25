@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "input": {
+    "message": "Where is order 7?"
+  },
+  "params": {
+    "temperature": 0
+  },
+  "toolPolicy": {
+    "sideEffects": "fake"
+  },
+  "fixtures": [
+    {
+      "tool": "refund_order",
+      "arguments": {
+        "id": "7"
+      },
+      "result": {
+        "ok": true
+      }
+    }
+  ]
+}

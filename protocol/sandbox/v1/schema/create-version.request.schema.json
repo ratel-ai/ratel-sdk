@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/create-version.request.schema.json",
+  "title": "Create a sandbox version: request",
+  "description": "POST /api/v1/sandboxes/versions with Authorization: Bearer <project key with sandboxes:write>.",
+  "type": "object",
+  "required": [
+    "manifest",
+    "git",
+    "bundle"
+  ],
+  "properties": {
+    "manifest": {
+      "$ref": "manifest.schema.json"
+    },
+    "git": {
+      "type": "object",
+      "required": [
+        "commit",
+        "dirty"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "dirty": {
+          "type": "boolean",
+          "description": "Whether the pushed files differ from the commit."
+        }
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "required": [
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "description": "The tar.gz that the upload step sends."
+    }
+  }
+}

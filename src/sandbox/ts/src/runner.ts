@@ -1,0 +1,230 @@
+import { fork } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
+import type { FromAgent, ToAgent } from "./agent-process.js";
+import type { RunInput, RunResult, RunUsage, ToolCall } from "./contract.js";
+import { createRedactor, type Redactor, redactLines } from "./redact.js";
+import { newTrace, rootSpan, traceparent } from "./trace.js";
+
+export type RunnerOptions = {
+  /** The environment of the instance: `RATEL_URL`, `RATEL_RUN_TOKEN`, `RATEL_RUN_INPUT`, secrets. */
+  env: Readonly<Record<string, string | undefined>>;
+  /** The project folder, with `ratel.sandbox.ts`. */
+  projectDir: string;
+  /** The names of the secrets in `env`. */
+  secretNames: readonly string[];
+  stdout?: (text: string) => void;
+  stderr?: (text: string) => void;
+  /** The wait before each new try of a post, in milliseconds. */
+  retryDelaysMs?: readonly number[];
+};
+
+/** Ratel refuses a larger result. */
+export const MAX_RESULT_BYTES = 4 * 1024 * 1024;
+
+/** How long the agent process has to flush and exit after it gave its output. */
+const EXIT_GRACE_MS = 10_000;
+const POST_TIMEOUT_MS = 30_000;
+const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
+
+/**
+ * Runs the agent of the project one time and posts the result. It posts a failed result when the
+ * agent throws or its process ends early. It rejects when it cannot post the result.
+ */
+export async function runSandbox(options: RunnerOptions): Promise<RunResult> {
+  const { env } = options;
+  const url = required(env, "RATEL_URL").replace(/\/+$/, "");
+  const token = required(env, "RATEL_RUN_TOKEN");
+  const runInput = decodeRunInput(required(env, "RATEL_RUN_INPUT"));
+  const redactor = createRedactor([
+    token,
+    ...options.secretNames.flatMap((name) => env[name] ?? []),
+  ]);
+  const ids = newTrace();
+  const startMs = Date.now();
+
+  const agent = await runAgent(options, runInput, traceparent(ids), redactor, { url, token });
+  const result = bounded(
+    redactor.json<RunResult>({
+      v: 1,
+      runId: runInput.runId,
+      status: agent.error ? "failed" : "completed",
+      ...(agent.error ? { error: agent.error } : { output: agent.output }),
+      toolCalls: agent.toolCalls,
+      usage: { ...agent.usage, durationMs: Date.now() - startMs },
+      traceId: ids.traceId,
+    }),
+  );
+
+  const span = rootSpan(ids, {
+    name: agent.name,
+    startMs,
+    endMs: Date.now(),
+    input: redactor.json(runInput.input),
+    output: result.output,
+    runId: runInput.runId,
+    ...(result.error ? { error: result.error } : {}),
+  });
+  const delays = options.retryDelaysMs ?? RETRY_DELAYS_MS;
+  // A lost span must not lose the result.
+  await post(`${url}/v1/traces`, token, span, delays.slice(0, 1)).catch(() => {
+    (options.stderr ?? writeStderr)("ratel: the trace of the run was not sent\n");
+  });
+  await post(`${url}/api/v1/sandbox-runs/${runInput.runId}/result`, token, result, delays);
+  return result;
+}
+
+type AgentOutcome = {
+  name: string;
+  output?: unknown;
+  error?: { type: string; message: string };
+  toolCalls: ToolCall[];
+  usage: Omit<RunUsage, "durationMs">;
+};
+
+function runAgent(
+  options: RunnerOptions,
+  runInput: RunInput,
+  parent: string,
+  redactor: Redactor,
+  ratel: { url: string; token: string },
+): Promise<AgentOutcome> {
+  return new Promise((done) => {
+    const outcome: AgentOutcome = { name: "sandbox", toolCalls: [], usage: {} };
+    let answered = false;
+    const child = fork(fileURLToPath(new URL("./agent-process.js", import.meta.url)), [], {
+      cwd: options.projectDir,
+      env: agentEnv(options.env, parent, ratel),
+      execArgv: ["--experimental-transform-types", "--disable-warning=ExperimentalWarning"],
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+      serialization: "json",
+    });
+    const out = redactLines(redactor, options.stdout ?? writeStdout);
+    const err = redactLines(redactor, options.stderr ?? writeStderr);
+    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => out.push(chunk));
+    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => err.push(chunk));
+
+    let grace: NodeJS.Timeout | undefined;
+    child.on("message", (message: FromAgent) => {
+      if (message.type === "name") outcome.name = message.name;
+      else if (message.type === "call") outcome.toolCalls.push(message.call);
+      else if (message.type === "usage") outcome.usage = addUsage(outcome.usage, message.usage);
+      else {
+        answered = true;
+        if (message.type === "output") outcome.output = message.output;
+        else outcome.error = message.error;
+        // The agent may flush its telemetry before it ends.
+        grace = setTimeout(() => child.kill("SIGKILL"), EXIT_GRACE_MS);
+      }
+    });
+    child.on("error", (error) => {
+      outcome.error ??= { type: "AgentProcessError", message: error.message };
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(grace);
+      out.end();
+      err.end();
+      if (!answered) {
+        outcome.error ??= {
+          type: "AgentExit",
+          message: `The agent process ended before it gave an output (${signal ?? `exit code ${code}`}).`,
+        };
+      }
+      done(outcome);
+    });
+    const message: ToAgent = { projectDir: options.projectDir, runInput, traceparent: parent };
+    child.send(message, () => {});
+  });
+}
+
+/** The agent sees its secrets and where to send traces. It does not see the input or the post URL. */
+function agentEnv(
+  env: RunnerOptions["env"],
+  parent: string,
+  { url, token }: { url: string; token: string },
+): NodeJS.ProcessEnv {
+  const { RATEL_RUN_INPUT: _input, RATEL_RUN_TOKEN: _token, ...rest } = env;
+  const traces = `${url}/v1/traces`;
+  return {
+    ...rest,
+    TRACEPARENT: parent,
+    RATEL_OTLP_ENDPOINT: traces,
+    RATEL_API_KEY: token,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: traces,
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: `authorization=${encodeURIComponent(`Bearer ${token}`)}`,
+  };
+}
+
+function bounded(result: RunResult): RunResult {
+  const bytes = Buffer.byteLength(JSON.stringify(result));
+  if (bytes <= MAX_RESULT_BYTES) return result;
+  const { output: _output, ...rest } = result;
+  return {
+    ...rest,
+    status: "failed",
+    toolCalls: [],
+    error: {
+      type: "ResultTooLarge",
+      message: `The result has ${bytes} bytes. The maximum is ${MAX_RESULT_BYTES}.`,
+    },
+  };
+}
+
+async function post(
+  url: string,
+  token: string,
+  body: unknown,
+  delays: readonly number[],
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    const failure = await send(url, token, body);
+    if (!failure) return;
+    const delay = delays[attempt];
+    if (!failure.retry || delay === undefined) throw new Error(failure.message);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
+
+async function send(url: string, token: string, body: unknown) {
+  const path = new URL(url).pathname;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+    });
+    await response.arrayBuffer();
+    if (response.ok) return undefined;
+    const retry = response.status === 429 || response.status >= 500;
+    return { retry, message: `POST ${path} answered ${response.status}.` };
+  } catch (error) {
+    return { retry: true, message: `POST ${path} failed: ${(error as Error).name}.` };
+  }
+}
+
+function decodeRunInput(text: string): RunInput {
+  const runInput = JSON.parse(gunzipSync(Buffer.from(text, "base64")).toString("utf8")) as RunInput;
+  if (runInput.v !== 1)
+    throw new Error("RATEL_RUN_INPUT has a version that this runner does not know.");
+  if (runInput.toolPolicy?.sideEffects !== "fake")
+    throw new Error("RATEL_RUN_INPUT has no valid tool policy.");
+  return runInput;
+}
+
+function addUsage(a: AgentOutcome["usage"], b: AgentOutcome["usage"]): AgentOutcome["usage"] {
+  const sum = { ...a };
+  for (const key of ["inputTokens", "outputTokens", "costUsd"] as const) {
+    if (typeof b[key] === "number") sum[key] = (sum[key] ?? 0) + b[key];
+  }
+  return sum;
+}
+
+function required(env: RunnerOptions["env"], name: string): string {
+  const value = env[name];
+  if (!value) throw new Error(`${name} is not set.`);
+  return value;
+}
+
+const writeStdout = (text: string) => void process.stdout.write(text);
+const writeStderr = (text: string) => void process.stderr.write(text);

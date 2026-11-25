@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/run-result.schema.json",
+  "title": "Run result",
+  "description": "POST /api/v1/sandbox-runs/{runId}/result with Authorization: Bearer <run token>. Secret values are replaced before the runner sends it.",
+  "type": "object",
+  "required": [
+    "v",
+    "runId",
+    "status",
+    "toolCalls",
+    "usage",
+    "traceId"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    },
+    "output": {},
+    "toolCalls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "arguments",
+          "source"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "arguments": {},
+          "result": {},
+          "error": {
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "real",
+              "fixture",
+              "fake"
+            ]
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "required": [
+        "durationMs"
+      ],
+      "properties": {
+        "durationMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "inputTokens": {
+          "type": "number",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": "number",
+          "minimum": 0
+        },
+        "costUsd": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "traceId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "type",
+        "message"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "if": {
+    "properties": {
+      "status": {
+        "const": "failed"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "error"
+    ]
+  }
+}

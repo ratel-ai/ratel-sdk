@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/run-input.schema.json",
+  "title": "Run input",
+  "description": "What Ratel gives to the runner of one instance. It reaches the instance as RATEL_RUN_INPUT: base64 of the gzip of this JSON.",
+  "type": "object",
+  "required": [
+    "v",
+    "runId",
+    "input",
+    "params",
+    "toolPolicy",
+    "fixtures"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "runId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "input": {
+      "description": "Any JSON value, given to the entry point."
+    },
+    "params": {
+      "type": "object"
+    },
+    "toolPolicy": {
+      "type": "object",
+      "required": [
+        "sideEffects"
+      ],
+      "properties": {
+        "sideEffects": {
+          "const": "fake",
+          "description": "A tool with side effects answers from a fixture, else from its fake handler. It never runs for real."
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool",
+          "arguments",
+          "result"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "arguments": {},
+          "result": {}
+        }
+      },
+      "description": "Matched on the tool name and the normalized arguments (object keys sorted). Equal matches answer in order, and the last one repeats."
+    }
+  }
+}

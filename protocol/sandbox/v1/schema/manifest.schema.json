@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/manifest.schema.json",
+  "title": "Sandbox manifest",
+  "description": "What a sandbox definition declares: no code, no secret value. A tool with side effects must declare a fake handler, so a run never performs the side effect by default.",
+  "type": "object",
+  "required": [
+    "v",
+    "name",
+    "entry",
+    "base",
+    "install",
+    "secrets",
+    "tools"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$))[^\\u0000]+$",
+      "description": "The entry point, relative to the project folder."
+    },
+    "base": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:@-]*$",
+      "description": "The base image of a registry."
+    },
+    "install": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "description": "Shell commands that run in the project folder, in order, when the image is built."
+    },
+    "secrets": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(?!RATEL_|MODAL_|AWS_)[A-Z][A-Z0-9_]{0,127}$"
+      },
+      "description": "Names only. The prefixes RATEL_, MODAL_ and AWS_ are reserved."
+    },
+    "tools": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "sideEffect",
+          "fake"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "sideEffect": {
+            "type": "boolean"
+          },
+          "fake": {
+            "type": "boolean",
+            "description": "Whether the definition has a fake handler."
+          }
+        },
+        "if": {
+          "properties": {
+            "sideEffect": {
+              "const": true
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "fake": {
+              "const": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

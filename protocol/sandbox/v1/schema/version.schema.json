@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/version.schema.json",
+  "title": "A sandbox version",
+  "description": "The answer of POST /api/v1/sandboxes/versions/{id}/finalize (202) and GET /api/v1/sandboxes/versions/{id} (200). A version never changes, except for its build state.",
+  "type": "object",
+  "required": [
+    "versionId",
+    "name",
+    "status",
+    "git",
+    "bundle",
+    "manifest",
+    "createdAt"
+  ],
+  "properties": {
+    "versionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+    },
+    "status": {
+      "enum": [
+        "uploading",
+        "uploaded",
+        "building",
+        "ready",
+        "failed"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Why the build failed or did not start."
+    },
+    "git": {
+      "type": "object",
+      "required": [
+        "commit",
+        "dirty"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "required": [
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "manifest": {
+      "$ref": "manifest.schema.json"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

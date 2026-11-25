@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "runId": "3f2c1a52-5f0d-4c6e-9a55-0c9d7f1f7e11",
+  "input": {
+    "message": "Where is order 7?"
+  },
+  "params": {
+    "temperature": 0
+  },
+  "toolPolicy": {
+    "sideEffects": "real"
+  },
+  "fixtures": [
+    {
+      "tool": "refund_order",
+      "arguments": {
+        "id": "7"
+      },
+      "result": {
+        "ok": true
+      }
+    }
+  ]
+}

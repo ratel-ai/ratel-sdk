@@ -16,7 +16,8 @@
       "src/rankers/**/*.js",
       "src/cloud-sdk/**/*.ts",
       "src/cloud-sdk/**/*.tsx",
-      "src/cloud-sdk/**/*.js"
+      "src/cloud-sdk/**/*.js",
+      "src/sandbox/**/*.ts"
     ]
   },
   "formatter": {

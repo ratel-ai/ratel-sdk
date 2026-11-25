@@ -18,6 +18,8 @@ loader and source implementations live outside `protocol/`.
 - `v2/` — experimental preview: v1 plus optional `searchableDescription` and its
   eight-field ETag projection with a canonical `null` unset representation. It includes its
   own schemas and executable conformance vectors.
+- `sandbox/v1/` — experimental preview, a separate contract: the manifest, push, run input and run
+  result of a Ratel sandbox.
 
 Both versions publish the `IntentGraph` usage-ranking shape — a producer contract shared by
 the local learner and Ratel Cloud, not a synced endpoint
