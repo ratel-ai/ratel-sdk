@@ -5,6 +5,7 @@ import type { FromAgent, ToAgent } from "./agent-process.js";
 import type { RunInput, RunResult, RunUsage, ToolCall } from "./contract.js";
 import { createRedactor, type Redactor, redactLines } from "./redact.js";
 import { newTrace, rootSpan, traceparent } from "./trace.js";
+import { typeScriptFlags } from "./typescript.js";
 
 export type RunnerOptions = {
   /** The environment of the instance: `RATEL_URL`, `RATEL_RUN_TOKEN`, `RATEL_RUN_INPUT`, secrets. */
@@ -24,7 +25,10 @@ export const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 
 /** How long the agent process has to flush and exit after it gave its output. */
 const EXIT_GRACE_MS = 10_000;
+/** How long the output of an ended agent process can still come. */
+const DRAIN_MS = 1_000;
 const POST_TIMEOUT_MS = 30_000;
+const TRACE_TIMEOUT_MS = 5_000;
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
 
 /**
@@ -44,17 +48,18 @@ export async function runSandbox(options: RunnerOptions): Promise<RunResult> {
   const startMs = Date.now();
 
   const agent = await runAgent(options, runInput, traceparent(ids), redactor, { url, token });
-  const result = bounded(
-    redactor.json<RunResult>({
-      v: 1,
-      runId: runInput.runId,
-      status: agent.error ? "failed" : "completed",
-      ...(agent.error ? { error: agent.error } : { output: agent.output }),
-      toolCalls: agent.toolCalls,
-      usage: { ...agent.usage, durationMs: Date.now() - startMs },
-      traceId: ids.traceId,
-    }),
-  );
+  // Only what the agent wrote is redacted: a secret can be equal to a part of a tool name.
+  const result = bounded({
+    v: 1,
+    runId: runInput.runId,
+    status: agent.error ? "failed" : "completed",
+    ...(agent.error
+      ? { error: redactor.json(agent.error) }
+      : { output: redactor.json(agent.output) }),
+    toolCalls: agent.toolCalls.map((call) => redactCall(call, redactor)),
+    usage: { ...agent.usage, durationMs: Date.now() - startMs },
+    traceId: ids.traceId,
+  });
 
   const span = rootSpan(ids, {
     name: agent.name,
@@ -67,7 +72,7 @@ export async function runSandbox(options: RunnerOptions): Promise<RunResult> {
   });
   const delays = options.retryDelaysMs ?? RETRY_DELAYS_MS;
   // A lost span must not lose the result.
-  await post(`${url}/v1/traces`, token, span, delays.slice(0, 1)).catch(() => {
+  await post(`${url}/v1/traces`, token, span, [], TRACE_TIMEOUT_MS).catch(() => {
     (options.stderr ?? writeStderr)("ratel: the trace of the run was not sent\n");
   });
   await post(`${url}/api/v1/sandbox-runs/${runInput.runId}/result`, token, result, delays);
@@ -95,7 +100,9 @@ function runAgent(
     const child = fork(fileURLToPath(new URL("./agent-process.js", import.meta.url)), [], {
       cwd: options.projectDir,
       env: agentEnv(options.env, parent, ratel),
-      execArgv: ["--experimental-transform-types", "--disable-warning=ExperimentalWarning"],
+      execArgv: typeScriptFlags(),
+      // A process group of its own, so what the agent started ends with it.
+      detached: true,
       stdio: ["ignore", "pipe", "pipe", "ipc"],
       serialization: "json",
     });
@@ -105,23 +112,35 @@ function runAgent(
     child.stderr?.setEncoding("utf8").on("data", (chunk: string) => err.push(chunk));
 
     let grace: NodeJS.Timeout | undefined;
-    child.on("message", (message: FromAgent) => {
-      if (message.type === "name") outcome.name = message.name;
-      else if (message.type === "call") outcome.toolCalls.push(message.call);
-      else if (message.type === "usage") outcome.usage = addUsage(outcome.usage, message.usage);
-      else {
+    let drain: NodeJS.Timeout | undefined;
+    child.on("message", (sent) => {
+      // Code of the host can send its own messages on this channel.
+      const message = sent as FromAgent | null;
+      if (message?.type === "name") outcome.name = message.name;
+      else if (message?.type === "call") outcome.toolCalls.push(message.call);
+      else if (message?.type === "usage") outcome.usage = addUsage(outcome.usage, message.usage);
+      else if (message?.type === "output" || message?.type === "error") {
         answered = true;
         if (message.type === "output") outcome.output = message.output;
         else outcome.error = message.error;
         // The agent may flush its telemetry before it ends.
-        grace = setTimeout(() => child.kill("SIGKILL"), EXIT_GRACE_MS);
+        grace ??= setTimeout(() => child.kill("SIGKILL"), EXIT_GRACE_MS);
       }
+    });
+    child.on("exit", () => {
+      endGroup(child.pid);
+      // A process that left the group still holds the pipes.
+      drain = setTimeout(() => {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }, DRAIN_MS);
     });
     child.on("error", (error) => {
       outcome.error ??= { type: "AgentProcessError", message: error.message };
     });
     child.on("close", (code, signal) => {
       clearTimeout(grace);
+      clearTimeout(drain);
       out.end();
       err.end();
       if (!answered) {
@@ -137,7 +156,26 @@ function runAgent(
   });
 }
 
-/** The agent sees its secrets and where to send traces. It does not see the input or the post URL. */
+/** Ends what the agent process left behind. */
+function endGroup(pid: number | undefined): void {
+  try {
+    if (pid) process.kill(-pid, "SIGKILL");
+  } catch {
+    // The group is empty.
+  }
+}
+
+function redactCall(call: ToolCall, redactor: Redactor): ToolCall {
+  const { result, error } = call;
+  return {
+    ...call,
+    arguments: redactor.json(call.arguments),
+    ...(result === undefined ? {} : { result: redactor.json(result) }),
+    ...(error === undefined ? {} : { error: redactor.text(error) }),
+  };
+}
+
+/** The agent sees its secrets and where to send traces, with the run token. */
 function agentEnv(
   env: RunnerOptions["env"],
   parent: string,
@@ -175,9 +213,10 @@ async function post(
   token: string,
   body: unknown,
   delays: readonly number[],
+  timeoutMs = POST_TIMEOUT_MS,
 ): Promise<void> {
   for (let attempt = 0; ; attempt++) {
-    const failure = await send(url, token, body);
+    const failure = await send(url, token, body, timeoutMs);
     if (!failure) return;
     const delay = delays[attempt];
     if (!failure.retry || delay === undefined) throw new Error(failure.message);
@@ -185,14 +224,15 @@ async function post(
   }
 }
 
-async function send(url: string, token: string, body: unknown) {
+async function send(url: string, token: string, body: unknown, timeoutMs: number) {
   const path = new URL(url).pathname;
   try {
     const response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+      redirect: "error",
+      signal: AbortSignal.timeout(timeoutMs),
     });
     await response.arrayBuffer();
     if (response.ok) return undefined;
@@ -215,7 +255,8 @@ function decodeRunInput(text: string): RunInput {
 function addUsage(a: AgentOutcome["usage"], b: AgentOutcome["usage"]): AgentOutcome["usage"] {
   const sum = { ...a };
   for (const key of ["inputTokens", "outputTokens", "costUsd"] as const) {
-    if (typeof b[key] === "number") sum[key] = (sum[key] ?? 0) + b[key];
+    const value = b?.[key];
+    if (typeof value === "number" && value >= 0) sum[key] = (sum[key] ?? 0) + value;
   }
   return sum;
 }

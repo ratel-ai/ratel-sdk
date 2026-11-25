@@ -20,7 +20,8 @@ try {
   });
   console.log(reply);
 } finally {
-  await flush();
+  // A lost trace must not lose the answer.
+  await flush().catch(() => {});
 }
 
 function text(role: string, content: string): string {

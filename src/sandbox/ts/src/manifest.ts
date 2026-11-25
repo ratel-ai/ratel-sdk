@@ -60,7 +60,7 @@ export function toManifest(definition: SandboxDefinition): Manifest {
   return {
     v: 1,
     name,
-    entry,
+    entry: entry.replace(/^(?:\.\/+)+/, ""),
     base,
     install: [...install],
     secrets: [...secrets],

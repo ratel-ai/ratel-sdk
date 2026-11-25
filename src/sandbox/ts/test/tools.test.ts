@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ToolCall } from "../src/contract.js";
 import { createRedactor } from "../src/redact.js";
 import { normalize, policyTools } from "../src/tools.js";
+import { typeScriptFlags } from "../src/typescript.js";
 
 describe("policyTools", () => {
   it("equal fixtures answer in order and the last one repeats", async () => {
@@ -16,6 +17,16 @@ describe("policyTools", () => {
     const send = () => tools.send?.({ b: { c: 2, d: 3 }, a: 1 });
     expect([await send(), await send(), await send()]).toEqual([1, 2, 2]);
     expect(await tools.send?.({ a: 2 })).toBe("fake");
+  });
+
+  it("a change to a fixture result does not change the next answer", async () => {
+    const tools = policyTools(
+      { send: { sideEffect: true, execute: () => [], fake: () => [] } },
+      [{ tool: "send", arguments: {}, result: [1] }],
+      () => {},
+    );
+    ((await tools.send?.()) as number[]).push(2);
+    expect(await tools.send?.()).toEqual([1]);
   });
 
   it("a fixture does not replace a read-only tool", async () => {
@@ -40,6 +51,14 @@ describe("policyTools", () => {
   it("normalizes the order of keys, not of list items", () => {
     expect(normalize({ b: 1, a: [2, 1] })).toBe(normalize({ a: [2, 1], b: 1 }));
     expect(normalize([1, 2])).not.toBe(normalize([2, 1]));
+  });
+});
+
+describe("typeScriptFlags", () => {
+  it("transforms types where Node can, and gives Node no flag that it does not know", () => {
+    const flag = "--experimental-transform-types";
+    expect(typeScriptFlags(new Set([flag]))).toContain(flag);
+    expect(typeScriptFlags(new Set())).not.toContain(flag);
   });
 });
 

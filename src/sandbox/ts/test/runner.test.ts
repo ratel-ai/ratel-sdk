@@ -35,6 +35,7 @@ beforeEach(async () => {
     req.on("end", () => {
       posts.push({ path: req.url ?? "", auth: req.headers.authorization, body: JSON.parse(text) });
       res.statusCode = (req.url?.endsWith("/result") ? answers.shift() : undefined) ?? 202;
+      if (res.statusCode === 307) res.setHeader("location", "/elsewhere");
       res.end("{}");
     });
   });
@@ -157,6 +158,35 @@ describe("the runner", () => {
     expect(result.error?.message).toMatch(message);
     expect(result.toolCalls.map((call) => call.name)).toEqual(["ping"]);
     expect(JSON.stringify(posts) + logs()).not.toContain(SECRET);
+  });
+
+  it("redacts each line of a secret with more than one line", async () => {
+    const lines = ["-----BEGIN KEY-----", randomBytes(16).toString("hex"), "-----END KEY-----"];
+    const { logs } = await run("crash-agent", { input: "print" }, { MODEL_KEY: lines.join("\n") });
+    for (const line of lines) expect(logs() + JSON.stringify(posts)).not.toContain(line);
+  });
+
+  it("a secret that is part of a tool name or is a number does not change the shape", async () => {
+    await run("crash-agent", { input: "x" }, { MODEL_KEY: "ping" });
+    expect(posted().toolCalls[0]?.name).toBe("ping");
+    expect(typeof posted().usage.durationMs).toBe("number");
+  });
+
+  it("a process that the agent leaves does not hold the run", async () => {
+    const started = Date.now();
+    await run("crash-agent", { input: "leave" });
+    expect(posted()).toMatchObject({ status: "completed", output: "left" });
+    expect(Date.now() - started).toBeLessThan(8_000);
+  });
+
+  it("a message that the agent sends itself is not the answer", async () => {
+    await run("crash-agent", { input: "message" });
+    expect(posted()).toMatchObject({ status: "completed", output: "after" });
+  });
+
+  it("the post of the result does not follow a redirect", async () => {
+    answers = [307, 307, 307];
+    await expect(run("crash-agent", { input: "x" })).rejects.toThrow(/result/);
   });
 
   it("a result over the size limit becomes a failed result", async () => {

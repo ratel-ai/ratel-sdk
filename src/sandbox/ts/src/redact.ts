@@ -2,6 +2,8 @@ export const REDACTED = "[redacted]";
 
 /** Shorter values are ordinary words and numbers: replacing them would destroy the output. */
 const MIN_SECRET_LENGTH = 4;
+/** A line of a secret with many lines. A shorter line can be an ordinary word or a bracket. */
+const MIN_LINE_LENGTH = 8;
 
 export type Redactor = {
   text(value: string): string;
@@ -27,21 +29,25 @@ export function createRedactor(secrets: readonly string[]): Redactor {
 
 /** Writes whole lines, so a secret that spans two chunks is replaced too. */
 export function redactLines(redactor: Redactor, write: (line: string) => void) {
-  let rest = "";
+  let rest: string[] = [];
   return {
     push(chunk: string) {
-      const lines = (rest + chunk).split("\n");
-      rest = lines.pop() ?? "";
-      for (const line of lines) write(`${redactor.text(line)}\n`);
+      const lines = chunk.split("\n");
+      for (const line of lines.slice(0, -1)) {
+        write(`${redactor.text(rest.join("") + line)}\n`);
+        rest = [];
+      }
+      rest.push(lines.at(-1) ?? "");
     },
     end() {
-      if (rest) write(redactor.text(rest));
-      rest = "";
+      const line = rest.join("");
+      if (line) write(redactor.text(line));
+      rest = [];
     },
   };
 }
 
-/** A secret as it is, trimmed, inside JSON text, in a URL and in base64. */
+/** A secret as it is, trimmed, inside JSON text, in a URL, in base64, and each of its lines. */
 function variants(secret: string): string[] {
   const trimmed = secret.trim();
   return [
@@ -50,5 +56,7 @@ function variants(secret: string): string[] {
     JSON.stringify(secret).slice(1, -1),
     encodeURIComponent(secret),
     Buffer.from(secret).toString("base64"),
+    // Process output is redacted by line, so a secret with many lines never shows whole there.
+    ...secret.split(/\r?\n/).filter((line) => line.length >= MIN_LINE_LENGTH),
   ];
 }

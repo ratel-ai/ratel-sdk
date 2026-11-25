@@ -15,7 +15,7 @@ import { lookupOrder, refundOrder } from "./src/tools.js";
 export default defineSandbox({
   name: "support-agent",
   entry: "src/agent.ts", // its default export is the run function
-  base: "node:24-slim", // the default. Node 22.18 or later
+  base: "node:24-slim", // the default. Node 22.18 or later (from Node 26 with no enum)
   install: ["npm ci --omit=dev"], // runs in the project folder when Ratel builds the image
   secrets: ["OPENAI_API_KEY"], // names only, never values
   tools: {

@@ -14,6 +14,7 @@ export default async function run({ input, params, tools, traceparent, reportUsa
       ...(typeof params.model === "string" ? { model: params.model } : {}),
     });
   } finally {
-    await flush();
+    // A lost trace must not lose the answer.
+    await flush().catch(() => {});
   }
 }

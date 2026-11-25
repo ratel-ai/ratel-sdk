@@ -53,7 +53,10 @@ export async function push({ projectDir, url, apiKey }: PushOptions): Promise<Pu
       JSON.stringify({ manifest, git, bundle }),
     );
     const { versionId, upload } = created as { versionId: string; upload: Upload };
-    const headers = { ...upload.headers, ...(upload.authorize ? auth : {}) };
+    const headers = {
+      ...upload.headers,
+      ...(upload.authorize && sameOrigin(upload.url, origin) ? auth : {}),
+    };
     await call(upload.method, upload.url, headers, await openAsBlob(file));
     const version = (await call(
       "POST",
@@ -75,6 +78,11 @@ export async function push({ projectDir, url, apiKey }: PushOptions): Promise<Pu
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+}
+
+/** The key goes to Ratel only. */
+function sameOrigin(a: string, b: string): boolean {
+  return new URL(a).origin === new URL(b).origin;
 }
 
 type Upload = {

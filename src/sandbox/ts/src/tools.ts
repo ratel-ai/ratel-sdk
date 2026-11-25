@@ -35,7 +35,7 @@ export function policyTools(
           });
         try {
           const result = fixture
-            ? fixture.result
+            ? structuredClone(fixture.result)
             : await (tool.sideEffect === false ? tool.execute : fakeOf(name, tool))(args);
           call({ result: toJson(result) });
           return result;

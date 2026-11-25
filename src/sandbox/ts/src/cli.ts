@@ -1,6 +1,9 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { PushRefused, push } from "./push.js";
+import { typeScriptFlags } from "./typescript.js";
 
 const USAGE = `Usage: ratel sandbox push [folder] [--json]
 
@@ -12,9 +15,21 @@ Bundles the project folder (the present folder by default) and makes a new sandb
 
 const EXIT = { ok: 0, refused: 1, usage: 2 } as const;
 
-main(process.argv.slice(2)).then((code) => {
-  process.exitCode = code;
-});
+// The definition loads here with the same TypeScript flags as in the instance.
+const flags = typeScriptFlags();
+if (flags.every((flag) => process.execArgv.includes(flag))) {
+  main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
+} else {
+  const argv = [
+    ...process.execArgv,
+    ...flags,
+    fileURLToPath(import.meta.url),
+    ...process.argv.slice(2),
+  ];
+  process.exitCode = spawnSync(process.execPath, argv, { stdio: "inherit" }).status ?? EXIT.refused;
+}
 
 async function main(argv: string[]): Promise<number> {
   let args: ReturnType<typeof parse>;

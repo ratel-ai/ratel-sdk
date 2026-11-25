@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TarFile } from "./tar.js";
@@ -13,7 +13,10 @@ export type GitState = { commit: string; dirty: boolean };
 export function readGitState(projectDir: string): GitState {
   try {
     const commit = git(projectDir, ["rev-parse", "--verify", "HEAD"]).trim();
-    return { commit, dirty: git(projectDir, ["status", "--porcelain", "--", "."]) !== "" };
+    return {
+      commit,
+      dirty: git(projectDir, ["status", "--porcelain", "--untracked-files=all", "--", "."]) !== "",
+    };
   } catch {
     throw new Error(
       "The project folder is not in a git repository with a commit. A push records the commit.",
@@ -29,7 +32,8 @@ export function listProjectFiles(projectDir: string): TarFile[] {
   const listed = git(projectDir, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
   const names = [...new Set(listed.split("\0").filter(Boolean))].filter(isBundled).sort();
   const root = realpathSync(projectDir);
-  return [...names.flatMap((name) => projectFile(root, name)), ...runnerFiles()];
+  const known = new Set(names);
+  return [...names.flatMap((name) => projectFile(root, name, known)), ...runnerFiles()];
 }
 
 /** Whether a listed file goes in the bundle. */
@@ -41,23 +45,29 @@ export function isBundled(name: string): boolean {
   );
 }
 
-/** A link inside the project becomes the file that it names. A deleted file is not there. */
-function projectFile(root: string, name: string): TarFile[] {
-  const path = join(root, name);
-  let target = path;
+/**
+ * A link becomes the file that it names, when that file is in the bundle too. A parent folder can
+ * also be a link. A deleted file is not there.
+ */
+function projectFile(root: string, name: string, known: ReadonlySet<string>): TarFile[] {
   try {
-    if (lstatSync(path).isSymbolicLink()) {
-      target = realpathSync(path);
-      if (!target.startsWith(root + sep)) {
-        throw new Error(
-          `${name} is a link to a file outside the project folder. Remove it, or ignore it in git.`,
-        );
-      }
-      if (!isBundled(target.slice(root.length + 1))) return [];
+    const target = realpathSync(join(root, name));
+    if (!target.startsWith(root + sep)) {
+      throw new Error(`${name} is a link to a file outside the project folder. Remove the link.`);
     }
+    const real = target
+      .slice(root.length + 1)
+      .split(sep)
+      .join("/");
+    if (!isBundled(real)) return [];
     const stat = statSync(target);
     // A folder here is a link to a folder or a git submodule: git lists its files elsewhere.
     if (!stat.isFile()) return [];
+    if (!known.has(real)) {
+      throw new Error(
+        `${name} is a link to a file that git does not list. Remove the link, or add the file to git.`,
+      );
+    }
     return [{ name, path: target, bytes: stat.size, executable: (stat.mode & 0o111) !== 0 }];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];

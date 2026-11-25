@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import type { RunContext } from "@ratel-ai/sandbox";
 
 export default async function run({ input, tools }: RunContext) {
@@ -14,5 +15,16 @@ export default async function run({ input, tools }: RunContext) {
   }
   if (input === "large") return "x".repeat(5 * 1024 * 1024);
   if (input === "linger") setInterval(() => {}, 1000);
+  if (input === "print") console.log(`${process.env.MODEL_KEY}\nand ${process.env.MODEL_KEY}`);
+  if (input === "leave") {
+    spawn("sleep", ["25"], { stdio: "inherit", detached: true }).unref();
+    spawn("sleep", ["25"], { stdio: "inherit" }).unref();
+    return "left";
+  }
+  if (input === "message") {
+    for (const message of ["ready", null, { type: "ready" }]) process.send?.(message);
+    await new Promise((done) => setTimeout(done, 300));
+    return "after";
+  }
   return "ok";
 }

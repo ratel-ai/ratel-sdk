@@ -1,6 +1,14 @@
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,12 +25,14 @@ let url: string;
 let calls: Call[];
 let refuse: { path: string; status: number; body: unknown } | null;
 let authorize: boolean;
+let uploadUrl: string | undefined;
 let project: string;
 
 beforeEach(async () => {
   calls = [];
   refuse = null;
   authorize = true;
+  uploadUrl = undefined;
   server = createServer((req, res) => {
     const parts: Buffer[] = [];
     req.on("data", (chunk) => parts.push(chunk));
@@ -36,7 +46,12 @@ beforeEach(async () => {
       };
       if (refuse && path === refuse.path) return answer(refuse.status, refuse.body);
       if (path === "/api/v1/sandboxes/versions") {
-        const upload = { method: "PUT", url: `${url}/upload?sig=1`, headers: {}, authorize };
+        const upload = {
+          method: "PUT",
+          url: uploadUrl ?? `${url}/upload?sig=1`,
+          headers: {},
+          authorize,
+        };
         return answer(201, { versionId: VERSION_ID, upload });
       }
       return answer(path.startsWith("/upload") ? 200 : 202, { status: "uploaded", reason: null });
@@ -105,6 +120,13 @@ describe("ratel sandbox push", () => {
     authorize = false;
     await ratel(["sandbox", "push"]);
     expect(calls[1]?.auth).toBeUndefined();
+    authorize = true;
+    uploadUrl = `${url.replace("127.0.0.1", "localhost")}/upload?sig=1`;
+    calls = [];
+    const { code } = await ratel(["sandbox", "push"]);
+    expect(code).toBe(0);
+    expect(calls[1]?.path).toBe("/upload?sig=1");
+    expect(calls[1]?.auth).toBeUndefined();
   });
 
   it("bundles what git lists and the runner, never .env files, node_modules or ignored files", async () => {
@@ -158,6 +180,48 @@ describe("ratel sandbox push", () => {
     expect(code).toBe(1);
     expect(err).toMatch(/hosts is a link to a file outside/);
     expect(calls).toEqual([]);
+  });
+
+  it("refuses a file that a linked parent folder moves out of the project", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "a.json"), "x");
+    mkdirSync(join(project, "d"));
+    writeFileSync(join(project, "d/a.json"), "y");
+    git("add", "-A");
+    rmSync(join(project, "d"), { recursive: true });
+    symlinkSync(outside, join(project, "d"));
+    writeFileSync(join(project, ".gitignore"), "d\n");
+    const { code, err } = await ratel(["sandbox", "push"]);
+    expect(code).toBe(1);
+    expect(err).toMatch(/d\/a.json is a link to a file outside/);
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses a link to a file that git ignores", async () => {
+    mkdirSync(join(project, "private"));
+    writeFileSync(join(project, "private/key.json"), "x");
+    writeFileSync(join(project, ".gitignore"), "private/\n");
+    symlinkSync("private/key.json", join(project, "cfg.json"));
+    const { code, err } = await ratel(["sandbox", "push"]);
+    expect(code).toBe(1);
+    expect(err).toMatch(/cfg.json is a link to a file that git does not list/);
+    expect(calls).toEqual([]);
+  });
+
+  it("takes a definition with an enum, an entry with ./, and any git status setting", async () => {
+    writeFileSync(
+      join(project, "ratel.sandbox.ts"),
+      'enum Name { One = "one" }\nexport default { name: Name.One, entry: "./src/agent.ts" };',
+    );
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "second");
+    git("config", "status.showUntrackedFiles", "no");
+    writeFileSync(join(project, "new.ts"), "x");
+    const { code, err } = await ratel(["sandbox", "push"]);
+    expect(err).toBe("");
+    expect(code).toBe(0);
+    const { manifest, git: state } = JSON.parse(String(calls[0]?.body));
+    expect(manifest).toMatchObject({ name: "one", entry: "src/agent.ts" });
+    expect(state.dirty).toBe(true);
   });
 
   it("the same folder gives the same bundle", async () => {
