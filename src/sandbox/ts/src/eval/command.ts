@@ -57,6 +57,7 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
     }
     if (options.compare) await requireBaseline({ url, apiKey });
     const started = await startEvalRun({ ...options, url, apiKey });
+    if (options.compare) run = { experimentId: started.experimentId, url: started.url };
     if (!options.wait) {
       if (json) print(started);
       else process.stdout.write(`${started.experimentId}\n`);
@@ -64,14 +65,13 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
     }
     process.stderr.write(`ratel: experiment ${started.experimentId} started\n`);
     const experiment = await waitForEvalRun(started.experimentId, { url, apiKey });
+    const exitCode = exitCodeOf(experiment);
     if (options.compare) {
-      run = { experimentId: experiment.experimentId, url: experiment.url };
       const comparison = await compareEvalRun(started.experimentId, { url, apiKey });
       if (json) print({ ...experiment, comparison });
       else process.stdout.write(report(experiment) + compared(comparison));
       return VERDICT_EXIT[comparison.verdict];
     }
-    const exitCode = exitCodeOf(experiment);
     if (json) print(experiment);
     else process.stdout.write(report(experiment));
     return exitCode;
@@ -79,7 +79,7 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
     const message = error instanceof Error ? error.message : String(error);
     const body = error instanceof EvalCallError ? error.body : {};
     if (json) print({ error: "eval_run_failed", ...body, message, ...run });
-    process.stderr.write(`ratel: ${message}\n`);
+    process.stderr.write(`ratel: ${oneLine(message)}\n`);
     return error instanceof EvalCallError ? error.exitCode : EVAL_EXIT.unavailable;
   }
 }
@@ -174,11 +174,17 @@ function compared({ verdict, rule, url, baseline, changedCases }: Comparison): s
   const lines = changedCases.map(({ name, change, baseline: before, candidate: after }) => {
     const sides = [before, after].filter((side) => side !== null);
     const versions = sides.map(({ number }) => `v${number}`).join(" to ");
-    return `  ${change}: ${name} (${versions}): ${sides.map(passes).join(" to ")}`;
+    return `  ${oneLine(change)}: ${oneLine(name)} (${versions}): ${sides.map(passes).join(" to ")}`;
   });
-  return `${[`${word} against the baseline ${baseline.experimentId}`, rule, ...lines, url].join("\n")}\n`;
+  return `${[`${word} against the baseline ${oneLine(baseline.experimentId)}`, oneLine(rule), ...lines, oneLine(url)].join("\n")}\n`;
 }
 
 function passes({ counts: { pass, fail, invalid } }: CaseSide): string {
   return `${pass}/${pass + fail + invalid} pass${invalid > 0 ? `, ${invalid} invalid` : ""}`;
+}
+
+/** A name can have any character. The output goes to a terminal and to the log of a CI job. */
+function oneLine(text: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it removes
+  return text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ");
 }

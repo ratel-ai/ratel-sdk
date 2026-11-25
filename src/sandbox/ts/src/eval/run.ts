@@ -105,11 +105,11 @@ export async function waitForEvalRun(
 /** Throws when no baseline is pinned: a run costs money, and it would have nothing to compare. */
 export async function requireBaseline({ url, apiKey }: Address): Promise<void> {
   const answer = await call("GET", `${origin(url)}/api/v1/evals/baseline`, apiKey);
-  if (answer.baseline === undefined) throw unreadable();
   if (answer.baseline === null) {
     const message = "The project has no pinned baseline. Pin an experiment first.";
     throw new EvalCallError(message, EVAL_EXIT.refused, { error: "no_baseline" });
   }
+  if (!isBaseline(answer.baseline)) throw unreadable();
 }
 
 /** The experiment against the pinned baseline. The run is paid, so a failed read is tried again. */
@@ -122,7 +122,7 @@ export async function compareEvalRun(
   for (let failures = 1; ; failures += 1) {
     try {
       const answer = await call("GET", address, apiKey);
-      if (!isComparison(answer)) throw unreadable();
+      if (!isComparison(answer, experimentId)) throw unreadable();
       return answer;
     } catch (error) {
       if (!mayTryAgain(error) || failures >= POLL_FAILURES) throw error;
@@ -137,9 +137,8 @@ export async function pinBaseline(
 ): Promise<{ baseline: Baseline }> {
   const body = { experimentId };
   const answer = await call("PUT", `${origin(url)}/api/v1/evals/baseline`, apiKey, body);
-  const baseline = answer.baseline as Baseline | null | undefined;
-  if (typeof baseline?.experimentId !== "string") throw unreadable();
-  return { ...answer, baseline };
+  if (!isBaseline(answer.baseline)) throw unreadable();
+  return { ...answer, baseline: answer.baseline };
 }
 
 /** A case with a failed trial is a fail. Then a case with an invalid trial is invalid. */
@@ -154,29 +153,40 @@ export function exitCodeOf({ cases }: Pick<Experiment, "cases">): number {
   return EVAL_EXIT.pass;
 }
 
-function isComparison(answer: Record<string, unknown>): answer is Comparison {
-  const { verdict, rule, url, baseline, changedCases } = answer as Partial<Comparison>;
-  const side = (value: unknown) =>
-    value === null ||
-    (isObject(value) &&
-      Number.isInteger(value.number) &&
-      isObject(value.counts) &&
-      [value.counts.pass, value.counts.fail, value.counts.invalid].every(Number.isInteger));
+/** The gate must not read a verdict of another run, or one that the contract does not have. */
+function isComparison(answer: Record<string, unknown>, experimentId: string): answer is Comparison {
+  const { verdict, rule, url, baseline, candidate, changedCases, otherCases } = answer;
   return (
-    Object.hasOwn(VERDICT_EXIT, String(verdict)) &&
+    typeof verdict === "string" &&
+    Object.hasOwn(VERDICT_EXIT, verdict) &&
     typeof rule === "string" &&
     typeof url === "string" &&
-    isObject(baseline) &&
-    typeof baseline.experimentId === "string" &&
-    Array.isArray(changedCases) &&
-    changedCases.every(
-      (row) =>
-        isObject(row) &&
-        typeof row.name === "string" &&
-        typeof row.change === "string" &&
-        side(row.baseline) &&
-        side(row.candidate),
-    )
+    isBaseline(baseline) &&
+    isObject(candidate) &&
+    candidate.experimentId === experimentId &&
+    [changedCases, otherCases].every((rows) => Array.isArray(rows) && rows.every(isComparedCase))
+  );
+}
+
+function isBaseline(value: unknown): value is Baseline {
+  return isObject(value) && typeof value.experimentId === "string";
+}
+
+function isComparedCase(row: unknown): boolean {
+  if (!isObject(row) || typeof row.name !== "string" || typeof row.change !== "string")
+    return false;
+  const sides = [row.baseline, row.candidate];
+  return (
+    sides.some((side) => side !== null) && sides.every((side) => side === null || isSide(side))
+  );
+}
+
+function isSide(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    Number.isInteger(value.number) &&
+    isObject(value.counts) &&
+    [value.counts.pass, value.counts.fail, value.counts.invalid].every(Number.isInteger)
   );
 }
 

@@ -9,6 +9,7 @@ const VALID = new URL("../../../../protocol/evals/v1/conformance/valid/", import
 const experiment = JSON.parse(readFileSync(new URL("experiment.completed.json", VALID), "utf8"));
 const ID = experiment.experimentId;
 const comparison = JSON.parse(readFileSync(new URL("comparison.regressed.json", VALID), "utf8"));
+comparison.candidate.experimentId = ID;
 const pinned = JSON.parse(readFileSync(new URL("baseline.pinned.json", VALID), "utf8"));
 const differ = JSON.parse(readFileSync(new URL("error.scorers-differ.json", VALID), "utf8"));
 
@@ -363,12 +364,81 @@ describe("--compare-baseline", () => {
     { ...comparison, changedCases: [{}] },
     { ...comparison, rule: undefined },
     { ...comparison, baseline: null },
+    { ...comparison, verdict: ["regressed"] },
+    { ...comparison, otherCases: undefined },
+    { ...comparison, candidate: undefined },
+    { ...comparison, candidate: { ...comparison.candidate, experimentId: "another" } },
+    {
+      ...comparison,
+      changedCases: [{ ...comparison.changedCases[0], baseline: null, candidate: null }],
+    },
   ])("4: a comparison that is not readable", async (body) => {
     comparisons = [{ status: 200, body }];
     const { code, out } = await ratel([...COMPARE, "--json"]);
     expect(code).toBe(4);
     expect(JSON.parse(out)).toMatchObject({ error: "eval_run_failed", experimentId: ID });
   }, 30_000);
+
+  it.each([["--json"], []])("4: an experiment that is not readable %j", async (...args) => {
+    for (const cases of [[{}], []]) {
+      reads = [{ status: 200, body: { ...experiment, cases } }];
+      const { code, err } = await ratel([...COMPARE, ...args]);
+      expect(code).toBe(4);
+      expect(err).toContain("not readable");
+    }
+  });
+
+  it.each([
+    [false],
+    ["x"],
+    [{}],
+  ])("4: a baseline %j that is not readable starts no run", async (value) => {
+    baseline = { status: 200, body: { baseline: value } };
+    expect((await ratel(COMPARE)).code).toBe(4);
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    [404, "not_found", 3],
+    [409, "no_baseline", 3],
+    [409, "same_experiment", 3],
+    [409, "not_completed", 3],
+    [429, "rate_limited", 4],
+  ])(
+    "after the run %s %s exits with the id of the run",
+    async (status, error, expected) => {
+      comparisons = [{ status, body: { error, message: error } }];
+      const { code, out } = await ratel([...COMPARE, "--json"]);
+      expect(code).toBe(expected);
+      expect(JSON.parse(out)).toMatchObject({ error, experimentId: ID, url: experiment.url });
+    },
+    30_000,
+  );
+
+  it("3: an old server with no baseline route gets no run", async () => {
+    baseline = { status: 404, body: { error: "not_found", message: "Not found." } };
+    expect((await ratel(COMPARE)).code).toBe(3);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("a wait that fails has the id of the paid run", async () => {
+    reads = [{ status: 404, body: { error: "not_found", message: "Not found." } }];
+    const { code, out } = await ratel([...COMPARE, "--json"]);
+    expect(code).toBe(3);
+    expect(JSON.parse(out)).toMatchObject({ experimentId: ID, url: experiment.url });
+  });
+
+  it("the text has no control character of a name or of a message", async () => {
+    const [row] = comparison.changedCases;
+    const name = "x\u001b[2J\u0007\nUnchanged: fake\u009b";
+    comparisons = [{ status: 200, body: { ...comparison, changedCases: [{ ...row, name }] } }];
+    const { out } = await ratel(COMPARE);
+    expect(out).toContain("x [2J  Unchanged: fake");
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the test is about them
+    expect(out).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]|\nUnchanged: fake/);
+    comparisons = [{ status: 409, body: { error: "x", message: "a\n::error::b" } }];
+    expect((await ratel(COMPARE)).err).not.toContain("\n::error::");
+  });
 
   it("4: no answer about the baseline", async () => {
     baseline = { status: 500, body: "" };

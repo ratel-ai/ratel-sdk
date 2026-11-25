@@ -46,6 +46,34 @@
           }
         }
       }
+    },
+    "baseline": {
+      "type": "object",
+      "required": [
+        "experimentId",
+        "url",
+        "pinnedBy",
+        "pinnedAt"
+      ],
+      "properties": {
+        "experimentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "pinnedBy": {
+          "type": "string",
+          "description": "The identity of a person, or `key:<id>`."
+        },
+        "pinnedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "With a refused comparison: the pinned baseline."
     }
   }
 }
