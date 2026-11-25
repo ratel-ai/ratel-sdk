@@ -68,6 +68,37 @@ commit, and whether the folder has changes that are not committed. The key needs
 | 1 | The push failed or Ratel refused it. The error output has the reason |
 | 2 | The command or a setting is wrong |
 
+## `ratel eval run`
+
+```bash
+RATEL_URL=https://cloud.ratel.sh RATEL_API_KEY=... ratel eval run [options]
+```
+
+Runs each approved case of the project on a sandbox version, waits for the end and prints the counts
+of each case and the address of the experiment page. The key needs the permissions `evals:read` and
+`evals:write`.
+
+| Option | Meaning |
+|---|---|
+| `--sandbox-version <id\|latest>` | The version to run. The default is `latest`: the newest version that is ready |
+| `--trials <n>` | The trials for each case, 1 to 20. Ratel's default is 3 |
+| `--params <json>` | A JSON object that each run gets as its params |
+| `--json` | Prints one JSON document on the standard output, and nothing else there |
+| `--no-wait` | Prints the experiment id, does not wait, and exits with 0 |
+
+The exit codes are a contract:
+
+| Exit code | Meaning |
+|---|---|
+| 0 | All cases pass: each trial passes. Also `--no-wait` and `--help` |
+| 1 | A case fails: one of its trials fails |
+| 2 | A case is invalid (one of its trials is) and no case fails |
+| 3 | Ratel refused the call, or the command or a setting is wrong |
+| 4 | The network or the server failed |
+
+With `--json`, the document is the [experiment](../../../protocol/evals/v1) (exit 0, 1 and 2), the
+started experiment (`--no-wait`), or `{ "error", "message" }` (exit 3 and 4).
+
 ## The runner
 
 `node .ratel-sandbox-runner/run.js`, in the project folder, is the main process of an instance. It:
@@ -85,7 +116,8 @@ killed gives a result with the status `failed`.
 Secret values of 4 characters or more are replaced with `[redacted]` in the result, the root span
 and the output of the process. The agent's own spans are not changed.
 
-The wire contract is [`protocol/sandbox/v1`](../../../protocol/sandbox/v1).
+The wire contract is [`protocol/sandbox/v1`](../../../protocol/sandbox/v1). The contract of eval runs is
+[`protocol/evals/v1`](../../../protocol/evals/v1).
 
 ## Build and test
 

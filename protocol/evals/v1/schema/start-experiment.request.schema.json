@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/start-experiment.request.schema.json",
+  "title": "The request to start an experiment",
+  "description": "The body of POST /api/v1/evals/experiments.",
+  "type": "object",
+  "required": [
+    "sandboxVersion"
+  ],
+  "properties": {
+    "sandboxVersion": {
+      "anyOf": [
+        {
+          "const": "latest"
+        },
+        {
+          "type": "string",
+          "format": "uuid"
+        }
+      ],
+      "description": "A sandbox version id, or the newest version that is ready."
+    },
+    "trials": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 3,
+      "description": "The trials for each case."
+    },
+    "params": {
+      "type": "object",
+      "description": "What each run gets as its params."
+    }
+  }
+}

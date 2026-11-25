@@ -20,6 +20,7 @@ loader and source implementations live outside `protocol/`.
   own schemas and executable conformance vectors.
 - `sandbox/v1/` — experimental preview, a separate contract: the manifest, push, run input and run
   result of a Ratel sandbox.
+- `evals/v1/` — experimental preview, a separate contract: start and read an eval run.
 
 Both versions publish the `IntentGraph` usage-ranking shape — a producer contract shared by
 the local learner and Ratel Cloud, not a synced endpoint

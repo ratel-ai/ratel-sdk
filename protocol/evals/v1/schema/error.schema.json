@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/error.schema.json",
+  "title": "A refusal",
+  "description": "The body of each refused call.",
+  "type": "object",
+  "required": [
+    "error",
+    "message"
+  ],
+  "properties": {
+    "error": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    }
+  }
+}

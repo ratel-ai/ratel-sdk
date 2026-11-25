@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/start-experiment.response.schema.json",
+  "title": "A started experiment",
+  "description": "The answer of POST /api/v1/evals/experiments (201).",
+  "type": "object",
+  "required": [
+    "experimentId",
+    "state",
+    "url"
+  ],
+  "properties": {
+    "experimentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "state": {
+      "enum": [
+        "running",
+        "completed"
+      ]
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    }
+  }
+}

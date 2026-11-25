@@ -2,10 +2,12 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { evalCommand } from "./eval/command.js";
 import { PushRefused, push } from "./push.js";
 import { typeScriptFlags } from "./typescript.js";
 
 const USAGE = `Usage: ratel sandbox push [folder] [--json]
+       ratel eval run --help
 
 Bundles the project folder (the present folder by default) and makes a new sandbox version.
 
@@ -32,6 +34,7 @@ if (flags.every((flag) => process.execArgv.includes(flag))) {
 }
 
 async function main(argv: string[]): Promise<number> {
+  if (argv[0] === "eval") return evalCommand(argv.slice(1), process.env);
   let args: ReturnType<typeof parse>;
   try {
     args = parse(argv);
