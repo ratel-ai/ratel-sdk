@@ -432,6 +432,18 @@ describe("--compare-baseline", () => {
     const [row] = comparison.changedCases;
     const name = "x\u001b[2J\u0007\nUnchanged: fake\u009b";
     comparisons = [{ status: 200, body: { ...comparison, changedCases: [{ ...row, name }] } }];
+    // The counts of the run print the same name.
+    reads = [
+      {
+        status: 200,
+        body: {
+          ...withCounts([3, 0, 0]),
+          cases: [
+            { ...experiment.cases[0], name, counts: { pass: 3, fail: 0, invalid: 0, open: 0 } },
+          ],
+        },
+      },
+    ];
     const { out } = await ratel(COMPARE);
     expect(out).toContain("x [2J  Unchanged: fake");
     // biome-ignore lint/suspicious/noControlCharactersInRegex: the test is about them

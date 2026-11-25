@@ -52,7 +52,7 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
     if (options.pin) {
       const pinned = await pinBaseline(options.pin, { url, apiKey });
       if (json) print(pinned);
-      else process.stdout.write(`${pinned.baseline.experimentId}\n`);
+      else process.stdout.write(`${oneLine(pinned.baseline.experimentId)}\n`);
       return EVAL_EXIT.pass;
     }
     if (options.compare) await requireBaseline({ url, apiKey });
@@ -60,10 +60,10 @@ export async function evalCommand(argv: string[], env: NodeJS.ProcessEnv): Promi
     if (options.compare) run = { experimentId: started.experimentId, url: started.url };
     if (!options.wait) {
       if (json) print(started);
-      else process.stdout.write(`${started.experimentId}\n`);
+      else process.stdout.write(`${oneLine(started.experimentId)}\n`);
       return EVAL_EXIT.pass;
     }
-    process.stderr.write(`ratel: experiment ${started.experimentId} started\n`);
+    process.stderr.write(`ratel: experiment ${oneLine(started.experimentId)} started\n`);
     const experiment = await waitForEvalRun(started.experimentId, { url, apiKey });
     const exitCode = exitCodeOf(experiment);
     if (options.compare) {
@@ -164,9 +164,9 @@ function object(text: string): Record<string, unknown> | null {
 function report({ cases, url }: Experiment): string {
   const lines = cases.map(
     ({ name, number, counts }) =>
-      `${name} (v${number}): ${counts.pass} pass, ${counts.fail} fail, ${counts.invalid} invalid`,
+      `${oneLine(name)} (v${number}): ${counts.pass} pass, ${counts.fail} fail, ${counts.invalid} invalid`,
   );
-  return `${[...lines, url].join("\n")}\n`;
+  return `${[...lines, oneLine(url)].join("\n")}\n`;
 }
 
 function compared({ verdict, rule, url, baseline, changedCases }: Comparison): string {
