@@ -1,5 +1,5 @@
-import { type RankCandidate, RetrieverError } from "@ratel-ai/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { type RankCandidate, RetrieverError } from "../../index.js";
 import { ratelCloud } from "./tool-picker.js";
 
 const TOOLS: RankCandidate[] = [

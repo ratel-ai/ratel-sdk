@@ -171,7 +171,8 @@ export const UNITS = {
       includePaths: ["src/rankers/python/**", "src/rankers/core/**"],
     },
   },
-  // The Ratel Cloud client: pure HTTP, no native addon, peers the SDK optionally.
+  // The deprecated Ratel Cloud shim: it re-exports @ratel-ai/sdk/cloud, /otel and
+  // /cloud/testing under its old entry points, and depends on @ratel-ai/sdk.
   // Moved from ratel-ai/ratel-cloud-sdk, whose releases were tagged `v*`.
   "cloud-sdk": {
     tagPrefix: "cloud-sdk-v",

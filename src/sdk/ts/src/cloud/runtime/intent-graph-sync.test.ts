@@ -6,7 +6,7 @@ import type { RuntimeEvent } from "../types.js";
 // deterministic, and independent of the native binary — the module under
 // test only ever calls `new IntentGraph()`, `IntentGraph.fromJson`,
 // `.toJson()`, and `.rev`, all reproduced here, plus a test-only `bumpRev`.
-vi.mock("@ratel-ai/sdk", () => {
+vi.mock("../../registry.js", () => {
   class FakeIntentGraph {
     #rev: number;
     #clusters: unknown[];

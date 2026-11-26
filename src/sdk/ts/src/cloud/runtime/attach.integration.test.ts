@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +12,7 @@ describe("runtime attach with local Ratel Cloud", () => {
     async () => {
       const { stdout } = await execFileAsync(
         process.execPath,
-        ["examples/runtime-attach-e2e.mjs"],
+        [resolve(import.meta.dirname, "../../../../../../examples/cloud/runtime-attach-e2e.mjs")],
         {
           cwd: process.cwd(),
           env: process.env,

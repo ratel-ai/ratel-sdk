@@ -8,7 +8,18 @@ import {
   BasicTracerProvider,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import { attach } from "../dist/runtime/index.js";
+import { attach } from "@ratel-ai/sdk/cloud";
+import { MockCloud } from "@ratel-ai/sdk/cloud/testing";
+
+// Hybrid target:
+//   • RATEL_CLOUD_ROOT unset → runs in process against MockCloud, plus a small fake of
+//     the runtime ingest routes (`POST /events`, `PUT /catalog/snapshot`) that MockCloud
+//     does not serve. No network, no database, no credentials.
+//   • RATEL_CLOUD_ROOT set → the live acceptance against a local ratel-cloud and its
+//     Postgres database (see README.md).
+if (!process.env.RATEL_CLOUD_ROOT?.trim()) {
+  process.exit(await runAgainstMockCloud());
+}
 
 const cloudRoot = requiredEnv("RATEL_CLOUD_ROOT");
 const ratelSdkDir = requiredEnv("RATEL_SDK_DIR");
@@ -243,6 +254,114 @@ async function buildSummary(client, searchEventId) {
     oversizedEventDropped: dropped.rowCount === 1,
     otlpDeduplicated: dedup.rows[0].count === 1 && otlp.rows[0].count === 1,
   };
+}
+
+async function runAgainstMockCloud() {
+  const ingest = mockRuntimeIngest(new MockCloud());
+  const mockBaseUrl = "https://mock.ratel.local/api/v1";
+  const mockSourceId = `cloud-sdk-e2e-${Date.now().toString(36)}`;
+  const mockToolId = `weather-${randomUUID()}`;
+  const mockOversizedEventId = `oversized-${randomUUID()}`;
+  let mockAttachment;
+  try {
+    const { ratel } = await import("@ratel-ai/sdk");
+    const runtime = ratel({ events: { sourceId: mockSourceId } });
+    mockAttachment = attach(runtime, {
+      apiKey: "mock-key",
+      baseUrl: mockBaseUrl,
+      fetch: ingest.fetch,
+      snapshotDebounceMs: 0,
+      flushIntervalMs: 0,
+    });
+    console.log(`attached runtime ${mockSourceId} to MockCloud`);
+
+    await runtime.tools.register({
+      id: mockToolId,
+      name: "weather_lookup",
+      description: "Look up the current weather for a city",
+      inputSchema: {
+        type: "object",
+        properties: { city: { type: "string" } },
+        required: ["city"],
+      },
+      outputSchema: { type: "object" },
+      execute: ({ city }) => ({ city, temperatureC: 21 }),
+    });
+    runtime.tools.search("weather in Rome", 1);
+    await runtime.tools.invoke(mockToolId, { city: "Rome" });
+    await mockAttachment.flush();
+
+    const oversized = await ingest.fetch(`${mockBaseUrl}/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        events: [
+          {
+            v: 2,
+            event_id: mockOversizedEventId,
+            type: "future_oversized_event",
+            padding: "x".repeat(70_000),
+          },
+        ],
+      }),
+    });
+    const oversizedReport = await oversized.json();
+
+    const factTypes = new Set(ingest.events.map(({ type }) => type));
+    const snapshot = ingest.snapshots.at(-1);
+    const summary = {
+      factsLanded:
+        factTypes.has("search") && factTypes.has("invoke_start") && factTypes.has("invoke_end"),
+      snapshotLanded: snapshot?.tools?.some((tool) => tool.name === "weather_lookup") === true,
+      oversizedEventDropped: oversizedReport.rejected?.[0]?.event_id === mockOversizedEventId,
+    };
+    console.log(`facts delivered: ${[...factTypes].join(", ")}`);
+    console.log(`catalog snapshots delivered: ${ingest.snapshots.length}`);
+    assert(summary.factsLanded, "runtime facts did not reach POST /events");
+    assert(summary.snapshotLanded, "the catalog snapshot did not reach PUT /catalog/snapshot");
+    assert(summary.oversizedEventDropped, "the oversized event was not rejected");
+    const deliveryStatus = mockAttachment.status();
+    console.log(`delivery status: ${deliveryStatus.overall}`);
+    assert(deliveryStatus.overall === "ok", "the delivery status is not ok");
+    console.log(JSON.stringify({ ...summary, deliveryStatus }));
+    return 0;
+  } catch (error) {
+    console.error(error);
+    return 1;
+  } finally {
+    await mockAttachment?.close();
+  }
+}
+
+/** MockCloud for every route, plus the two runtime ingest routes it does not serve. */
+function mockRuntimeIngest(cloud) {
+  const events = [];
+  const snapshots = [];
+  const ingestFetch = async (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const method = init.method ?? "GET";
+    if (method === "POST" && url.pathname.endsWith("/events")) {
+      const batch = JSON.parse(init.body).events;
+      const rejected = [];
+      for (const event of batch) {
+        if (JSON.stringify(event).length > 65_536) {
+          rejected.push({ event_id: event.event_id, reason: "event exceeds 64 KiB" });
+        } else {
+          events.push(event);
+        }
+      }
+      return Response.json(
+        { accepted: batch.length - rejected.length, rejected },
+        { status: 202 },
+      );
+    }
+    if (method === "PUT" && url.pathname.endsWith("/catalog/snapshot")) {
+      snapshots.push(JSON.parse(init.body));
+      return Response.json({ synced: true }, { status: 200 });
+    }
+    return cloud.fetch(input, init);
+  };
+  return { events, snapshots, fetch: ingestFetch };
 }
 
 function requiredEnv(name) {

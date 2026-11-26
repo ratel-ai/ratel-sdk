@@ -15,12 +15,12 @@ async function loadPicker(fetchImpl: typeof fetch) {
 }
 
 afterEach(() => {
-  vi.doUnmock("@ratel-ai/sdk");
+  vi.doUnmock("../../errors.js");
 });
 
 describe("toolPicker next to an SDK without RetrieverError", () => {
   it("fails with a plain Error naming RetrieverError when the SDK lacks it", async () => {
-    vi.doMock("@ratel-ai/sdk", () => ({}));
+    vi.doMock("../../errors.js", () => ({}));
     const fetchImpl = vi.fn<typeof fetch>();
     const picker = await loadPicker(fetchImpl);
 
@@ -33,7 +33,7 @@ describe("toolPicker next to an SDK without RetrieverError", () => {
   });
 
   it("fails with a plain Error naming the SDK when it cannot be imported", async () => {
-    vi.doMock("@ratel-ai/sdk", () => {
+    vi.doMock("../../errors.js", () => {
       throw new Error("Cannot find package '@ratel-ai/sdk'");
     });
     const fetchImpl = vi.fn<typeof fetch>();

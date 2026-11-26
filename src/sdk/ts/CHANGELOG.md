@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Ratel Cloud subpaths.** The code of `@ratel-ai/cloud-sdk` moved into this package with no behavior change: `@ratel-ai/sdk/cloud` (the old root and `/runtime` names), `@ratel-ai/sdk/otel` and `@ratel-ai/sdk/cloud/testing`. None of them loads the native addon. The OpenTelemetry exporter packages that `/otel` uses are optional peers. The root entry point does not change. See the README's "Ratel Cloud" section.
+
 ## [0.13.0-rc.13] - 2026-11-22
 
 ### Changed

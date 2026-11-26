@@ -1,7 +1,7 @@
 import type {
   RuntimeEvents,
   RuntimeEventSubscription as SdkRuntimeEventSubscription,
-} from "@ratel-ai/sdk";
+} from "../../index.js";
 import type { RuntimeCatalogToolDefinition } from "../types.js";
 import { isRemotelyPublishable } from "./allowlist.js";
 import {

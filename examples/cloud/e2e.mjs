@@ -15,15 +15,15 @@
 // (Reading the published catalog is intentionally NOT part of this client — that
 //  is the ratel cloud loader's job — so there is no catalog step here.)
 //
-//   node examples/e2e.mjs            # mock
-//   RATEL_API_KEY=rtl_… node examples/e2e.mjs
-//   RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://my-host/api/v1 node examples/e2e.mjs
+//   node e2e.mjs            # mock
+//   RATEL_API_KEY=rtl_… node e2e.mjs
+//   RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://my-host/api/v1 node e2e.mjs
 //
-// Imports the built package, so run `pnpm run build` first (the npm script
-// `pnpm run example:e2e` does not build for you).
+// Imports the built `@ratel-ai/sdk`, so build it first
+// (`pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk build`).
 
-import { RatelCloudSdk, CloudSdkError } from "../dist/index.js";
-import { MockCloud } from "../dist/testing/index.js";
+import { RatelCloudSdk, CloudSdkError } from "@ratel-ai/sdk/cloud";
+import { MockCloud } from "@ratel-ai/sdk/cloud/testing";
 
 /* — tiny test harness ————————————————————————————————————————————————————— */
 

@@ -1,4 +1,4 @@
-import type { RankCandidate, RankedId, RankFn, RetrieverError } from "@ratel-ai/sdk";
+import type { RankCandidate, RankedId, RankFn, RetrieverError } from "../../index.js";
 import { DEFAULT_BASE_URL } from "../transport.js";
 
 /**
@@ -138,7 +138,7 @@ let errorFactory: Promise<ErrorFactory> | undefined;
  * `/runtime` keeps loading next to SDKs that predate it.
  */
 function retrieverErrorFactory(): Promise<ErrorFactory> {
-  errorFactory ??= import("@ratel-ai/sdk").then(
+  errorFactory ??= import("../../errors.js").then(
     (sdk: { RetrieverError?: typeof RetrieverError }) => {
       const Retriever = sdk.RetrieverError;
       if (Retriever === undefined) {

@@ -53,6 +53,21 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  examples/cloud:
+    dependencies:
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: ^0.221.0
+        version: 0.221.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.10.0
+        version: 2.12.0(@opentelemetry/api@1.9.1)
+      '@ratel-ai/sdk':
+        specifier: workspace:*
+        version: link:../../src/sdk/ts
+
   examples/configurable-adaptive-ranking-ts:
     dependencies:
       '@ratel-ai/sdk':
@@ -288,6 +303,10 @@ importers:
         version: 4.4.3
 
   src/cloud-sdk/ts:
+    dependencies:
+      '@ratel-ai/sdk':
+        specifier: workspace:^
+        version: link:../../sdk/ts
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.13
@@ -310,9 +329,6 @@ importers:
       '@opentelemetry/sdk-trace-base':
         specifier: ^2.10.0
         version: 2.12.0(@opentelemetry/api@1.9.1)
-      '@ratel-ai/sdk':
-        specifier: ^0.13.0-rc.12
-        version: 0.13.0-rc.12(zod@4.4.3)
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.5
@@ -377,12 +393,18 @@ importers:
       '@opentelemetry/context-async-hooks':
         specifier: ^2.9.0
         version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-logs-otlp-proto':
+        specifier: ^0.221.0
+        version: 0.221.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: ^0.221.0
+        version: 0.221.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-logs':
-        specifier: ^0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
+        specifier: ^0.221.0
+        version: 0.221.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base':
-        specifier: ^2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
+        specifier: ^2.10.0
+        version: 2.12.0(@opentelemetry/api@1.9.1)
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
@@ -1540,46 +1562,6 @@ packages:
 
   '@posthog/types@1.419.0':
     resolution: {integrity: sha512-XX7zRYt/vK8AzaD6V+oDquAzacZf5exJv971dja9En8Qf6g84Qvc3rpT0w6hDYYLWrjaSSkdjFfvvoXI0ouJDg==}
-
-  '@ratel-ai/sdk-darwin-arm64@0.13.0-rc.12':
-    resolution: {integrity: sha512-VQK88gQyc5JX7F7ULxWYYNWkroQ2CWpCqcmcCqC6Fy4OOEkwGuYCKLAYeUItJMDMr/6FnoC/Hnm3tqyO63yElw==}
-    engines: {node: '>=20.0.0'}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@ratel-ai/sdk-darwin-x64@0.13.0-rc.12':
-    resolution: {integrity: sha512-ZRKbNpstYbKcjkfwHitjlrHw0LkiexiLxkDz37NFf4kmF9004CAh27UQdU6HC+Hv9OUhwEVBh9nvX0D/+xwpUg==}
-    engines: {node: '>=20.0.0'}
-    cpu: [x64]
-    os: [darwin]
-
-  '@ratel-ai/sdk-linux-arm64-gnu@0.13.0-rc.12':
-    resolution: {integrity: sha512-LxmFiNcGaDHsWu9d0evVcKxHq2R5wLv2fWG44LMbylB3U9P4z/DlvtOXRAqqmaL5lweLqu6FAdUcwi3VeqnBlA==}
-    engines: {node: '>=20.0.0'}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
-  '@ratel-ai/sdk-linux-x64-gnu@0.13.0-rc.12':
-    resolution: {integrity: sha512-xGV4BxKGZ0m0/oXP7QPsTrZmxPtL/dde2uemD9p+me/i8w/8If1Qc6BGqPHIOsFJws4XRMKWR4Weu6kieYqAuA==}
-    engines: {node: '>=20.0.0'}
-    cpu: [x64]
-    os: [linux]
-    libc: [glibc]
-
-  '@ratel-ai/sdk-win32-x64-msvc@0.13.0-rc.12':
-    resolution: {integrity: sha512-Wu+S3pywP2rWrlYmfoB3APlP2Rguo52ixPSx6mEpULHzPuFvjtVx2pkChtbxcO6lduJVYQfamaJDBAS+ozXxsg==}
-    engines: {node: '>=20.0.0'}
-    cpu: [x64]
-    os: [win32]
-
-  '@ratel-ai/sdk@0.13.0-rc.12':
-    resolution: {integrity: sha512-uIch0PCM6d/aXOG++X1i1yLNKil7j687fmZOM2MktHR5DH/0OWLqP/FiFtzdrWTCY4fmkIWPLSIGKvRMppOwXQ==}
-    engines: {node: '>=20.6.0'}
-
-  '@ratel-ai/telemetry@0.5.0':
-    resolution: {integrity: sha512-eeUlzPAf/hxAaaRXfcTjDKO/z9L8yiioBbnBTaVWD08088EXsWI7MINPMx3HIAS2/njiKTlGKEqYD1G+J8wCKw==}
-    engines: {node: '>=20.6.0'}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.17':
     resolution: {integrity: sha512-s70pVGhw4zqGeFnXWvAzJDlvxhlRollagdCCKRgOsgUOH3N1l0LIxf83AtGzmb5SiVM4Hjl5HyarMRfdfj3DaQ==}
@@ -3976,42 +3958,6 @@ snapshots:
       '@posthog/types': 1.419.0
 
   '@posthog/types@1.419.0': {}
-
-  '@ratel-ai/sdk-darwin-arm64@0.13.0-rc.12':
-    optional: true
-
-  '@ratel-ai/sdk-darwin-x64@0.13.0-rc.12':
-    optional: true
-
-  '@ratel-ai/sdk-linux-arm64-gnu@0.13.0-rc.12':
-    optional: true
-
-  '@ratel-ai/sdk-linux-x64-gnu@0.13.0-rc.12':
-    optional: true
-
-  '@ratel-ai/sdk-win32-x64-msvc@0.13.0-rc.12':
-    optional: true
-
-  '@ratel-ai/sdk@0.13.0-rc.12(zod@4.4.3)':
-    dependencies:
-      '@modelcontextprotocol/sdk': 1.32.2(zod@4.4.3)
-      '@opentelemetry/api': 1.9.1
-      '@opentelemetry/api-logs': 0.220.0
-      '@ratel-ai/telemetry': 0.5.0
-      '@types/json-schema': 7.0.15
-      canonicalize: 4.0.0
-    optionalDependencies:
-      '@ratel-ai/sdk-darwin-arm64': 0.13.0-rc.12
-      '@ratel-ai/sdk-darwin-x64': 0.13.0-rc.12
-      '@ratel-ai/sdk-linux-arm64-gnu': 0.13.0-rc.12
-      '@ratel-ai/sdk-linux-x64-gnu': 0.13.0-rc.12
-      '@ratel-ai/sdk-win32-x64-msvc': 0.13.0-rc.12
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - supports-color
-      - zod
-
-  '@ratel-ai/telemetry@0.5.0': {}
 
   '@rolldown/binding-android-arm64@1.0.0-rc.17':
     optional: true
