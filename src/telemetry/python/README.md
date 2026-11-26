@@ -34,7 +34,7 @@ Want turnkey OTLP export to Ratel? Install `ratel-ai-telemetry[otlp]` and call `
 ```python
 from ratel_ai_telemetry.otlp import init  # also importable as `from ratel_ai_telemetry import init`
 
-handle = init()  # reads RATEL_OTLP_ENDPOINT + RATEL_API_KEY (or pass endpoint=, api_key=, headers=)
+handle = init()  # reads RATEL_API_KEY (or pass api_key=, base_url=, endpoint=, headers=)
 # ... emit spans and EventRecords through the global OTel APIs ...
 handle.shutdown()  # flush the exporter on exit
 ```
@@ -42,9 +42,14 @@ handle.shutdown()  # flush the exporter on exit
 `init()` returns a shutdown handle (`handle.shutdown()` / `handle.force_flush()`), not a provider —
 emit through the global OTel API. Explicit arguments beat the environment: an explicit `api_key=`
 sets the Bearer header, and the `RATEL_API_KEY` fallback never overrides an `Authorization` header
-you pass yourself. The endpoint resolves from `RATEL_OTLP_ENDPOINT`; the superseded `RATEL_URL` is
-still read as a fallback and warns, since it also names the SDK's catalog source (ADR-0003). `endpoint` is the full traces URL; `logs_endpoint` overrides the Logs URL that
-otherwise derives from sibling `/v1/logs`. On first setup, pass `enabled=False` to get an OTel-free
+you pass yourself. The traces URL resolves from `endpoint=`, then `RATEL_OTLP_ENDPOINT`, then the superseded
+`RATEL_URL` (it warns, since it also names the SDK's catalog source, ADR-0003), then
+`${base_url}/traces`. `base_url=` falls back to `RATEL_BASE_URL`, then
+`https://cloud.ratel.sh/api/v1`; trailing slashes are removed. The Logs URL resolves from
+`logs_endpoint=`, then `RATEL_OTLP_LOGS_ENDPOINT`. Without either, a custom traces URL gives its
+sibling `/v1/logs` URL, and the base-URL default gives `${base_url}/logs`. The base-URL default
+needs an API key or a base URL: with no key, no base URL and no endpoint, `init()` raises
+`ValueError`. On first setup, pass `enabled=False` to get an OTel-free
 no-op shutdown handle without endpoint configuration or the `[otlp]` extra, `span_filter=` to
 narrow spans, or `log_filter=` to narrow EventRecords (both default to accepting everything).
 Repeated `init()` calls return the exact

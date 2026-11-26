@@ -932,6 +932,25 @@ async def test_stale_handle_shutdown_does_not_clobber_a_newer_override(
     assert await _invoke_and_read_args(exporter) == '{"path": "/p"}'
 
 
+def test_base_url_passes_through_to_the_otlp_init(monkeypatch: pytest.MonkeyPatch) -> None:
+    # configure_telemetry delegates endpoint resolution to ratel_ai_telemetry.init, so the
+    # base_url option must reach it on both the plain and the capture-override paths.
+    received: list[Any] = []
+
+    def _init(**kwargs: Any) -> _FakeProvider:
+        received.append(kwargs.get("base_url"))
+        return _FakeProvider()
+
+    monkeypatch.setattr("ratel_ai_telemetry.otlp.init", _init)
+
+    configure_telemetry(base_url="https://staging.example/api/v1").shutdown()
+    configure_telemetry(
+        base_url="https://staging.example/api/v1", include_span_and_events=True
+    ).shutdown()
+
+    assert received == ["https://staging.example/api/v1", "https://staging.example/api/v1"]
+
+
 @pytest.mark.asyncio
 async def test_stale_handle_isolated_when_idempotent_init_returns_one_provider(
     exporter: Any, monkeypatch: pytest.MonkeyPatch

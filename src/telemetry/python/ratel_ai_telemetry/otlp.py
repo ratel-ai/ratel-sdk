@@ -51,6 +51,9 @@ class TelemetryHandle(Protocol):
 #: Env var whose value is the default OTLP traces endpoint.
 OTLP_ENDPOINT_ENV = "RATEL_OTLP_ENDPOINT"
 
+#: Env var whose value is the default OTLP logs endpoint.
+OTLP_LOGS_ENDPOINT_ENV = "RATEL_OTLP_LOGS_ENDPOINT"
+
 #: Superseded spelling, still read as a fallback. ``RATEL_URL`` also names the SDK's
 #: catalog source (ADR-0003), so overloading it as the OTLP endpoint conflated two
 #: unrelated destinations. Setting it still works and warns.
@@ -61,6 +64,12 @@ ENDPOINT_ENV = OTLP_ENDPOINT_ENV
 
 #: Env var whose value is the default API key when api_key= is omitted.
 API_KEY_ENV = "RATEL_API_KEY"
+
+#: Env var whose value is the API root when base_url= is omitted.
+BASE_URL_ENV = "RATEL_BASE_URL"
+
+#: Ratel Cloud API root the default OTLP routes hang off.
+DEFAULT_BASE_URL = "https://cloud.ratel.sh/api/v1"
 
 #: service.name used when the caller does not pass one.
 DEFAULT_SERVICE_NAME = "ratel"
@@ -113,6 +122,7 @@ class OtlpConfig:
 def resolve_otlp_config(
     *,
     api_key: str | None = None,
+    base_url: str | None = None,
     endpoint: str | None = None,
     logs_endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
@@ -121,21 +131,44 @@ def resolve_otlp_config(
 ) -> OtlpConfig:
     """Resolve init() options into concrete exporter config.
 
-    Accepts either api_key= (falling back to RATEL_API_KEY; endpoint defaults to
-    RATEL_OTLP_ENDPOINT, then the superseded RATEL_URL; Authorization: Bearer) or
-    endpoint=/headers= (custom endpoint / collector). The forms compose: explicit
-    endpoint/api_key values win over their environment fallbacks. An explicit api_key sets
-    the Bearer header; the RATEL_API_KEY fallback applies only when neither api_key nor an
-    explicit Authorization header is given, so ambient env never clobbers auth the caller
-    set on purpose. env is injectable so the precedence is testable without a network.
+    The precedence matches ``resolveOtlpConfig`` of ``@ratel-ai/sdk``. Traces URL: explicit
+    ``endpoint``, then ``RATEL_OTLP_ENDPOINT``, then the superseded ``RATEL_URL`` (it warns),
+    then ``${base_url}/traces``. Logs URL: explicit ``logs_endpoint``, then
+    ``RATEL_OTLP_LOGS_ENDPOINT``; without either, a custom traces URL gives its ``/v1/logs``
+    sibling and the base-URL default gives ``${base_url}/logs``. The base-URL default applies
+    only when an API key or a base URL is set, so a caller with no destination fails loud.
+
+    Auth: an explicit api_key sets ``Authorization: Bearer``; the ``RATEL_API_KEY`` fallback
+    applies only when neither api_key nor an explicit Authorization header is given, so
+    ambient env never clobbers auth the caller set on purpose.
+
+    Args:
+        api_key: Project API key; defaults to ``RATEL_API_KEY``.
+        base_url: API root of the default routes, with the ``/api/v1`` prefix; defaults to
+            ``RATEL_BASE_URL``, then ``https://cloud.ratel.sh/api/v1``. Trailing slashes are
+            removed.
+        endpoint: Full OTLP traces URL; overrides base_url.
+        logs_endpoint: Full OTLP logs URL; defaults to ``RATEL_OTLP_LOGS_ENDPOINT``.
+        headers: Extra headers sent with every export.
+        service_name: ``service.name`` resource attribute; defaults to ``"ratel"``.
+        env: Environment to read; defaults to ``os.environ``. Injectable so the precedence
+            is testable without a network.
+
+    Returns:
+        The resolved traces URL, logs URL, headers and service name.
+
+    Raises:
+        ValueError: if no endpoint, no API key and no base URL is set.
     """
     resolved_env = os.environ if env is None else env
     url = endpoint if endpoint is not None else _resolve_endpoint_from_env(resolved_env)
-    if not url:
-        raise ValueError(
-            f"ratel telemetry init: no endpoint. Pass endpoint= or set {OTLP_ENDPOINT_ENV} "
-            f"(use api_key= or {API_KEY_ENV} for Bearer auth)."
-        )
+    if url:
+        default_logs_url = _derive_logs_url(url)
+    else:
+        root = _resolve_base_url(base_url, api_key, resolved_env)
+        url = f"{root}/traces"
+        default_logs_url = f"{root}/logs"
+    logs_url = logs_endpoint or resolved_env.get(OTLP_LOGS_ENDPOINT_ENV) or default_logs_url
     resolved_headers: dict[str, str] = dict(headers or {})
     if api_key:
         resolved_headers["Authorization"] = f"Bearer {api_key}"
@@ -143,7 +176,7 @@ def resolve_otlp_config(
         resolved_headers["Authorization"] = f"Bearer {resolved_env[API_KEY_ENV]}"
     return OtlpConfig(
         url=url,
-        logs_url=logs_endpoint or _derive_logs_url(url),
+        logs_url=logs_url,
         headers=resolved_headers,
         service_name=service_name or DEFAULT_SERVICE_NAME,
     )
@@ -169,6 +202,20 @@ def _resolve_endpoint_from_env(env: Mapping[str, str]) -> str | None:
             stacklevel=3,
         )
     return legacy
+
+
+def _resolve_base_url(base_url: str | None, api_key: str | None, env: Mapping[str, str]) -> str:
+    """The API root the default routes hang off: argument, then RATEL_BASE_URL, then the
+    Ratel Cloud default. The default needs an API key, so a caller with no destination at
+    all fails loud instead of exporting unauthenticated to Ratel Cloud."""
+    chosen = base_url or env.get(BASE_URL_ENV)
+    if not chosen and not (api_key or env.get(API_KEY_ENV)):
+        raise ValueError(
+            f"ratel telemetry init: no endpoint. Pass endpoint= or set {OTLP_ENDPOINT_ENV}, "
+            f"or pass api_key= / set {API_KEY_ENV} (or base_url= / {BASE_URL_ENV}) to "
+            "export to Ratel Cloud."
+        )
+    return (chosen or DEFAULT_BASE_URL).rstrip("/")
 
 
 def _derive_logs_url(traces_url: str) -> str:
@@ -292,10 +339,13 @@ def _already_shut_down_error() -> RuntimeError:
 def ratel_span_exporter(
     *,
     api_key: str | None = None,
+    base_url: str | None = None,
     endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
 ) -> SpanExporter:
     """Build the OTLP http/protobuf span exporter at the resolved Ratel endpoint.
+
+    The endpoint resolves as in resolve_otlp_config (``base_url`` gives ``${base_url}/traces``).
 
     The standalone exporter for callers wiring their own span-processor; ratel_span_processor
     batches over it. Carries no resource — the caller's provider owns service.name. Needs the
@@ -305,24 +355,31 @@ def ratel_span_exporter(
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(_EXTRA_HINT) from exc
-    cfg = resolve_otlp_config(api_key=api_key, endpoint=endpoint, headers=headers)
+    cfg = resolve_otlp_config(
+        api_key=api_key, base_url=base_url, endpoint=endpoint, headers=headers
+    )
     return OTLPSpanExporter(endpoint=cfg.url, headers=dict(cfg.headers))
 
 
 def ratel_log_exporter(
     *,
     api_key: str | None = None,
+    base_url: str | None = None,
     endpoint: str | None = None,
     logs_endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
 ) -> LogRecordExporter:
-    """Build the OTLP http/protobuf log exporter at the resolved logs endpoint."""
+    """Build the OTLP http/protobuf log exporter at the resolved logs endpoint.
+
+    The endpoint resolves as in resolve_otlp_config (``base_url`` gives ``${base_url}/logs``).
+    """
     try:
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(_EXTRA_HINT) from exc
     cfg = resolve_otlp_config(
         api_key=api_key,
+        base_url=base_url,
         endpoint=endpoint,
         logs_endpoint=logs_endpoint,
         headers=headers,
@@ -333,6 +390,7 @@ def ratel_log_exporter(
 def ratel_span_processor(
     *,
     api_key: str | None = None,
+    base_url: str | None = None,
     endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
     span_filter: SpanFilter | None = None,
@@ -355,7 +413,9 @@ def ratel_span_processor(
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(_EXTRA_HINT) from exc
     active_filter = span_filter or ratel_signal_filter
-    exporter = ratel_span_exporter(api_key=api_key, endpoint=endpoint, headers=headers)
+    exporter = ratel_span_exporter(
+        api_key=api_key, base_url=base_url, endpoint=endpoint, headers=headers
+    )
 
     class _RatelSpanProcessor(BatchSpanProcessor):
         def on_end(self, span: ReadableSpan) -> None:
@@ -368,6 +428,7 @@ def ratel_span_processor(
 def ratel_log_record_processor(
     *,
     api_key: str | None = None,
+    base_url: str | None = None,
     endpoint: str | None = None,
     logs_endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
@@ -385,6 +446,7 @@ def ratel_log_record_processor(
     active_filter = log_filter or ratel_event_filter
     exporter = ratel_log_exporter(
         api_key=api_key,
+        base_url=base_url,
         endpoint=endpoint,
         logs_endpoint=logs_endpoint,
         headers=headers,
@@ -401,6 +463,7 @@ def ratel_log_record_processor(
 def init(
     *,
     api_key: str | None = None,
+    base_url: str | None = None,
     endpoint: str | None = None,
     logs_endpoint: str | None = None,
     headers: Mapping[str, str] | None = None,
@@ -421,6 +484,10 @@ def init(
     endpoint; once Ratel owns the provider, repeated calls return it regardless of options.
     Enabled initialization needs the [otlp] extra and raises a clear error without it.
 
+    Endpoints and auth resolve as in resolve_otlp_config: with no endpoint, an API key or a
+    base_url (then ``RATEL_BASE_URL``) selects ``${base_url}/traces`` and ``${base_url}/logs``
+    (default ``https://cloud.ratel.sh/api/v1``); with none of these it raises ValueError.
+
     Shutdown is terminal: after handle.shutdown(), a later init() raises rather than hand back
     the dead provider (OTel's global provider is set once per process). Note that the handle is
     shared across repeated calls, so shutting it down stops export for every caller.
@@ -428,6 +495,7 @@ def init(
     with _INIT_LOCK:
         return _init_locked(
             api_key=api_key,
+            base_url=base_url,
             endpoint=endpoint,
             logs_endpoint=logs_endpoint,
             headers=headers,
@@ -453,6 +521,7 @@ def recorded_service_name() -> str | None:
 def _init_locked(
     *,
     api_key: str | None,
+    base_url: str | None,
     endpoint: str | None,
     logs_endpoint: str | None,
     headers: Mapping[str, str] | None,
@@ -502,6 +571,7 @@ def _init_locked(
         raise _foreign_provider_error()
     cfg = resolve_otlp_config(
         api_key=api_key,
+        base_url=base_url,
         endpoint=endpoint,
         logs_endpoint=logs_endpoint,
         headers=headers,
@@ -512,6 +582,7 @@ def _init_locked(
     provider.add_span_processor(
         ratel_span_processor(
             api_key=api_key,
+            base_url=base_url,
             endpoint=endpoint,
             headers=headers,
             span_filter=_accept_all_spans if span_filter is None else span_filter,
@@ -521,6 +592,7 @@ def _init_locked(
     logger_provider.add_log_record_processor(
         ratel_log_record_processor(
             api_key=api_key,
+            base_url=base_url,
             endpoint=endpoint,
             logs_endpoint=logs_endpoint,
             headers=headers,

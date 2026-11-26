@@ -124,8 +124,10 @@ class TestResolveOtlpConfig:
         assert cfg.service_name == "my-agent"
 
     def test_raises_when_no_endpoint_and_no_ratel_url(self) -> None:
+        # An API key alone now selects the Ratel Cloud default route, so the error needs
+        # no key, no base URL and no endpoint.
         with pytest.raises(ValueError, match=ENDPOINT_ENV):
-            resolve_otlp_config(api_key="k", env={})
+            resolve_otlp_config(env={})
 
 
 class TestOtlpEndpointEnvMigration:
@@ -174,7 +176,7 @@ class TestOtlpEndpointEnvMigration:
 
     def test_missing_endpoint_error_names_the_dedicated_var(self) -> None:
         with pytest.raises(ValueError, match=OTLP_ENDPOINT_ENV):
-            resolve_otlp_config(api_key="k", env={})
+            resolve_otlp_config(env={})
 
     def test_the_dedicated_var_does_not_warn(self) -> None:
         import warnings
@@ -403,9 +405,10 @@ class TestInit:
             foreign_provider.shutdown()
 
     def test_raises_on_misconfiguration(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv(ENDPOINT_ENV, raising=False)
+        for name in (ENDPOINT_ENV, LEGACY_ENDPOINT_ENV, API_KEY_ENV, "RATEL_BASE_URL"):
+            monkeypatch.delenv(name, raising=False)
         with pytest.raises(ValueError, match=ENDPOINT_ENV):
-            init(api_key="k")
+            init()
 
 
 class TestRecordedServiceName:

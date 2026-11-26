@@ -387,10 +387,15 @@ Each Cloud feature resolves its key and URL in one place (`resolve_cloud_config`
 | `cloud["tool_picker"]` | — | off (`True` means `"precise"`) |
 | `cloud["source_id"]` | — | the runtime's event source id |
 | `cloud["timeout"]` | — | the default of each feature (30 s for most requests) |
-| `endpoint` of `configure_telemetry` | `RATEL_OTLP_ENDPOINT` | none: required |
-| `logs_endpoint` of `configure_telemetry` | — | the `/v1/logs` sibling of `endpoint` |
+| `endpoint` of `configure_telemetry` | `RATEL_OTLP_ENDPOINT` | `${base_url}/traces` |
+| `logs_endpoint` of `configure_telemetry` | `RATEL_OTLP_LOGS_ENDPOINT` | `${base_url}/logs` |
 
-`cloud["timeout"]` is in seconds. `cloud["transport"]` replaces the HTTP transport of every
+Python has two OTLP differences from TypeScript. With a custom traces URL and no logs setting,
+Python sends logs to the `/v1/logs` sibling of that URL, but TypeScript sends them to
+`${baseUrl}/logs`. With no API key, no base URL and no endpoint, Python raises `ValueError`, but
+TypeScript uses `https://cloud.ratel.sh/api/v1`.
+
+`base_url` of `configure_telemetry` reads `RATEL_BASE_URL` too. `cloud["timeout"]` is in seconds. `cloud["transport"]` replaces the HTTP transport of every
 feature (default `ratel_ai.cloud.UrllibTransport`). Tests pass a `MockCloud`.
 
 ### Advanced: the separate functions
@@ -584,6 +589,6 @@ Use `ground()` for a long-lived agent whose messages you persist; `ground_snapsh
 
 Facts are **host-driven**: the model-facing `search_capabilities` tool is unchanged and never returns facts — you decide what is true and inject it, rather than letting the model discover it. Every decision is traced (`fact_inject` with its reason, `fact_inject_skip`, `fact_snapshot`), so the skip rate — the tokens you saved — is measurable. See [ADR-0017](../../../docs/adr/0017-facts-and-injection-freshness.md).
 
-Telemetry export is optional. With the `otlp` extra installed, `configure_telemetry()` reads `RATEL_OTLP_ENDPOINT` (falling back to the superseded `RATEL_URL`, which warns) and `RATEL_API_KEY`, wires trace and Logs exporters, and returns a shutdown handle. It exports only `gen_ai.*`/`ratel.*` signal spans and EventRecords by default — `export_all_spans=True` widens spans only. Message and tool content stays off by default; opt in with `capture_content`/`include_span_and_events` (see the [telemetry guide](https://docs.ratel.sh/docs/telemetry) for the capture modes and their privacy implications). Experimental catalog-definition export additionally requires `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true`. Changed definitions then emit one `ratel.catalog.definition` EventRecord per registry-local content hash. Hosts that already own OpenTelemetry providers add both `ratel_span_processor` and `ratel_log_record_processor` instead.
+Telemetry export is optional. With the `otlp` extra installed, `configure_telemetry()` reads `RATEL_OTLP_ENDPOINT` (falling back to the superseded `RATEL_URL`, which warns), then `RATEL_BASE_URL` (default `https://cloud.ratel.sh/api/v1`, with the `/traces` and `/logs` routes), `RATEL_OTLP_LOGS_ENDPOINT` and `RATEL_API_KEY`, wires trace and Logs exporters, and returns a shutdown handle. It exports only `gen_ai.*`/`ratel.*` signal spans and EventRecords by default — `export_all_spans=True` widens spans only. Message and tool content stays off by default; opt in with `capture_content`/`include_span_and_events` (see the [telemetry guide](https://docs.ratel.sh/docs/telemetry) for the capture modes and their privacy implications). Experimental catalog-definition export additionally requires `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true`. Changed definitions then emit one `ratel.catalog.definition` EventRecord per registry-local content hash. Hosts that already own OpenTelemetry providers add both `ratel_span_processor` and `ratel_log_record_processor` instead.
 
 Package layout: `ratel_ai/` is the Python surface (including `embedding_artifact.py` for build/warm helpers), `native/` contains the PyO3 binding, and `tests/` exercises both. For local development, create `.venv` with `uv`, install `maturin`, `pytest`, `pytest-asyncio`, `ruff`, and `mypy`, then run `.venv/bin/maturin develop` and `.venv/bin/pytest`.

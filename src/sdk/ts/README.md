@@ -684,6 +684,11 @@ Each Cloud feature resolves its key and URL in one place (`resolveCloudConfig` o
 | `endpoint` of `RatelSpanProcessor` | `RATEL_OTLP_ENDPOINT` | `${baseUrl}/traces` |
 | `endpoint` of `RatelLogRecordProcessor` | `RATEL_OTLP_LOGS_ENDPOINT` | `${baseUrl}/logs` |
 
+The Python SDK has two OTLP differences. With a custom traces URL and no logs setting, Python sends
+logs to the `/v1/logs` sibling of that URL, but TypeScript sends them to `${baseUrl}/logs`. With no
+API key, no base URL and no endpoint, Python raises `ValueError`, but TypeScript uses
+`https://cloud.ratel.sh/api/v1`.
+
 ### Advanced: the separate functions
 
 `ratel({ cloud })` wires the functions below. Use them directly to wire one feature yourself,

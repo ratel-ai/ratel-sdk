@@ -402,12 +402,14 @@ Turnkey initialization:
 - Resolves the traces endpoint from `RATEL_OTLP_ENDPOINT`, falling back to the superseded
   `RATEL_URL` with a `DeprecationWarning` (that var also selects the SDK's catalog source per
   ADR-0003, so it no longer doubles as the OTLP destination); an explicit `endpoint=` wins over
-  both. Resolves auth from `RATEL_API_KEY`; an explicit `api_key=` wins. Custom `headers` compose with
+  both. With none of these, an API key (`api_key=` or `RATEL_API_KEY`) or a base URL (`base_url=`,
+  then `RATEL_BASE_URL`, default `https://cloud.ratel.sh/api/v1`) selects the `${base_url}/traces`
+  route; with no key, no base URL and no endpoint it raises `ValueError`. Resolves auth from `RATEL_API_KEY`; an explicit `api_key=` wins. Custom `headers` compose with
   either form. An explicit API key sets `Authorization: Bearer ...`; the `RATEL_API_KEY` fallback
   applies only when neither an explicit API key nor an explicit `Authorization` header is given, so
-  ambient env never clobbers auth the caller set on purpose. The traces endpoint remains the full
-  `/v1/traces` URL; the Logs exporter derives its sibling `/v1/logs` URL. `logs_endpoint` overrides
-  that derivation.
+  ambient env never clobbers auth the caller set on purpose. The Logs URL resolves from
+  `logs_endpoint=`, then `RATEL_OTLP_LOGS_ENDPOINT`. Without either, a custom traces URL gives its
+  sibling `/v1/logs` URL, and the base-URL default gives `${base_url}/logs`.
 - On first setup, accepts `enabled=False` before resolving configuration or registering a provider,
   returning a no-op handle without importing the OTel SDK at all. The composable span and
   log-record processors have the same switch. If Ratel already owns the global providers,

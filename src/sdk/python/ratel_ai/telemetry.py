@@ -611,6 +611,7 @@ class _TelemetryHandle:
 def configure_telemetry(
     *,
     api_key: str | None = None,
+    base_url: str | None = None,
     endpoint: str | None = None,
     logs_endpoint: str | None = None,
     headers: dict[str, str] | None = None,
@@ -639,10 +640,14 @@ def configure_telemetry(
 
     Args:
         api_key: Ratel Cloud API key override; defaults to ``RATEL_API_KEY``.
-        endpoint: OTLP endpoint override; defaults to ``RATEL_OTLP_ENDPOINT``, then
-            the superseded ``RATEL_URL`` (which warns).
-        logs_endpoint: OTLP logs endpoint override; defaults to the sibling
-            ``/v1/logs`` URL derived from `endpoint`.
+        base_url: API root of the default OTLP routes, with the ``/api/v1`` prefix;
+            defaults to ``RATEL_BASE_URL``, then ``https://cloud.ratel.sh/api/v1``.
+        endpoint: OTLP traces endpoint override; defaults to ``RATEL_OTLP_ENDPOINT``,
+            then the superseded ``RATEL_URL`` (which warns), then ``${base_url}/traces``.
+            The base-URL default needs an API key or a base URL.
+        logs_endpoint: OTLP logs endpoint override; defaults to
+            ``RATEL_OTLP_LOGS_ENDPOINT``, then the ``/v1/logs`` sibling of a custom
+            traces URL, or ``${base_url}/logs`` with the base-URL default.
         headers: Extra headers sent with every export request.
         service_name: ``service.name`` resource attribute; defaults per `init`.
             Once the provider is installed, the effective name is also recorded
@@ -666,7 +671,8 @@ def configure_telemetry(
         ModuleNotFoundError: if the OpenTelemetry exporter is not installed
             (``pip install 'ratel-ai[otlp]'``).
         ValueError: if `capture_content` is not a recognized mode — raised before
-            any exporter is wired, so a bad option has no side effects.
+            any exporter is wired, so a bad option has no side effects. Also raised
+            when no endpoint, no API key and no base URL is set.
     """
     try:
         from ratel_ai_telemetry import (
@@ -696,6 +702,7 @@ def configure_telemetry(
         # capture path below, rather than leaking init()'s shared handle directly.
         handle = init(
             api_key=api_key,
+            base_url=base_url,
             endpoint=endpoint,
             logs_endpoint=logs_endpoint,
             headers=headers,
@@ -712,6 +719,7 @@ def configure_telemetry(
     try:
         provider = init(
             api_key=api_key,
+            base_url=base_url,
             endpoint=endpoint,
             logs_endpoint=logs_endpoint,
             headers=headers,

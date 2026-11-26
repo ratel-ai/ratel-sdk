@@ -63,9 +63,10 @@ class TestRatelSpanExporter:
         assert isinstance(ratel_span_exporter(endpoint=ENDPOINT), OTLPSpanExporter)
 
     def test_raises_without_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv(ENDPOINT_ENV, raising=False)
+        for name in (ENDPOINT_ENV, "RATEL_URL", "RATEL_API_KEY", "RATEL_BASE_URL"):
+            monkeypatch.delenv(name, raising=False)
         with pytest.raises(ValueError, match=ENDPOINT_ENV):
-            ratel_span_exporter(api_key="k")
+            ratel_span_exporter()
 
 
 class TestRatelLogExporter:
