@@ -316,7 +316,7 @@ jobs:
           }
           console.log("OK");
           EOF
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: src/rankers/ts/README.md
           sparse-checkout-cone-mode: false
