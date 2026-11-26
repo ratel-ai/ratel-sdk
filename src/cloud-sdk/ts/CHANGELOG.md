@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Deprecated
+
+- **This package is a shim over `@ratel-ai/sdk`.** Import `@ratel-ai/sdk/cloud` (for the root and `/runtime`), `@ratel-ai/sdk/otel` and `@ratel-ai/sdk/cloud/testing` instead. Each old entry point re-exports the same names with the same types, so current imports continue to work. `@ratel-ai/sdk` is now a regular dependency, not an optional peer, and the package needs Node >= 20.6.0. The examples moved to `examples/cloud/`.
+
 ## [0.7.0-rc.5] - 2026-11-22
 
 ### Added

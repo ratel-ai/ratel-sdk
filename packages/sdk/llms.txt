@@ -254,7 +254,27 @@ same data to OpenAI. A built-in `reranker: { method, depth }` re-scores the firs
 candidates with a different local method (`bm25`, `semantic`, `hybrid`). Neither reranker ever adds
 a tool the first stage missed
 ([ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md)).
-The Ratel Cloud Tool Picker is not part of this SDK.
+The Ratel Cloud Tool Picker ranks through the TypeScript SDK's `cloud` option (see below); it
+sends the query to Ratel Cloud.
+
+### Ratel Cloud from the TypeScript SDK
+
+`ratel({ cloud })` is the one switch for Ratel Cloud in `@ratel-ai/sdk`. With no `cloud` option,
+no Cloud code runs and no request leaves the process. `cloud: true` reads `RATEL_API_KEY` and
+`RATEL_BASE_URL` (default `https://cloud.ratel.sh/api/v1`); an object sets `apiKey`, `baseUrl`,
+`fetch`, `timeoutMs` and the features: `events` (runtime events and catalog snapshots, default
+on, `RATEL_CLOUD_EVENTS=off` turns events off), `definitions` (Cloud-owned Retrieval
+descriptions, default off), `intentGraph` (intent graph sync and adaptive ranking with it,
+default off, `RATEL_CLOUD_INTENT_GRAPH=off` turns it off) and `toolPicker` (`true` or a mode,
+default off; do not combine it with `method` or `retrieveFn`). `ratel()` throws when `cloud` is
+set and no key resolves. `r.cloud` (the same object on every `adaptTo` view) holds the
+management clients (`skills`, `suggestions`, `intents`, `jobs`, `runtimeCatalog`), `toolPicker`,
+and `status()`, `verify()`, `ready()`, `flush()`, `close()`, `refreshDefinitions()`. The OTLP
+destination in `@ratel-ai/sdk/otel` derives `${baseUrl}/traces` and `${baseUrl}/logs` from the
+same settings; `RATEL_OTLP_ENDPOINT` and `RATEL_OTLP_LOGS_ENDPOINT` override them. The separate
+functions (`attach`, `ratelCloud`, `attachIntentGraphSync`, `RatelCloudSdk` from
+`@ratel-ai/sdk/cloud`) still work and read the same settings. `@ratel-ai/cloud-sdk` is a
+deprecated shim over these subpaths.
 
 ### `replace` vs `suggest` mode
 

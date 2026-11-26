@@ -1,63 +1,56 @@
-/** `@ratel-ai/cloud-sdk/runtime` — fail-open runtime facts delivery, plus Tool Picker ranking. */
+/**
+ * `@ratel-ai/cloud-sdk/runtime` is deprecated. Import `@ratel-ai/sdk/cloud` instead.
+ *
+ * This entry point re-exports the names it exported before the Cloud code moved into
+ * `@ratel-ai/sdk`. It holds no Cloud logic.
+ *
+ * @deprecated Import `@ratel-ai/sdk/cloud`.
+ */
 
-export type {
-  RuntimeCatalogSnapshot,
-  RuntimeCatalogToolDefinition,
-  RuntimeEvent,
-} from "../types.js";
-export {
-  isRemotelyPublishable,
-  RUNTIME_EVENT_TYPES,
-  type RuntimeEventType,
-} from "./allowlist.js";
 export {
   type AttachOptions,
   attach,
+  attachIntentGraphSync,
+  CatalogSnapshotsPublisher,
+  type CatalogSnapshotsPublisherOptions,
   type CloudDefinitionsRuntimeAttachment,
-  type RatelRuntime,
-  type RatelRuntimeCatalog,
-  type RatelRuntimeCatalogToolDefinition,
-  type RatelRuntimeEvents,
-  type RuntimeAttachment,
-  type RuntimeEventSubscription,
-} from "./attach.js";
-export {
   type DeliveryKind,
   type DeliveryOverall,
   type DeliveryResult,
   DeliveryStatus,
   type DeliveryStatusOptions,
   type EventsDeliveryStatus,
-  type RuntimeDeliveryStatus,
-  type SnapshotDeliveryStatus,
-} from "./delivery-status.js";
-export { hashCatalogSnapshot } from "./hash.js";
-export {
-  attachIntentGraphSync,
+  hashCatalogSnapshot,
   type IntentGraphSync,
   type IntentGraphSyncCatalog,
   type IntentGraphSyncError,
   type IntentGraphSyncErrorKind,
   type IntentGraphSyncOptions,
   type IntentGraphSyncStatus,
-} from "./intent-graph-sync.js";
-export {
+  isRemotelyPublishable,
+  type RatelCloud,
+  type RatelCloudOptions,
+  type RatelRuntime,
+  type RatelRuntimeCatalog,
+  type RatelRuntimeCatalogToolDefinition,
+  type RatelRuntimeEvents,
   RUNTIME_EVENT_BATCH_MAX_BYTES,
   RUNTIME_EVENT_BATCH_MAX_EVENTS,
   RUNTIME_EVENT_MAX_BYTES,
+  RUNTIME_EVENT_TYPES,
+  type RuntimeAttachment,
+  type RuntimeCatalogSnapshot,
+  type RuntimeCatalogToolDefinition,
+  type RuntimeDeliveryStatus,
+  type RuntimeEvent,
   type RuntimeEventRejection,
+  type RuntimeEventSubscription,
   RuntimeEventsPublisher,
   type RuntimeEventsPublisherOptions,
   type RuntimeEventsRetryOptions,
-} from "./publisher.js";
-export {
-  CatalogSnapshotsPublisher,
-  type CatalogSnapshotsPublisherOptions,
-} from "./snapshots.js";
-export {
-  type RatelCloud,
-  type RatelCloudOptions,
+  type RuntimeEventType,
   ratelCloud,
+  type SnapshotDeliveryStatus,
   type ToolPicker,
   type ToolPickerMode,
-} from "./tool-picker.js";
+} from "@ratel-ai/sdk/cloud";

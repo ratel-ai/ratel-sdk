@@ -1,7 +1,7 @@
 {
   "name": "@ratel-ai/cloud-sdk",
   "version": "0.7.0-rc.5",
-  "description": "Management & supervised self-improvement client for Ratel Cloud — catalog writes, intent analysis, and skill-suggestion review over the cloud API, plus the OpenTelemetry destination on /otel. Dependency-free at the root; pure HTTP, no native addon.",
+  "description": "Deprecated: use @ratel-ai/sdk/cloud, @ratel-ai/sdk/otel and @ratel-ai/sdk/cloud/testing. This package re-exports them under the old entry points (root, /runtime, /otel, /testing) so that current imports continue to work.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -47,7 +47,7 @@
     "ratel"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.6.0"
   },
   "publishConfig": {
     "access": "public"
@@ -64,17 +64,17 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
     "test": "vitest run",
-    "example:e2e": "node examples/e2e.mjs",
-    "example:runtime-e2e": "node examples/runtime-attach-e2e.mjs",
-    "example:ui": "node examples/ui/server.mjs"
+    "example:shim-e2e": "node --import ./examples/use-shim.mjs ../../../examples/cloud/e2e.mjs && node --import ./examples/use-shim.mjs ../../../examples/cloud/runtime-attach-e2e.mjs"
+  },
+  "dependencies": {
+    "@ratel-ai/sdk": "workspace:^"
   },
   "peerDependencies": {
     "@opentelemetry/api": ">=1.3.0 <1.10.0",
     "@opentelemetry/exporter-logs-otlp-proto": ">=0.221.0 <1.0.0",
     "@opentelemetry/exporter-trace-otlp-proto": ">=0.220.0 <1.0.0",
     "@opentelemetry/sdk-logs": ">=0.221.0 <1.0.0",
-    "@opentelemetry/sdk-trace-base": "^2.10.0",
-    "@ratel-ai/sdk": ">=0.13.0-rc.11"
+    "@opentelemetry/sdk-trace-base": "^2.10.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
@@ -91,9 +91,6 @@
     },
     "@opentelemetry/sdk-trace-base": {
       "optional": true
-    },
-    "@ratel-ai/sdk": {
-      "optional": true
     }
   },
   "devDependencies": {
@@ -104,7 +101,6 @@
     "@opentelemetry/exporter-trace-otlp-proto": "^0.221.0",
     "@opentelemetry/sdk-logs": "^0.221.0",
     "@opentelemetry/sdk-trace-base": "^2.10.0",
-    "@ratel-ai/sdk": "^0.13.0-rc.12",
     "@types/node": "^22.10.0",
     "typescript": "^5.6.0",
     "vitest": "^4.1.5"

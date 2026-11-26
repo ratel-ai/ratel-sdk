@@ -21,6 +21,11 @@ import {
   ToolCatalog,
   type TraceSinkConfig,
 } from "./catalog.js";
+import {
+  type RatelCloudConfig,
+  type RatelCloudRuntime,
+  setupRatelCloud,
+} from "./cloud/ratel-cloud.js";
 import { validateDefinitionOverlayResponse } from "./definition-overrides.js";
 import type { ExperimentalEmbeddingArtifact } from "./embedding-artifact.js";
 import { DefinitionOverlayError } from "./errors.js";
@@ -88,7 +93,18 @@ export interface RatelConfig {
   trace?: TraceSinkConfig;
   /** Public runtime-event stream identity and bounded delivery options (ADR-0020). */
   events?: RuntimeEventsOptions;
+  /**
+   * Turn on Ratel Cloud: `true` reads `RATEL_API_KEY` (and `RATEL_BASE_URL`), an
+   * object sets the key, the URL and each feature. Events and catalog snapshots
+   * are on by default; definitions, the intent graph and the Tool Picker are off.
+   * Gives `r.cloud`. With no `cloud`, `ratel()` runs no Cloud code and sends no
+   * request. Throws at construction when no API key is set.
+   */
+  cloud?: true | RatelCloudConfig;
 }
+
+/** The type of `r.cloud`: the handle for a core made with `cloud`, `undefined` for one made without. */
+export type RatelCloudSlot = RatelCloudRuntime | undefined;
 
 /**
  * A framework tool ingested into the catalog: what an adapter's
@@ -298,7 +314,9 @@ export interface AdaptedToolCollection<TTool> {
  * add their idioms via {@link RatelAdapter.extend}; universal capability lives
  * here.
  */
-export interface AdaptedBase<TTool, TMessage> {
+export interface AdaptedBase<TTool, TMessage, TCloud extends RatelCloudSlot = RatelCloudSlot> {
+  /** The Cloud handle of the core ({@link Ratel.cloud}): the same object on every view. */
+  readonly cloud: TCloud;
   /** This view's handle over the shared catalog, in the framework's tool shape. */
   readonly tools: AdaptedToolCollection<TTool>;
   /** The shared skill catalog (skills are framework-neutral). */
@@ -367,9 +385,9 @@ export interface AdaptedBase<TTool, TMessage> {
  * the bare base type here (instead of collapsing the whole view to `never`,
  * which would surface as a cryptic error far from the broken adapter).
  */
-export type AdaptedRatel<A extends RatelAdapter> =
+export type AdaptedRatel<A extends RatelAdapter, TCloud extends RatelCloudSlot = RatelCloudSlot> =
   A extends RatelAdapter<infer TTool, infer TMessage, infer TExt>
-    ? AdaptedBase<TTool, TMessage> & (TExt extends object ? TExt : unknown)
+    ? AdaptedBase<TTool, TMessage, TCloud> & (TExt extends object ? TExt : unknown)
     : never;
 
 /**
@@ -379,7 +397,12 @@ export type AdaptedRatel<A extends RatelAdapter> =
  * model {@link Ratel.modelTools}, rank with {@link Ratel.recall} —
  * and adaptable on top for a framework's native shapes.
  */
-export interface Ratel {
+export interface Ratel<TCloud extends RatelCloudSlot = RatelCloudSlot> {
+  /**
+   * The Ratel Cloud handle when the core was made with `cloud`: the management
+   * clients, the Tool Picker and the delivery lifecycle. `undefined` otherwise.
+   */
+  readonly cloud: TCloud;
   /** Handle over the shared tool catalog (native shapes, guarded). */
   readonly tools: ToolCollection;
   /** The shared skill catalog — exposed raw (skills are framework-neutral and
@@ -462,7 +485,7 @@ export interface Ratel {
   /** The id of the turn the caller is running inside, or `undefined`. */
   currentTurnId(): string | undefined;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
-  adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A>;
+  adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A, TCloud>;
 }
 
 // The capability-tool ids: an app tool may not shadow them (registration throws).
@@ -512,13 +535,22 @@ const KNOWN_FRAMEWORKS: readonly {
  * const messages = await r.appendRecall(history); // per-turn recall (AI SDK idiom)
  * ```
  */
+export function ratel(
+  config: RatelConfig & { cloud: true | RatelCloudConfig },
+): Ratel<RatelCloudRuntime>;
+export function ratel(config?: RatelConfig & { cloud?: undefined }): Ratel<undefined>;
+export function ratel(config?: RatelConfig): Ratel;
 export function ratel(config: RatelConfig = {}): Ratel {
-  const catalogMethod: SearchMethod = config.method ?? "bm25";
+  // The one Cloud wiring point: validated before the catalogs exist, because the
+  // Tool Picker replaces their ranking.
+  const cloudSetup = config.cloud === undefined ? undefined : setupRatelCloud(config.cloud, config);
+  const method = cloudSetup?.ranking?.method ?? config.method;
+  const catalogMethod: SearchMethod = method ?? "bm25";
   const embeddingArtifact = config.experimentalEmbeddingArtifact;
   const ranking = {
-    method: config.method,
+    method,
     reranker: config.reranker,
-    retrieveFn: config.retrieveFn,
+    retrieveFn: cloudSetup?.ranking?.retrieveFn ?? config.retrieveFn,
     rerankerFn: config.rerankerFn,
     rerankerDepth: config.rerankerDepth,
   };
@@ -642,7 +674,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     if (factsCatalog === undefined) {
       factsCatalog = new FactCatalog({
         // Facts have no custom path; rank them lexically instead.
-        method: config.method === "custom" ? "bm25" : config.method,
+        method: method === "custom" ? "bm25" : method,
         embedding: config.embedding,
         trace: config.trace,
         factsTopK: config.factsTopK,
@@ -651,6 +683,10 @@ export function ratel(config: RatelConfig = {}): Ratel {
     }
     return factsCatalog;
   };
+  const cloud = cloudSetup?.connect({ events, catalog: runtimeCatalog, tools: catalog });
+  // Only a core made with `cloud` has the key, so a core without it keeps its keys.
+  // An absent key reads as `undefined`, which is the type of `cloud` for that core.
+  const cloudSlot = (cloud === undefined ? {} : { cloud }) as { readonly cloud: RatelCloudSlot };
   // Framework-shaped passthrough values stay in their originating views, but
   // their ids must participate in the core-wide adapted-path first-wins guard.
   const claimedAdaptedToolIds = new Set<string>();
@@ -803,6 +839,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     };
 
     const baseWithoutFacts: Omit<AdaptedBase<unknown, unknown>, "facts"> = {
+      ...cloudSlot,
       tools: adaptedTools,
       skills,
       events,
@@ -842,6 +879,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
   }
 
   return withLazyFacts(facts, {
+    ...cloudSlot,
     tools,
     skills,
     events,

@@ -1,57 +1,87 @@
-import { IntentsClient } from "./intents.js";
-import { JobsClient } from "./jobs.js";
-import { RuntimeCatalogClient } from "./runtime-catalog.js";
-import { SkillsClient } from "./skills.js";
-import { SuggestionsClient } from "./suggestions.js";
-import { type CloudSdkOptions, Transport } from "./transport.js";
-
 /**
- * Management & supervised self-improvement client for Ratel Cloud: catalog
- * writes, intent analysis, and suggestion review over the v1 HTTP API. Pure
- * fetch — no native addon, no BM25; all analysis and drafting stay server-side.
+ * `@ratel-ai/cloud-sdk` is deprecated. Import `@ratel-ai/sdk/cloud` instead.
  *
- * This package deliberately does NOT sync skills into an agent at runtime —
- * that's the `@ratel-ai/cloud` loader's job (replica, refresh, ownership).
- * The two share only the API key.
+ * This entry point re-exports the names it exported before the Cloud code moved into
+ * `@ratel-ai/sdk`. It holds no Cloud logic.
+ *
+ * @deprecated Import `@ratel-ai/sdk/cloud`.
  */
-export class RatelCloudSdk {
-  readonly skills: SkillsClient;
-  readonly suggestions: SuggestionsClient;
-  readonly intents: IntentsClient;
-  readonly jobs: JobsClient;
-  readonly runtimeCatalog: RuntimeCatalogClient;
 
-  constructor(options: CloudSdkOptions) {
-    const transport = new Transport(options);
-    this.skills = new SkillsClient(transport);
-    this.suggestions = new SuggestionsClient(transport);
-    this.intents = new IntentsClient(transport);
-    this.jobs = new JobsClient(transport);
-    this.runtimeCatalog = new RuntimeCatalogClient(transport);
-  }
-}
-
-export { CloudSdkError, type CloudSdkErrorCode } from "./errors.js";
-export { IntentsClient, type ListIntentsOptions } from "./intents.js";
-export { JobsClient, type WaitForJobOptions } from "./jobs.js";
-export { RuntimeCatalogClient } from "./runtime-catalog.js";
-export { type ListSkillsOptions, type ListSkillsResult, SkillsClient } from "./skills.js";
-export { type ListSuggestionsOptions, SuggestionsClient } from "./suggestions.js";
 export {
+  type AnalyzeInput,
+  type AnalyzeResult,
+  type Catalog,
+  type CatalogResponse,
+  type CatalogResponseV2,
+  type CatalogV2,
+  CloudSdkError,
+  type CloudSdkErrorCode,
   type CloudSdkLogEvent,
   type CloudSdkOptions,
-  consoleLogEvent,
-  DEFAULT_BASE_URL,
-  DEFAULT_TIMEOUT_MS,
-  Transport,
-} from "./transport.js";
-export * from "./types.js";
-export {
+  type CloudSkill,
+  type CloudSuggestion,
+  type ConversationMessage,
   canonicalSet,
   canonicalSetV2,
   canonicalSkill,
   canonicalSkillV2,
+  consoleLogEvent,
+  DEFAULT_BASE_URL,
+  DEFAULT_TIMEOUT_MS,
+  type EditSkillPatch,
+  type ExtractedIntent,
+  type GenerateSuggestionsResult,
+  type ImportReport,
+  IntentsClient,
   ifNoneMatchMatches,
+  JOB_STATUSES,
+  type Job,
+  type JobStatus,
+  JobsClient,
+  type ListIntentsOptions,
+  type ListIntentsResult,
+  type ListRuntimeCatalogOverridesOptions,
+  type ListSkillsOptions,
+  type ListSkillsResult,
+  type ListSuggestionsOptions,
+  type ListSuggestionsResult,
+  type MessageRole,
+  type NewSkillInput,
+  type NewSkillPatch,
+  type QueryIntent,
+  RatelCloudSdk,
+  type RetrievabilityPreview,
+  type RetrievabilityPreviewHit,
+  RuntimeCatalogClient,
+  type RuntimeCatalogEntryKind,
+  type RuntimeCatalogOverride,
+  type RuntimeCatalogOverridesFreshResult,
+  type RuntimeCatalogOverridesNotModifiedResult,
+  type RuntimeCatalogOverridesResponse,
+  type RuntimeCatalogOverridesResult,
+  type RuntimeCatalogSnapshot,
+  type RuntimeCatalogToolDefinition,
+  type RuntimeEvent,
   resolve,
   resolveV2,
-} from "./wire.js";
+  SIGNAL_KINDS,
+  type SignalKind,
+  SKILL_FIELDS,
+  SKILL_STATUSES,
+  type SkillStatus,
+  SkillsClient,
+  SUGGESTION_STATUSES,
+  SUGGESTION_TYPES,
+  type SuggestionStatus,
+  SuggestionsClient,
+  type SuggestionType,
+  type SuggestJobReason,
+  type SuggestJobResult,
+  type SuggestResult,
+  Transport,
+  type UpdateSkillInput,
+  V2_SKILL_FIELDS,
+  type WaitForJobOptions,
+  type WireSkill,
+  type WireSkillV2,
+} from "@ratel-ai/sdk/cloud";

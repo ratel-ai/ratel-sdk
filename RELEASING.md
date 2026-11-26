@@ -20,7 +20,7 @@ each unit carries its own version in its own manifest and ships on its own caden
 | `mastra` | `mastra-v*` | `@ratel-ai/mastra` on npm | `src/adapters/ts-mastra/package.json` |
 | `rankers-ts` | `rankers-ts-v*` | `@ratel-ai/rankers-plugin` + 5 platform packages on npm | `src/rankers/ts/package.json` |
 | `rankers-py` | `rankers-py-v*` | `ratel-ai-rankers-plugin` on PyPI | `src/rankers/python/pyproject.toml` |
-| `cloud-sdk` | `cloud-sdk-v*` | `@ratel-ai/cloud-sdk` on npm | `src/cloud-sdk/ts/package.json` |
+| `cloud-sdk` | `cloud-sdk-v*` | `@ratel-ai/cloud-sdk` (deprecated shim) on npm | `src/cloud-sdk/ts/package.json` |
 
 The units are registered once, in [`scripts/release-units.mjs`](scripts/release-units.mjs)
 — the single source of truth that the tag gate, the `releasable` helper, the changelog
@@ -70,9 +70,14 @@ While the TS floor is a prerelease, npm's `latest` SDK sits below it, so the plu
 `packages/sdk/llms.txt` install both packages at `@rc` (`scripts/rankers-sdk-floor.test.mjs` enforces it). Once
 the floor is GA and both packages hold `latest`, drop the `@rc` from those install lines.
 
-The **cloud-sdk** unit (`@ratel-ai/cloud-sdk`) is the pure-HTTP Ratel Cloud client. It moved
-here from `ratel-ai/ratel-cloud-sdk`, whose releases were tagged `v*`; from this repo it ships on
-`cloud-sdk-v*`. It has no native addon and no `workspace:` runtime dependency.
+The **cloud-sdk** unit (`@ratel-ai/cloud-sdk`) is a deprecated shim. The Ratel Cloud code is in
+`@ratel-ai/sdk` (`src/sdk/ts/src/cloud`), behind `@ratel-ai/sdk/cloud`, `@ratel-ai/sdk/otel` and
+`@ratel-ai/sdk/cloud/testing`. The shim re-exports them under its old entry points (root,
+`/runtime`, `/otel`, `/testing`) and holds no Cloud logic. It moved here from
+`ratel-ai/ratel-cloud-sdk`, whose releases were tagged `v*`; from this repo it ships on
+`cloud-sdk-v*`. It has a `workspace:^` runtime dependency on `@ratel-ai/sdk`: the
+`publish-cloud-sdk` job pins it to `^<sdk version>` before publish and fails when that SDK is
+not on npm, so publish `sdk-ts` first. Cloud code changes ship with the `sdk-ts` unit.
 
 The SDKs moved here from `ratel-ai/ratel` (the platform repo). ADR links below point at
 `ratel-ai/ratel`'s `docs/adr/`.

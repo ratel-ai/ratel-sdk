@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **`ratel({ cloud })` turns on Ratel Cloud with one option.** `cloud: true` reads `RATEL_API_KEY`; an object sets `apiKey`, `baseUrl`, `fetch`, `timeoutMs`, `sourceId` and the features: `events` (runtime events and catalog snapshots, default on), `definitions`, `intentGraph` and `toolPicker` (default off). `r.cloud` (the same handle on every `adaptTo` view) holds the management clients, the Tool Picker and `status()`, `verify()`, `ready()`, `flush()`, `close()`, `refreshDefinitions()`. With `cloud` set and no key, `ratel()` throws a `CloudSdkError` with code `config`. Without `cloud`, `ratel()` runs no Cloud code and sends no request. `ratelCloud()` now also returns the management clients.
+- **One resolver for every Cloud setting.** `resolveCloudConfig` and `CloudConfig` in `@ratel-ai/sdk/cloud`: the option, then the env variable, then the default. The management client, `attach()`, the publishers, the Tool Picker, intent graph sync and both OTLP resolvers use it. The new `RATEL_BASE_URL` env variable moves all of them. `apiKey` is now optional in `CloudSdkOptions` (default `RATEL_API_KEY`); a request with no key throws a `CloudSdkError` with code `config` and sends nothing. `attachIntentGraphSync` takes a `baseUrl` option (`endpoint` still wins).
+- **`MockCloud` serves the runtime routes:** `POST /events`, `PUT /catalog/snapshot`, `GET`/`PUT /intent-graph` and `POST /tools/pick`, and records what it receives (`runtimeEvents`, `catalogSnapshots`, `intentGraphs`, `toolPicks`).
+- **Ratel Cloud subpaths.** The code of `@ratel-ai/cloud-sdk` moved into this package with no behavior change: `@ratel-ai/sdk/cloud` (the old root and `/runtime` names), `@ratel-ai/sdk/otel` and `@ratel-ai/sdk/cloud/testing`. None of them loads the native addon. The OpenTelemetry exporter packages that `/otel` uses are optional peers. The root entry point does not change. See the README's "Ratel Cloud" section.
+
 ## [0.13.0-rc.13] - 2026-11-22
 
 ### Changed
