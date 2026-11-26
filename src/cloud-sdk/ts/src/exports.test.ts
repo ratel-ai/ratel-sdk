@@ -195,7 +195,10 @@ const program = ts.createProgram(
   },
 );
 const checker = program.getTypeChecker();
-const SDK_CLOUD_DIST = resolve(dirname(realResolve("@ratel-ai/sdk/package.json")), "dist/cloud");
+const SDK_PLATFORM_DIST = resolve(
+  dirname(realResolve("@ratel-ai/sdk/package.json")),
+  "dist/platform",
+);
 
 describe.each(ENTRIES)("the %s entry point", (entry) => {
   const expected = MAIN_EXPORTS[entry] as { values: string[]; types: string[] };
@@ -227,7 +230,7 @@ function exportsOf(entry: string): { values: string[]; types: string[]; outside:
     const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
     (target.flags & ts.SymbolFlags.Value ? values : types).push(symbol.name);
     const declared = target.declarations?.[0]?.getSourceFile().fileName ?? "";
-    if (!resolve(declared).startsWith(SDK_CLOUD_DIST)) outside.push(symbol.name);
+    if (!resolve(declared).startsWith(SDK_PLATFORM_DIST)) outside.push(symbol.name);
   }
   return { values: values.sort(), types: types.sort(), outside };
 }

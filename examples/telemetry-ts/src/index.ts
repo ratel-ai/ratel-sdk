@@ -145,7 +145,7 @@ async function main(): Promise<void> {
   // --- Production wiring: traces + EventRecords exported to Ratel over OTLP ---
   // Endpoint and auth are plain host configuration; shown here with demo values so the
   // derivation is visible without sending anything:
-  const demoUrl = "https://cloud.ratel.sh/v1/traces";
+  const demoUrl = "https://app.ratel.sh/api/v1/traces";
   const demoHeaders = authHeaders("sk-demo");
   console.log("\n--- exporter config the host resolves (illustrative demo values) ---");
   console.log(`  url:         ${demoUrl}`);

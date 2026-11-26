@@ -34,7 +34,7 @@ import { aiSdkMajor, MockLanguageModelV2, usage } from "./test-support/mock-mode
  * the AI SDK's `gen_ai.*` spans riding ONE host-owned provider out to several
  * destinations at once, including the real `@langfuse/otel` processor.
  *
- * In-memory capture only — no network — and no Ratel Cloud import: `@ratel-ai/cloud`
+ * In-memory capture only — no network — and no Ratel Platform import: the platform client
  * ships last precisely so the OSS path is proven against third-party backends
  * first. Everything here works with packages a host already runs.
  *

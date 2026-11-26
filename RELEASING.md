@@ -70,14 +70,14 @@ While the TS floor is a prerelease, npm's `latest` SDK sits below it, so the plu
 `packages/sdk/llms.txt` install both packages at `@rc` (`scripts/rankers-sdk-floor.test.mjs` enforces it). Once
 the floor is GA and both packages hold `latest`, drop the `@rc` from those install lines.
 
-The **cloud-sdk** unit (`@ratel-ai/cloud-sdk`) is a deprecated shim. The Ratel Cloud code is in
-`@ratel-ai/sdk` (`src/sdk/ts/src/cloud`), behind `@ratel-ai/sdk/cloud`, `@ratel-ai/sdk/otel` and
-`@ratel-ai/sdk/cloud/testing`. The shim re-exports them under its old entry points (root,
-`/runtime`, `/otel`, `/testing`) and holds no Cloud logic. It moved here from
+The **cloud-sdk** unit (`@ratel-ai/cloud-sdk`) is a deprecated shim. The Ratel Platform code is in
+`@ratel-ai/sdk` (`src/sdk/ts/src/platform`), behind `@ratel-ai/sdk/platform`, `@ratel-ai/sdk/otel`
+and `@ratel-ai/sdk/platform/testing`. The shim re-exports them under its old entry points (root,
+`/runtime`, `/otel`, `/testing`) and old names, and holds no logic. It moved here from
 `ratel-ai/ratel-cloud-sdk`, whose releases were tagged `v*`; from this repo it ships on
 `cloud-sdk-v*`. It has a `workspace:^` runtime dependency on `@ratel-ai/sdk`: the
 `publish-cloud-sdk` job pins it to `^<sdk version>` before publish and fails when that SDK is
-not on npm, so publish `sdk-ts` first. Cloud code changes ship with the `sdk-ts` unit.
+not on npm, so publish `sdk-ts` first. Platform code changes ship with the `sdk-ts` unit.
 
 The SDKs moved here from `ratel-ai/ratel` (the platform repo). ADR links below point at
 `ratel-ai/ratel`'s `docs/adr/`.

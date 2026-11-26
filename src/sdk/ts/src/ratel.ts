@@ -21,17 +21,17 @@ import {
   ToolCatalog,
   type TraceSinkConfig,
 } from "./catalog.js";
-import {
-  type RatelCloudConfig,
-  type RatelCloudRuntime,
-  setupRatelCloud,
-} from "./cloud/ratel-cloud.js";
 import { validateDefinitionOverlayResponse } from "./definition-overrides.js";
 import type { ExperimentalEmbeddingArtifact } from "./embedding-artifact.js";
 import { DefinitionOverlayError } from "./errors.js";
 import { FactCatalog } from "./fact-catalog.js";
 import type { GroundingResult, GroundingSnapshotItem, GroundOptions } from "./grounding.js";
 import { isPackageInstalled } from "./package-resolution.js";
+import {
+  type RatelPlatformConfig,
+  type RatelPlatformRuntime,
+  setupRatelPlatform,
+} from "./platform/ratel-platform.js";
 import {
   type ExperimentalDefinitionOverride,
   type ExperimentalDefinitionOverridesAttachment,
@@ -94,17 +94,17 @@ export interface RatelConfig {
   /** Public runtime-event stream identity and bounded delivery options (ADR-0020). */
   events?: RuntimeEventsOptions;
   /**
-   * Turn on Ratel Cloud: `true` reads `RATEL_API_KEY` (and `RATEL_BASE_URL`), an
+   * Turn on Ratel Platform: `true` reads `RATEL_API_KEY` (and `RATEL_BASE_URL`), an
    * object sets the key, the URL and each feature. Events and catalog snapshots
    * are on by default; definitions, the intent graph and the Tool Picker are off.
-   * Gives `r.cloud`. With no `cloud`, `ratel()` runs no Cloud code and sends no
+   * Gives `r.platform`. With no `platform`, `ratel()` runs no Platform code and sends no
    * request. Throws at construction when no API key is set.
    */
-  cloud?: true | RatelCloudConfig;
+  platform?: true | RatelPlatformConfig;
 }
 
-/** The type of `r.cloud`: the handle for a core made with `cloud`, `undefined` for one made without. */
-export type RatelCloudSlot = RatelCloudRuntime | undefined;
+/** The type of `r.platform`: the handle for a core made with `platform`, `undefined` for one made without. */
+export type RatelPlatformSlot = RatelPlatformRuntime | undefined;
 
 /**
  * A framework tool ingested into the catalog: what an adapter's
@@ -314,9 +314,13 @@ export interface AdaptedToolCollection<TTool> {
  * add their idioms via {@link RatelAdapter.extend}; universal capability lives
  * here.
  */
-export interface AdaptedBase<TTool, TMessage, TCloud extends RatelCloudSlot = RatelCloudSlot> {
-  /** The Cloud handle of the core ({@link Ratel.cloud}): the same object on every view. */
-  readonly cloud: TCloud;
+export interface AdaptedBase<
+  TTool,
+  TMessage,
+  TPlatform extends RatelPlatformSlot = RatelPlatformSlot,
+> {
+  /** The Platform handle of the core ({@link Ratel.platform}): the same object on every view. */
+  readonly platform: TPlatform;
   /** This view's handle over the shared catalog, in the framework's tool shape. */
   readonly tools: AdaptedToolCollection<TTool>;
   /** The shared skill catalog (skills are framework-neutral). */
@@ -385,9 +389,12 @@ export interface AdaptedBase<TTool, TMessage, TCloud extends RatelCloudSlot = Ra
  * the bare base type here (instead of collapsing the whole view to `never`,
  * which would surface as a cryptic error far from the broken adapter).
  */
-export type AdaptedRatel<A extends RatelAdapter, TCloud extends RatelCloudSlot = RatelCloudSlot> =
+export type AdaptedRatel<
+  A extends RatelAdapter,
+  TPlatform extends RatelPlatformSlot = RatelPlatformSlot,
+> =
   A extends RatelAdapter<infer TTool, infer TMessage, infer TExt>
-    ? AdaptedBase<TTool, TMessage, TCloud> & (TExt extends object ? TExt : unknown)
+    ? AdaptedBase<TTool, TMessage, TPlatform> & (TExt extends object ? TExt : unknown)
     : never;
 
 /**
@@ -397,12 +404,12 @@ export type AdaptedRatel<A extends RatelAdapter, TCloud extends RatelCloudSlot =
  * model {@link Ratel.modelTools}, rank with {@link Ratel.recall} —
  * and adaptable on top for a framework's native shapes.
  */
-export interface Ratel<TCloud extends RatelCloudSlot = RatelCloudSlot> {
+export interface Ratel<TPlatform extends RatelPlatformSlot = RatelPlatformSlot> {
   /**
-   * The Ratel Cloud handle when the core was made with `cloud`: the management
+   * The Ratel Platform handle when the core was made with `platform`: the management
    * clients, the Tool Picker and the delivery lifecycle. `undefined` otherwise.
    */
-  readonly cloud: TCloud;
+  readonly platform: TPlatform;
   /** Handle over the shared tool catalog (native shapes, guarded). */
   readonly tools: ToolCollection;
   /** The shared skill catalog — exposed raw (skills are framework-neutral and
@@ -485,7 +492,7 @@ export interface Ratel<TCloud extends RatelCloudSlot = RatelCloudSlot> {
   /** The id of the turn the caller is running inside, or `undefined`. */
   currentTurnId(): string | undefined;
   /** Adapt the core to a framework, inferring its tool/message types and helpers. */
-  adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A, TCloud>;
+  adaptTo<A extends RatelAdapter>(adapter: A): AdaptedRatel<A, TPlatform>;
 }
 
 // The capability-tool ids: an app tool may not shadow them (registration throws).
@@ -536,21 +543,22 @@ const KNOWN_FRAMEWORKS: readonly {
  * ```
  */
 export function ratel(
-  config: RatelConfig & { cloud: true | RatelCloudConfig },
-): Ratel<RatelCloudRuntime>;
-export function ratel(config?: RatelConfig & { cloud?: undefined }): Ratel<undefined>;
+  config: RatelConfig & { platform: true | RatelPlatformConfig },
+): Ratel<RatelPlatformRuntime>;
+export function ratel(config?: RatelConfig & { platform?: undefined }): Ratel<undefined>;
 export function ratel(config?: RatelConfig): Ratel;
 export function ratel(config: RatelConfig = {}): Ratel {
-  // The one Cloud wiring point: validated before the catalogs exist, because the
+  // The one Platform wiring point: validated before the catalogs exist, because the
   // Tool Picker replaces their ranking.
-  const cloudSetup = config.cloud === undefined ? undefined : setupRatelCloud(config.cloud, config);
-  const method = cloudSetup?.ranking?.method ?? config.method;
+  const platformSetup =
+    config.platform === undefined ? undefined : setupRatelPlatform(config.platform, config);
+  const method = platformSetup?.ranking?.method ?? config.method;
   const catalogMethod: SearchMethod = method ?? "bm25";
   const embeddingArtifact = config.experimentalEmbeddingArtifact;
   const ranking = {
     method,
     reranker: config.reranker,
-    retrieveFn: cloudSetup?.ranking?.retrieveFn ?? config.retrieveFn,
+    retrieveFn: platformSetup?.ranking?.retrieveFn ?? config.retrieveFn,
     rerankerFn: config.rerankerFn,
     rerankerDepth: config.rerankerDepth,
   };
@@ -683,10 +691,12 @@ export function ratel(config: RatelConfig = {}): Ratel {
     }
     return factsCatalog;
   };
-  const cloud = cloudSetup?.connect({ events, catalog: runtimeCatalog, tools: catalog });
-  // Only a core made with `cloud` has the key, so a core without it keeps its keys.
-  // An absent key reads as `undefined`, which is the type of `cloud` for that core.
-  const cloudSlot = (cloud === undefined ? {} : { cloud }) as { readonly cloud: RatelCloudSlot };
+  const platform = platformSetup?.connect({ events, catalog: runtimeCatalog, tools: catalog });
+  // Only a core made with `platform` has the key, so a core without it keeps its keys.
+  // An absent key reads as `undefined`, which is the type of `platform` for that core.
+  const platformSlot = (platform === undefined ? {} : { platform }) as {
+    readonly platform: RatelPlatformSlot;
+  };
   // Framework-shaped passthrough values stay in their originating views, but
   // their ids must participate in the core-wide adapted-path first-wins guard.
   const claimedAdaptedToolIds = new Set<string>();
@@ -839,7 +849,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
     };
 
     const baseWithoutFacts: Omit<AdaptedBase<unknown, unknown>, "facts"> = {
-      ...cloudSlot,
+      ...platformSlot,
       tools: adaptedTools,
       skills,
       events,
@@ -879,7 +889,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
   }
 
   return withLazyFacts(facts, {
-    ...cloudSlot,
+    ...platformSlot,
     tools,
     skills,
     events,

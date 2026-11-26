@@ -1,10 +1,11 @@
 /**
- * `@ratel-ai/cloud-sdk` is deprecated. Import `@ratel-ai/sdk/cloud` instead.
+ * `@ratel-ai/cloud-sdk` is deprecated. Import `@ratel-ai/sdk/platform` instead.
  *
- * This entry point re-exports the names it exported before the Cloud code moved into
- * `@ratel-ai/sdk`. It holds no Cloud logic.
+ * This entry point re-exports the names it exported before the platform code moved into
+ * `@ratel-ai/sdk`. Each old Cloud name is an alias of its new Platform name. It holds
+ * no logic.
  *
- * @deprecated Import `@ratel-ai/sdk/cloud`.
+ * @deprecated Import `@ratel-ai/sdk/platform`.
  */
 
 export {
@@ -14,12 +15,6 @@ export {
   type CatalogResponse,
   type CatalogResponseV2,
   type CatalogV2,
-  CloudSdkError,
-  type CloudSdkErrorCode,
-  type CloudSdkLogEvent,
-  type CloudSdkOptions,
-  type CloudSkill,
-  type CloudSuggestion,
   type ConversationMessage,
   canonicalSet,
   canonicalSetV2,
@@ -48,8 +43,14 @@ export {
   type MessageRole,
   type NewSkillInput,
   type NewSkillPatch,
+  type PlatformClientOptions as CloudSdkOptions,
+  PlatformError as CloudSdkError,
+  type PlatformErrorCode as CloudSdkErrorCode,
+  type PlatformLogEvent as CloudSdkLogEvent,
+  type PlatformSkill as CloudSkill,
+  type PlatformSuggestion as CloudSuggestion,
   type QueryIntent,
-  RatelCloudSdk,
+  RatelPlatformClient as RatelCloudSdk,
   type RetrievabilityPreview,
   type RetrievabilityPreviewHit,
   RuntimeCatalogClient,
@@ -84,4 +85,4 @@ export {
   type WaitForJobOptions,
   type WireSkill,
   type WireSkillV2,
-} from "@ratel-ai/sdk/cloud";
+} from "@ratel-ai/sdk/platform";

@@ -199,7 +199,7 @@ export interface S3IntentGraphStorageOptions {
    * virtual-hosted-style. Defaults to `true` whenever `endpoint` is set —
    * what MinIO and most self-hosted S3-compatible services require. Pass
    * `false` for a custom endpoint that supports virtual-hosted style (e.g.
-   * Cloudflare R2). No effect without `endpoint` — AWS S3 always uses
+   * R2). No effect without `endpoint` — AWS S3 always uses
    * virtual-hosted style.
    */
   readonly forcePathStyle?: boolean;

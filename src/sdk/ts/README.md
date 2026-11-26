@@ -1,6 +1,6 @@
 <div align="center">
   <h1>@ratel-ai/sdk</h1>
-  <p>Context engineering for TypeScript and Node.js agents.</p>
+  <p>The Ratel Platform SDK for TypeScript and Node.js agents: context engineering at runtime, plus sync and self-improvement through the platform.</p>
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
@@ -26,7 +26,7 @@ Every tool, skill, and fact accepts an optional experimental `experimentalSearch
 Registration always owns the complete local definition and can publish it through experimental
 `ratel.catalog.definition` telemetry. An external source can override only the retrieval
 description, and only when the runtime explicitly opts in at attach time. The seam is a plain
-injected source — any implementation of `ExperimentalDefinitionOverlaySource` works; `@ratel-ai/sdk/cloud` is
+injected source — any implementation of `ExperimentalDefinitionOverlaySource` works; `@ratel-ai/sdk/platform` is
 the first one, supplying an authenticated network client:
 
 ```ts
@@ -214,7 +214,7 @@ argument as the turn id, so a framework adapter passes one per model turn.
 
 It scopes, it does not attribute: within a turn, an invoke is paired with the search that actually
 returned that capability, so several searches before any invoke each keep their own evidence
-(ADR-0014), whether the graph is learned in-process or by Ratel Cloud replaying your runtime
+(ADR-0014), whether the graph is learned in-process or by Ratel Platform replaying your runtime
 events. What the id buys is separation — two conversations sharing one catalog must not pair
 each other's searches and invokes. Omit it and every caller shares a single scope, which is fine
 for one conversation at a time and wrong for concurrent ones.
@@ -615,16 +615,22 @@ Both lists matter: with `spanProcessors` alone, `NodeSDK` builds the logger prov
 
 Message and tool content is off by default; opt in with the `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` env var or `setContentCapture()` (see the [telemetry guide](https://docs.ratel.sh/docs/telemetry) for the capture modes and their privacy implications). Experimental catalog-definition export additionally requires `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true`. Changed definitions then emit one `ratel.catalog.definition` EventRecord per registry-local content hash. The `ratel.*` constants themselves live in [`@ratel-ai/telemetry`](../../telemetry/ts/README.md); this package re-exports only the content-capture gate.
 
-## Ratel Cloud
+## Ratel Platform
 
-One option turns on Ratel Cloud for a runtime: `ratel({ cloud })`. With `RATEL_API_KEY` set,
-`cloud: true` is enough. The runtime then publishes its runtime events and its catalog
-snapshots, and `r.cloud` reaches the Cloud API with the same key:
+`@ratel-ai/sdk` is the SDK of the Ratel Platform. It manages the context of an agent at runtime,
+in process. It also connects the agent to the platform: the platform receives the runtime events
+and the catalog snapshots, syncs the definitions and the intent graph back, and drafts
+improvements for review. The platform is `https://app.ratel.sh` by default, or your own
+self-hosted platform (see [Self-hosted platform](#self-hosted-platform)).
+
+One option turns on the Ratel Platform for a runtime: `ratel({ platform })`. With `RATEL_API_KEY` set,
+`platform: true` is enough. The runtime then publishes its runtime events and its catalog
+snapshots, and `r.platform` reaches the Platform API with the same key:
 
 ```ts
 import { ratel } from "@ratel-ai/sdk";
 
-const r = ratel({ cloud: true }); // reads RATEL_API_KEY (and RATEL_BASE_URL)
+const r = ratel({ platform: true }); // reads RATEL_API_KEY (and RATEL_BASE_URL)
 
 await r.tools.register(deployTool, rollbackTool);
 await r.turn(async () => {
@@ -632,111 +638,128 @@ await r.turn(async () => {
   if (best) await r.tools.invoke(best.toolId, { service: "billing" });
 });
 
-// The Cloud API, from the same object and the same key.
-const { skills } = await r.cloud.skills.list();
+// The Platform API, from the same object and the same key.
+const { skills } = await r.platform.skills.list();
 
-await r.cloud.flush(); // deliver what is queued (also called by close())
-console.log(r.cloud.status()); // delivery health of events and snapshots
-await r.cloud.close(); // at shutdown
+await r.platform.flush(); // deliver what is queued (also called by close())
+console.log(r.platform.status()); // delivery health of events and snapshots
+await r.platform.close(); // at shutdown
 ```
 
-Without `cloud`, `ratel()` runs no Cloud code and sends no request, and `r.cloud` is `undefined`.
-With `cloud` and no API key, `ratel()` throws a `CloudSdkError` (code `config`) that names
-`RATEL_API_KEY`. Delivery is fail-open: a Cloud failure never fails a search or an invoke. A
-runnable version is [`examples/cloud/src/quickstart.ts`](../../../examples/cloud/src/quickstart.ts).
+Without `platform`, `ratel()` runs no Platform code and sends no request, and `r.platform` is `undefined`.
+With `platform` and no API key, `ratel()` throws a `PlatformError` (code `config`) that names
+`RATEL_API_KEY`. Delivery is fail-open: a Platform failure never fails a search or an invoke. A
+runnable version is [`examples/platform/src/quickstart.ts`](../../../examples/platform/src/quickstart.ts).
 
 Pass an object to set the key and the URL in code, or to turn on more features:
 
 ```ts
 const r = ratel({
-  cloud: {
+  platform: {
     apiKey: "rtl_…",
-    baseUrl: "https://cloud.ratel.sh/api/v1",
+    baseUrl: "https://app.ratel.sh/api/v1",
     events: { warnOnFailure: false }, // on by default; false turns it off
-    definitions: true, // Cloud owns the Retrieval descriptions
+    definitions: true, // Platform owns the Retrieval descriptions
     intentGraph: true, // sync the intent graph and rank with it
-    toolPicker: "precise", // rank tools with the Cloud Tool Picker (method: "custom")
+    toolPicker: "precise", // rank tools with the Platform Tool Picker (method: "custom")
   },
 });
-await r.cloud.ready(); // the first definitions pull and intent graph load ended
+await r.platform.ready(); // the first definitions pull and intent graph load ended
 ```
 
-`r.cloud` has `skills`, `suggestions`, `intents`, `jobs` and `runtimeCatalog` (the management
+`r.platform` has `skills`, `suggestions`, `intents`, `jobs` and `runtimeCatalog` (the management
 clients), `toolPicker`, and the lifecycle methods `status()`, `verify()`, `ready()`, `flush()`,
 `close()` and `refreshDefinitions()`. Every adapted view has the same handle:
-`r.adaptTo(adapter).cloud === r.cloud`. Do not set `method` or `retrieveFn` with `toolPicker`:
+`r.adaptTo(adapter).platform === r.platform`. Do not set `method` or `retrieveFn` with `toolPicker`:
 `ratel()` throws.
 
-### Cloud settings
+### Platform settings
 
-Each Cloud feature resolves its key and URL in one place (`resolveCloudConfig` of
-`@ratel-ai/sdk/cloud`): the option, then the env variable, then the default.
+Each Platform feature resolves its key and URL in one place (`resolvePlatformConfig` of
+`@ratel-ai/sdk/platform`): the option, then the env variable, then the default.
 
 | Option | Env variable | Default |
 | --- | --- | --- |
-| `cloud.apiKey` | `RATEL_API_KEY` | none: required |
-| `cloud.baseUrl` | `RATEL_BASE_URL` | `https://cloud.ratel.sh/api/v1` |
-| `cloud.events` | `RATEL_CLOUD_EVENTS=off` turns runtime events off | on |
-| `cloud.definitions` | — | off |
-| `cloud.intentGraph` | `RATEL_CLOUD_INTENT_GRAPH=off` turns it off | off |
-| `cloud.toolPicker` | — | off (`true` means `"precise"`) |
-| `cloud.sourceId` | — | the runtime's event source id |
-| `cloud.timeoutMs` | — | the default of each feature (30 s for most requests) |
+| `platform.apiKey` | `RATEL_API_KEY` | none: required |
+| `platform.baseUrl` | `RATEL_BASE_URL` | `https://app.ratel.sh/api/v1` |
+| `platform.events` | `RATEL_PLATFORM_EVENTS=off` turns runtime events off (deprecated: `RATEL_CLOUD_EVENTS`) | on |
+| `platform.definitions` | — | off |
+| `platform.intentGraph` | `RATEL_PLATFORM_INTENT_GRAPH=off` turns it off (deprecated: `RATEL_CLOUD_INTENT_GRAPH`) | off |
+| `platform.toolPicker` | — | off (`true` means `"precise"`) |
+| `platform.sourceId` | — | the runtime's event source id |
+| `platform.timeoutMs` | — | the default of each feature (30 s for most requests) |
 | `endpoint` of `RatelSpanProcessor` | `RATEL_OTLP_ENDPOINT` | `${baseUrl}/traces` |
 | `endpoint` of `RatelLogRecordProcessor` | `RATEL_OTLP_LOGS_ENDPOINT` | `${baseUrl}/logs` |
 
 The Python SDK has two OTLP differences. With a custom traces URL and no logs setting, Python sends
 logs to the `/v1/logs` sibling of that URL, but TypeScript sends them to `${baseUrl}/logs`. With no
 API key, no base URL and no endpoint, Python raises `ValueError`, but TypeScript uses
-`https://cloud.ratel.sh/api/v1`.
+`https://app.ratel.sh/api/v1`.
+
+The SDK still reads the deprecated `RATEL_CLOUD_EVENTS` and `RATEL_CLOUD_INTENT_GRAPH` when the
+`RATEL_PLATFORM_*` name is not set. When both are set, the `RATEL_PLATFORM_*` name wins.
+
+### Self-hosted platform
+
+To use a self-hosted Ratel Platform, set its API root, including the `/api/v1` prefix, in one
+place: the `RATEL_BASE_URL` env variable or `platform.baseUrl`. Each platform request and both
+OTLP defaults (`${baseUrl}/traces` and `${baseUrl}/logs`) then go to that platform:
+
+```sh
+RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://ratel.example.internal/api/v1 node agent.js
+```
+
+```ts
+const r = ratel({ platform: { baseUrl: "https://ratel.example.internal/api/v1" } });
+```
 
 ### Advanced: the separate functions
 
-`ratel({ cloud })` wires the functions below. Use them directly to wire one feature yourself,
-or for a runtime that `ratel()` does not create. They read the same settings. The Cloud client
+`ratel({ platform })` wires the functions below. Use them directly to wire one feature yourself,
+or for a runtime that `ratel()` does not create. They read the same settings. The Platform client
 is behind three subpaths. None of them loads the native addon:
 
 | Import | What it holds |
 | --- | --- |
-| `@ratel-ai/sdk/cloud` | `RatelCloudSdk` (catalog writes, intent analysis, suggestion review over the v1 HTTP API), plus runtime attachment (`attach`, `attachIntentGraphSync`, `ratelCloud`) and `resolveCloudConfig` |
-| `@ratel-ai/sdk/otel` | The Ratel Cloud OpenTelemetry destination (`RatelSpanProcessor`, `RatelLogRecordProcessor`) |
-| `@ratel-ai/sdk/cloud/testing` | `MockCloud`, an in-process fake of the Cloud API |
+| `@ratel-ai/sdk/platform` | `RatelPlatformClient` (catalog writes, intent analysis, suggestion review over the v1 HTTP API), plus runtime attachment (`attach`, `attachIntentGraphSync`, `ratelPlatform`) and `resolvePlatformConfig` |
+| `@ratel-ai/sdk/otel` | The Ratel Platform OpenTelemetry destination (`RatelSpanProcessor`, `RatelLogRecordProcessor`) |
+| `@ratel-ai/sdk/platform/testing` | `MockPlatform`, an in-process fake of the Platform API |
 
 The OpenTelemetry exporter packages that `@ratel-ai/sdk/otel` uses are optional peers: install
 them only when you use it. `@ratel-ai/cloud-sdk` is a deprecated shim that re-exports these
 subpaths under its old entry points. Runnable examples are in
-[`examples/cloud/`](../../../examples/cloud/README.md).
+[`examples/platform/`](../../../examples/platform/README.md).
 
-Management & supervised self-improvement client for [Ratel Cloud](https://cloud.ratel.sh): manage a project's
-**cloud skills catalog**, run **intent analysis** on conversations, and review the resulting
+Management & supervised self-improvement client for [Ratel Platform](https://app.ratel.sh): manage a project's
+**platform skills catalog**, run **intent analysis** on conversations, and review the resulting
 **skill suggestions** — over the v1 HTTP API, authenticated by a project API key.
 
 ### Management client quickstart
 
 ```ts
-import { RatelCloudSdk, type SuggestJobResult } from "@ratel-ai/sdk/cloud";
+import { RatelPlatformClient, type SuggestJobResult } from "@ratel-ai/sdk/platform";
 
-const cloud = new RatelCloudSdk(); // reads RATEL_API_KEY and RATEL_BASE_URL
+const platform = new RatelPlatformClient(); // reads RATEL_API_KEY and RATEL_BASE_URL
 
 // — Catalog management —
-const skill = await cloud.skills.create({
+const skill = await platform.skills.create({
   name: "deploy-checklist",
   description: "How to deploy safely.",
   searchableDescription: "release production rollback canary", // optional Retrieval description
   body: "# Deploy\n…",
 });
-await cloud.skills.publish(skill.id, { expectedVersion: skill.version });
+await platform.skills.publish(skill.id, { expectedVersion: skill.version });
 
 // — Supervised self-improvement (async: analyze → suggest → poll → review) —
-const run = await cloud.intents.analyze({
+const run = await platform.intents.analyze({
   messages: [{ role: "user", content: "how do I rotate the database credentials?" }],
   endUserId: "user-123",
 });
 for (const intent of run.intents.filter((i) => !i.covered)) {
-  const { jobId } = await cloud.intents.suggest(intent.id); // draft a skill (async)
-  const job = await cloud.jobs.waitFor<SuggestJobResult>(jobId); // poll until it's done
+  const { jobId } = await platform.intents.suggest(intent.id); // draft a skill (async)
+  const job = await platform.jobs.waitFor<SuggestJobResult>(jobId); // poll until it's done
   if (job.result?.suggestionId) {
-    await cloud.suggestions.approve(job.result.suggestionId); // lands as a draft skill
+    await platform.suggestions.approve(job.result.suggestionId); // lands as a draft skill
   }
 }
 ```
@@ -744,9 +767,9 @@ for (const intent of run.intents.filter((i) => !i.covered)) {
 ### Client setup
 
 ```ts
-const cloud = new RatelCloudSdk({
+const platform = new RatelPlatformClient({
   apiKey: "rtl_…",                              // default RATEL_API_KEY — sent as `Authorization: Bearer`
-  baseUrl: "https://cloud.ratel.sh/api/v1",     // default RATEL_BASE_URL, then this; include /api/v1
+  baseUrl: "https://app.ratel.sh/api/v1",     // default RATEL_BASE_URL, then this; include /api/v1
   timeoutMs: 30_000,                            // default per-request timeout
   fetch: customFetch,                           // injectable (testing, proxies, instrumentation)
   debug: true,                                  // log each request + response to the console
@@ -760,34 +783,34 @@ Set `RATEL_API_KEY`, then attach once after creating the Ratel runtime:
 
 ```ts
 import { ratel } from "@ratel-ai/sdk";
-import * as ratelCloud from "@ratel-ai/sdk/cloud";
+import * as ratelPlatform from "@ratel-ai/sdk/platform";
 
 const runtime = ratel();
-const cloudRuntime = ratelCloud.attach(runtime, { useCloudDefinitions: true });
+const platformRuntime = ratelPlatform.attach(runtime, { usePlatformDefinitions: true });
 ```
 
-`useCloudDefinitions: true` is the one-line adoption path for Cloud-owned Retrieval descriptions.
+`usePlatformDefinitions: true` is the one-line adoption path for Platform-owned Retrieval descriptions.
 It pulls the complete runtime-catalog overlay during attach and applies it to live tools, skills,
 and facts through the core SDK. Definition events emitted after adoption carry
-`ratel.catalog.use_definition_overrides=true`, so Cloud can distinguish an in-sync runtime from one
+`ratel.catalog.use_definition_overrides=true`, so Platform can distinguish an in-sync runtime from one
 that remains locally owned. Omit the flag (or set it to false) to keep local
 `experimentalSearchableDescription` values authoritative and make no overlay request.
 
-Cloud definitions require `@ratel-ai/sdk` >= 0.12.0, which the declared peer range
+Platform definitions require `@ratel-ai/sdk` >= 0.12.0, which the declared peer range
 (>= 0.13.0-rc.11) already guarantees. Against an older SDK outside that range, using this flag
 warns once and keeps local Retrieval descriptions active.
 
 The initial pull is fail-open and runs in the background because `attach()` remains synchronous.
 `flush()` and `close()` await it. For later pulls, call
-`cloudRuntime.refreshCloudDefinitions()`; it sends the last strong ETag, treats a `304` as a no-op,
+`platformRuntime.refreshPlatformDefinitions()`; it sends the last strong ETag, treats a `304` as a no-op,
 and applies a changed complete overlay:
 
 ```ts
-await cloudRuntime.refreshCloudDefinitions();
+await platformRuntime.refreshPlatformDefinitions();
 ```
 
 Failures warn once per continuous failure period. An initial-pull failure leaves local Retrieval
-descriptions active; a later refresh failure retains the last successfully applied Cloud
+descriptions active; a later refresh failure retains the last successfully applied Platform
 descriptions.
 
 `attach()` subscribes to search, invocation, registration, experiment, and turn facts. Only the
@@ -802,7 +825,7 @@ events, `attach()` warns once and returns a no-op handle.
 
 #### Mark each request
 
-Wrap each user request in `runtime.turn(...)` so Cloud sees it as one run: every search and tool
+Wrap each user request in `runtime.turn(...)` so Platform sees it as one run: every search and tool
 call inside carries the same `turn_id`, even when many users hit the same process at once.
 
 ```ts
@@ -829,7 +852,7 @@ stable deployment identity (it is trimmed and truncated to 512 characters once, 
 lanes share the normalized value):
 
 ```ts
-const cloudRuntime = ratelCloud.attach(runtime, { sourceId: "checkout-worker" });
+const platformRuntime = ratelPlatform.attach(runtime, { sourceId: "checkout-worker" });
 ```
 
 Transient catalog failures remain queued and retry with an exponential backoff that keeps growing
@@ -838,7 +861,7 @@ durable snapshots reconcile every five minutes. Deterministic payload rejects (H
 are surfaced once through `onRejected` and dropped instead of retrying. Tune the windows with
 `snapshotDebounceMs` and `snapshotReconcileIntervalMs`.
 
-Set `RATEL_CLOUD_EVENTS=off` before calling `attach()` to disable event delivery. Catalog snapshots
+Set `RATEL_PLATFORM_EVENTS=off` before calling `attach()` to disable event delivery. Catalog snapshots
 remain enabled; the events publisher reads this kill switch once when the attachment is created.
 
 Delivery is fail-open and in memory. On long-running processes, call `close()` during final
@@ -853,26 +876,26 @@ export async function handler(request: Request) {
   try {
     return await handleRequest(request, runtime);
   } finally {
-    await cloudRuntime.flush();
+    await platformRuntime.flush();
   }
 }
 
-process.once("SIGTERM", () => void cloudRuntime.close());
+process.once("SIGTERM", () => void platformRuntime.close());
 ```
 
-Pass `onRejected` to observe terminal event delivery failures, Cloud event rejects, and catalog
-tools omitted by client-side snapshot limits. Snapshot publication matches Cloud's limits: 5,000
+Pass `onRejected` to observe terminal event delivery failures, Platform event rejects, and catalog
+tools omitted by client-side snapshot limits. Snapshot publication matches Platform's limits: 5,000
 tools and a 4,000,000-byte body; IDs/names are trimmed to 512 characters and descriptions to
 16,384 characters. A degraded `202 { synced: false }` remains pending and retries on a slow
-cadence (30 seconds — Cloud caches its ingest decision) until Cloud confirms a durable sync.
+cadence (30 seconds — Platform caches its ingest decision) until Platform confirms a durable sync.
 
-Events survive the same rollout window. While Cloud's ingest flag is off, an accepted `/events`
+Events survive the same rollout window. While Platform's ingest flag is off, an accepted `/events`
 response carrying `deferred: true` requeues the batch into the bounded in-memory queue and retries
 it on a slow cadence of its own — a 30-second floor, doubling across consecutive deferrals, capped
 at five minutes — instead of the normal flush interval. Loss stays bounded by `queueCapacity`:
 overflow keeps dropping the oldest events with the standard `events_dropped` accounting, so a
 rollout no longer silently discards everything emitted while the flag is off. An accepted delivery
-resets the cadence. A response without the field (an older Cloud) stays terminal fire-and-forget,
+resets the cadence. A response without the field (an older Platform) stays terminal fire-and-forget,
 and a batch deferred while `close()` drains is dropped and counted rather than retried past
 shutdown.
 
@@ -881,9 +904,9 @@ shutdown.
 The attachment exposes synchronous, JSON-serializable delivery health and an explicit preflight:
 
 ```ts
-const result = await cloudRuntime.verify(); // POSTs { events: [] }; queues are untouched
+const result = await platformRuntime.verify(); // POSTs { events: [] }; queues are untouched
 console.log(result);                        // { kind, status, message }
-console.log(cloudRuntime.status());         // { overall, events, snapshots }
+console.log(platformRuntime.status());         // { overall, events, snapshots }
 ```
 
 `result.kind` and each last outcome are `ok`, `auth` (401), `gated` (3xx), `not_deployed`
@@ -892,7 +915,7 @@ requests never follow redirects, so a fronting auth gate remains visible as `gat
 
 `status().overall` is `pending` before confirmation, `blocked` for authentication, auth-gate, or
 missing-endpoint failures, `degraded` for rate limits, payload rejects, or network failures, and
-`ok` after current work is durable. It is `disabled` when `RATEL_CLOUD_EVENTS=off`. Event status
+`ok` after current work is durable. It is `disabled` when `RATEL_PLATFORM_EVENTS=off`. Event status
 includes Unix-millisecond attempt/accept timestamps, the last error, and cumulative accepted,
 rejected, and queue-dropped counters. Snapshot status is keyed by source id and includes
 `lastDurableAt`, `pendingSince`, and `lastOutcome`.
@@ -902,7 +925,7 @@ that kind recovers. Use `warnOnFailure: false` to disable these warnings, or obs
 without polling:
 
 ```ts
-ratelCloud.attach(runtime, {
+ratelPlatform.attach(runtime, {
   onStatusChange: (status) => healthGauge.set(status.overall),
 });
 ```
@@ -910,11 +933,11 @@ ratelCloud.attach(runtime, {
 Status callbacks and diagnostics are fail-open: exceptions never escape into the agent.
 
 The cross-repository live acceptance test is opt-in with `RATEL_E2E=1`; see the
-[runtime attach E2E example](../../../examples/cloud/README.md#runtime-attach-e2emjs--live-runtime-attach-acceptance).
+[runtime attach E2E example](../../../examples/platform/README.md#runtime-attach-e2emjs--live-runtime-attach-acceptance).
 
 Set `debug: true` to log every call — `→ GET /skills?status=published` on the way out, `← 200 …`
 with the parsed response body on the way back (the auth header is never logged). For structured
-logging, pass a `logger: (event: CloudSdkLogEvent) => void` sink instead (it takes precedence over
+logging, pass a `logger: (event: PlatformLogEvent) => void` sink instead (it takes precedence over
 `debug`); each event is a `request`, `response` (with `status`, `durationMs`, `body`), or `error`.
 
 Some calls override `timeoutMs` with a budget of their own — `suggestions.generate` (5 min) and
@@ -923,15 +946,15 @@ Some calls override `timeoutMs` with a budget of their own — `suggestions.gene
 
 The transport does **no retries**: mutations are not idempotent, and reads are cheap to re-issue
 at your discretion. A request that never gets a response (DNS failure, abort, timeout) throws a
-`CloudSdkError` with `code: "network_error"` and `status: null` — see [Errors](#errors).
+`PlatformError` with `code: "network_error"` and `status: null` — see [Errors](#errors).
 
 #### Intent graph sync (adaptive usage ranking)
 
 `attachIntentGraphSync` is the courier between an app's in-memory `IntentGraph` (ADR-0014,
-adaptive usage ranking, from `@ratel-ai/sdk` >=0.12.0) and Ratel Cloud's per-project,
+adaptive usage ranking, from `@ratel-ai/sdk` >=0.12.0) and Ratel Platform's per-project,
 per-source-id graph storage. The SDK owns no storage itself: on attach it loads the graph for
-`sourceId` from Cloud (or starts empty if none exists yet), watches the runtime's own event
-stream for usage that moves `graph.rev`, and debounce-saves changes back to Cloud. Ranking
+`sourceId` from Platform (or starts empty if none exists yet), watches the runtime's own event
+stream for usage that moves `graph.rev`, and debounce-saves changes back to Platform. Ranking
 itself is never enabled or disabled by this function — call the catalog's own
 `experimentalEnableAdaptiveRanking`/`experimentalDisableAdaptiveRanking` yourself:
 
@@ -949,14 +972,14 @@ catalog.experimentalEnableAdaptiveRanking(sync.graph);
 Saves are deliberately coarse: a trailing debounce of `debounceMs` (default 15 seconds) after
 the last qualifying invoke, capped by `maxWaitMs` (default 60 seconds) so a save happens at
 least that often even under continuous activity that would otherwise keep resetting the
-debounce forever. Cloud rate-limits this route per project API key, and every PUT makes it
+debounce forever. Platform rate-limits this route per project API key, and every PUT makes it
 rebuild the graph's cluster/edge projection server-side, so saving on every invoke would both
 throttle quickly and waste that work; the graph is learning state, not a transaction log, so
 a minute of persistence latency is an acceptable tradeoff against a crash losing everything
 learned since the last save. `maxWaitMs: 0` saves on the next tick instead of waiting for the
 debounce — it does not disable the cap.
 
-`onReplaced` fires when Cloud rejects a save because another process wrote a newer graph first
+`onReplaced` fires when Platform rejects a save because another process wrote a newer graph first
 (HTTP 409): the SDK re-fetches the newer graph, replaces its own in-memory reference, and hands
 it to you so ranking can be re-armed against current data — the rejected write is never retried.
 Graph JSON is treated as opaque: this package never inspects, filters, or logs its contents
@@ -967,21 +990,21 @@ Sync is fail-open like the rest of this package — network failures and 5xx res
 forever with exponential backoff (capped at 30 seconds) and never throw into the caller or block
 ranking; a 429 honors `Retry-After`. Unlike `attach()`, calling `attachIntentGraphSync` a second
 time for the same `catalog` throws — each catalog gets exactly one sync. Set
-`RATEL_CLOUD_INTENT_GRAPH=off` to disable it entirely (no network activity, an empty in-memory
-graph), matching `RATEL_CLOUD_EVENTS=off` for events. Call `sync.close()` during shutdown to
+`RATEL_PLATFORM_INTENT_GRAPH=off` to disable it entirely (no network activity, an empty in-memory
+graph), matching `RATEL_PLATFORM_EVENTS=off` for events. Call `sync.close()` during shutdown to
 flush a pending save and unsubscribe; there is no global registration to clean up on its behalf.
 
-##### Consuming a Cloud graph
+##### Consuming a Platform graph
 
-Pass `mode: "consume"` to read a graph Ratel Cloud owns instead of syncing the runtime's own —
-the intended shape once Cloud replays every runtime's usage events server-side and builds one
+Pass `mode: "consume"` to read a graph Ratel Platform owns instead of syncing the runtime's own —
+the intended shape once Platform replays every runtime's usage events server-side and builds one
 graph per project. This mode never writes: it never subscribes to the event stream and never
 PUTs, so `graph.rev` moving locally is nobody's business but the app's own.
 
 ```ts
 const sync = await attachIntentGraphSync(catalog, {
   mode: "consume",
-  graphKey: "cloud",          // the key Ratel Cloud serves the project graph under
+  graphKey: "platform",          // the key Ratel Platform serves the project graph under
   pollIntervalMs: 300_000,
   onReplaced: (graph) => {
     catalog.experimentalDisableAdaptiveRanking();
@@ -992,7 +1015,7 @@ catalog.experimentalEnableAdaptiveRanking(sync.graph, { learn: false });
 ```
 
 `graphKey` selects which stored graph to fetch and defaults to `sourceId`; it is the runtime's
-own key until Ratel Cloud serves project-level graphs, and until then the route answers
+own key until Ratel Platform serves project-level graphs, and until then the route answers
 `not_found` for any other key, which this mode treats as "not built yet" rather than an error.
 `pollIntervalMs` sets how often a conditional GET checks for a newer revision — default 300000ms
 (5 minutes), clamped to a 15000ms floor. `onReplaced` fires on every adopted poll after the
@@ -1004,29 +1027,29 @@ with the default push mode throws at attach.
 
 #### Tool Picker ranking (`retrieveFn`)
 
-`ratelCloud()` ranks a Ratel runtime's tools with the Ratel Cloud Tool Picker. `rc.toolPicker`
+`ratelPlatform()` ranks a Ratel runtime's tools with the Ratel Platform Tool Picker. `rc.toolPicker`
 is a plain `RankFn`, so it plugs into the generic ranking hooks of `@ratel-ai/sdk`; the SDK
-itself knows nothing about Cloud:
+itself knows nothing about Platform:
 
 ```ts
 import { ratel } from "@ratel-ai/sdk";
-import { attach, ratelCloud } from "@ratel-ai/sdk/cloud";
+import { attach, ratelPlatform } from "@ratel-ai/sdk/platform";
 
-const rc = ratelCloud({ apiKey: process.env.RATEL_API_KEY }); // apiKey defaults to RATEL_API_KEY
+const rc = ratelPlatform({ apiKey: process.env.RATEL_API_KEY }); // apiKey defaults to RATEL_API_KEY
 const runtime = ratel({ method: "custom", retrieveFn: rc.toolPicker });
-const cloudRuntime = attach(runtime);
+const platformRuntime = attach(runtime);
 
 await runtime.tools.register(/* … */);
-await cloudRuntime.flush(); // publish the catalog snapshot before the first search
+await platformRuntime.flush(); // publish the catalog snapshot before the first search
 
 const hits = await runtime.tools.searchAsync("roll back the last deploy", 5);
 ```
 
 `retrieveFn`, `rerankerFn` and `RetrieverError` first ship in `@ratel-ai/sdk` 0.13.0-rc.11
 (ADR-0027), and a
-`"custom"` catalog searches through `searchAsync` only. `ratelCloud` is a named export because the
-snippets above import the subpath as a namespace called `ratelCloud`. With the namespace import,
-write `ratelCloud.ratelCloud(...)`.
+`"custom"` catalog searches through `searchAsync` only. `ratelPlatform` is a named export because the
+snippets above import the subpath as a namespace called `ratelPlatform`. With the namespace import,
+write `ratelPlatform.ratelPlatform(...)`.
 
 **Modes.** `rc.toolPicker` asks in `precise` mode. `withMode` returns a picker for another mode
 and leaves the original as it was:
@@ -1035,38 +1058,38 @@ and leaves the original as it was:
 |---|---|---|
 | `instant` | BM25 only, no credits | 15 s |
 | `precise` (default) | BM25 shortlist, then Jev | 15 s |
-| `exhaustive` | Jev over the whole catalog. Can take seconds, and Cloud stops at 45 s | 60 s |
+| `exhaustive` | Jev over the whole catalog. Can take seconds, and Platform stops at 45 s | 60 s |
 
 ```ts
 ratel({ method: "custom", retrieveFn: rc.toolPicker.withMode("exhaustive") });
 ratel({ method: "bm25", rerankerFn: rc.toolPicker.withMode("instant") }); // rerank BM25's top 50
 ```
 
-Pass `timeoutMs` to `ratelCloud()` to override both budgets. `baseUrl` takes the same
+Pass `timeoutMs` to `ratelPlatform()` to override both budgets. `baseUrl` takes the same
 `/api/v1`-prefixed value as `attach()`, and the picker calls `POST {baseUrl}/tools/pick`.
 
-**The catalog comes from Cloud, not the candidates.** The Tool Picker ranks the project's
-runtime catalog in Cloud: every tool any source id has synced to the project, one entry per tool
-id. `attach()` fills it through `PUT /catalog/snapshot`, but Cloud also updates entries from the
-definition events runtimes report, and for each tool the most recent write wins. So the text Cloud
+**The catalog comes from Platform, not the candidates.** The Tool Picker ranks the project's
+runtime catalog in Platform: every tool any source id has synced to the project, one entry per tool
+id. `attach()` fills it through `PUT /catalog/snapshot`, but Platform also updates entries from the
+definition events runtimes report, and for each tool the most recent write wins. So the text Platform
 ranks can differ from what this runtime registered when another runtime reports the same tool id
 with different text. `rc.toolPicker` sends only `{ query, mode, top_k }`, with `top_k` capped at
-Cloud's maximum of 20 and the query cut to Cloud's 2000-character limit. It does not send the
+Platform's maximum of 20 and the query cut to Platform's 2000-character limit. It does not send the
 candidate texts. Before the first search, call `attach()`, register your tools, and
-`await cloudRuntime.flush()`. Snapshots are otherwise debounced (~500 ms), so a search
-straight after `register` can reach Cloud before the catalog does.
+`await platformRuntime.flush()`. Snapshots are otherwise debounced (~500 ms), so a search
+straight after `register` can reach Platform before the catalog does.
 
 `flush()` resolves even when the PUT failed. To confirm the snapshot landed, check that
-`cloudRuntime.status().snapshots[sourceId].lastDurableAt` is set. If the project has no synced
+`platformRuntime.status().snapshots[sourceId].lastDurableAt` is set. If the project has no synced
 tools, the pick fails with `NoSyncedTools`. Ids the picker returns that this runtime has not
 registered (for example, tools another source id synced) are dropped by the SDK.
 
 **Skills.** The picker knows only tools. `ratel({ retrieveFn })` also ranks the skill catalog
-with the same function. In that case `rc.toolPicker` returns `[]` without calling Cloud, so a
+with the same function. In that case `rc.toolPicker` returns `[]` without calling Platform, so a
 skill search finds nothing.
 
 **Errors.** Every failure is a `RetrieverError` from `@ratel-ai/sdk`, carrying `code`, `status`
-(when Cloud answered) and `transient`. A `retrieveFn` search fails on any error. A `rerankerFn`
+(when Platform answered) and `transient`. A `retrieveFn` search fails on any error. A `rerankerFn`
 falls back to stage-1 order on a transient error and fails on the rest.
 
 | `code` | Cause | `transient` |
@@ -1083,15 +1106,15 @@ falls back to stage-1 order on a transient error and fails on the rest.
 | `Malformed` | A 2xx response the client cannot parse | yes |
 | `Http` | Any other status. Transient for 5xx | 5xx only |
 
-**Data sent to Ratel Cloud.** Every search sends its query text to Ratel Cloud with the project
-key. The tool catalog it ranks (ids, names, descriptions) reaches Cloud through `attach()`'s
+**Data sent to Ratel Platform.** Every search sends its query text to Ratel Platform with the project
+key. The tool catalog it ranks (ids, names, descriptions) reaches Platform through `attach()`'s
 snapshot.
 
 ---
 
 ### API reference
 
-#### `cloud.runtimeCatalog` — pull runtime-catalog overrides
+#### `platform.runtimeCatalog` — pull runtime-catalog overrides
 
 Prefer the runtime attach flag above for the standard adoption path. The management client's
 `runtimeCatalog` surface remains available for custom ownership or scheduling flows: pull the
@@ -1101,8 +1124,8 @@ descriptions:
 ```ts
 let previousEtag: string | undefined;
 
-async function syncCloudDefinitions() {
-  const result = await cloud.runtimeCatalog.listOverrides({ ifNoneMatch: previousEtag });
+async function syncPlatformDefinitions() {
+  const result = await platform.runtimeCatalog.listOverrides({ ifNoneMatch: previousEtag });
   if (result.notModified) return; // keep the cached overrides
 
   previousEtag = result.etag ?? undefined;
@@ -1130,7 +1153,7 @@ by `kind` then `entryId`. Each has `kind: "tool" | "skill" | "fact"`, `entryId`,
 `searchableDescription`. Only entries with an operator override are returned; an invalid project
 key throws `unauthorized`.
 
-#### `cloud.skills` — managed-catalog write surface
+#### `platform.skills` — managed-catalog write surface
 
 Skills live in one project and move through `draft → published → archived`. Every mutation
 supports **opt-in optimistic concurrency**: pass the `version` you last read as
@@ -1142,22 +1165,22 @@ scripts, forced overwrites).
 ##### `skills.list(options?) → { count, skills }`
 
 ```ts
-const { skills } = await cloud.skills.list({ status: "draft" });
-const theirs = await cloud.skills.list({ endUserId: "user-123" }); // one user's scoped skills
+const { skills } = await platform.skills.list({ status: "draft" });
+const theirs = await platform.skills.list({ endUserId: "user-123" }); // one user's scoped skills
 ```
 
 Filters: `status` (`"draft" | "published" | "archived"`), `endUserId`. No filter returns every
 skill in the project, archived included.
 
-##### `skills.get(id) → CloudSkill`
+##### `skills.get(id) → PlatformSkill`
 
 Throws `not_found` for unknown ids — including skills that never existed *and* ids from another
 project (the server does not distinguish).
 
-##### `skills.create(input) → CloudSkill`
+##### `skills.create(input) → PlatformSkill`
 
 ```ts
-const skill = await cloud.skills.create({
+const skill = await platform.skills.create({
   name: "rotate-db-credentials",       // kebab-case, unique among non-archived skills
   description: "Rotate database credentials without downtime.",
   searchableDescription: "rotate secrets keys credentials", // optional; null/omitted = description
@@ -1178,17 +1201,17 @@ const skill = await cloud.skills.create({
   lifecycle transition, not a starting state).
 - The returned skill carries `version: 1` — keep it for the next mutation.
 
-##### `skills.update(id, { expectedVersion?, …fields }) → CloudSkill`
+##### `skills.update(id, { expectedVersion?, …fields }) → PlatformSkill`
 
 ```ts
-const next = await cloud.skills.update(skill.id, {
+const next = await platform.skills.update(skill.id, {
   expectedVersion: skill.version,      // guard the edit against concurrent writes
   body: "# Rotation (v2)\n…",
   name: "rotate-credentials",          // renames are allowed
   searchableDescription: null,         // clear the Retrieval description
 });
 
-await cloud.skills.update(skill.id, { tags: ["ops"] }); // unguarded: applies unconditionally
+await platform.skills.update(skill.id, { tags: ["ops"] }); // unguarded: applies unconditionally
 ```
 
 Partial edit: only the fields you pass change. `status` is deliberately **not** editable here —
@@ -1212,7 +1235,7 @@ application already manages:
 const rows = await db.query(
   "SELECT name, description, searchable_description, body, tags FROM playbooks",
 );
-const report = await cloud.skills.import(
+const report = await platform.skills.import(
   rows.map((r) => ({
     name: r.name,
     description: r.description,
@@ -1226,31 +1249,31 @@ const report = await cloud.skills.import(
 
 - Matching is by `name` against non-archived skills; content comparison decides
   `updated` vs `unchanged`, including override-only edits, so re-running an import is idempotent.
-- Import **never archives**: a skill that exists in cloud but not in your input is left alone.
-  Cloud is the source of truth — removal is an explicit `archive` call.
+- Import **never archives**: a skill that exists in platform but not in your input is left alone.
+  Platform is the source of truth — removal is an explicit `archive` call.
 - Imported updates bump versions like any other edit; concurrent editors will see
   `version_conflict` on their next stale write, as expected.
 
 Reading the *resolved published* catalog — the overlaid, published-only view an agent receives —
-is deliberately not part of this client: that's the ratel SDK cloud loader's job. `list` gives
+is deliberately not part of this client: that's the ratel SDK platform loader's job. `list` gives
 you the management rows; the loader serves the consumer view.
 
-#### `cloud.intents` — conversation analysis
+#### `platform.intents` — conversation analysis
 
 The intent flow is **asynchronous**: `analyze` extracts intents and scores coverage but does
 **not** draft skills. To draft one, call `intents.suggest(intentId)` — it enqueues a job you poll
-with `cloud.jobs` — then fetch the drafted proposal with `suggestions.get`.
+with `platform.jobs` — then fetch the drafted proposal with `suggestions.get`.
 
 ##### `intents.analyze(input) → AnalyzeResult`
 
 ```ts
-const run = await cloud.intents.analyze({
+const run = await platform.intents.analyze({
   messages: [
     { role: "user", content: "how do I rotate the database credentials?" },
     { role: "assistant", content: "You can use the rotation runbook…" },
   ],
   endUserId: "user-123",         // optional — scope coverage to this user's overlaid catalog
-  conversationId: "conv-42",     // optional — reference a conversation Cloud already ingested
+  conversationId: "conv-42",     // optional — reference a conversation Platform already ingested
 });
 
 run.intents.forEach((i) => {
@@ -1275,7 +1298,7 @@ tool`); extraction is driven by the user turns, with the rest as context. Analys
 key server-side.
 
 Extraction never degrades: if the server's extractor is unconfigured or temporarily down,
-`analyze` throws a `CloudSdkError` with code `"unavailable"` (reason `"extractor_not_configured"`
+`analyze` throws a `PlatformError` with code `"unavailable"` (reason `"extractor_not_configured"`
 or `"extractor_unavailable"`) instead of returning made-up intents — retry later. For
 testing/debugging, pass `noCache: true` to skip the stored-run cache and force a live
 extraction; the fresh result replaces the stored run for that conversation.
@@ -1283,7 +1306,7 @@ extraction; the fresh result replaces the stored run for that conversation.
 ##### `intents.list(options?) → ListIntentsResult`
 
 ```ts
-const { intents, total, page, pageSize } = await cloud.intents.list({ page: 0 });
+const { intents, total, page, pageSize } = await platform.intents.list({ page: 0 });
 // intents: [{ id, text, occurrences, firstSeenAt, lastSeenAt }] — most-frequent first
 ```
 
@@ -1292,22 +1315,22 @@ The project's recurring-ask ledger. `page` is zero-based; the server serves 50 p
 ##### `intents.suggest(intentId) → { jobId, coalesced? }`
 
 ```ts
-const { jobId } = await cloud.intents.suggest(intent.id);
+const { jobId } = await platform.intents.suggest(intent.id);
 ```
 
 Enqueues a drafting job for one intent id (from `analyze` or `list`) and returns immediately.
-Poll it with `cloud.jobs` (below). Throws `not_found` if the intent isn't in your project.
+Poll it with `platform.jobs` (below). Throws `not_found` if the intent isn't in your project.
 
-#### `cloud.jobs` — polling async jobs
+#### `platform.jobs` — polling async jobs
 
 ##### `jobs.get(id) → Job` · `jobs.waitFor(id, opts?) → Job`
 
 ```ts
-const job = await cloud.jobs.waitFor<SuggestJobResult>(jobId); // polls until done/error
+const job = await platform.jobs.waitFor<SuggestJobResult>(jobId); // polls until done/error
 // { id, kind: "suggest_skill", status, result, error }
 if (job.result?.suggestionId) {
-  const suggestion = await cloud.suggestions.get(job.result.suggestionId);
-  await cloud.suggestions.approve(suggestion.id);     // lands as a draft skill
+  const suggestion = await platform.suggestions.get(job.result.suggestionId);
+  await platform.suggestions.approve(suggestion.id);     // lands as a draft skill
 }
 ```
 
@@ -1322,10 +1345,10 @@ if (job.result?.suggestionId) {
 `waitFor` polls at `intervalMs` (default 1 s) until the job is terminal or `timeoutMs` (default
 2 min) elapses; it returns the terminal job (it does **not** throw on `status: "error"` — inspect
 `job.error`), throwing only on transport failures or timeout. The timeout throw is a
-`CloudSdkError` with `code: "unavailable"` and `reason: "poll_timeout"`, so it's distinguishable
+`PlatformError` with `code: "unavailable"` and `reason: "poll_timeout"`, so it's distinguishable
 from a real 503.
 
-#### `cloud.suggestions` — reviewing machine-drafted proposals
+#### `platform.suggestions` — reviewing machine-drafted proposals
 
 Suggestions are proposals the self-improvement pipeline drafts from usage signals
 (`coverage_gap`, `surfaced_not_invoked`, `tool_error`). Two types:
@@ -1339,10 +1362,10 @@ Each suggestion carries `rationale`, `evidence`, and a `retrievabilityPreview` (
 representative queries would rank before vs after applying), so a human can review without
 reconstructing context.
 
-##### `suggestions.get(id) → CloudSuggestion`
+##### `suggestions.get(id) → PlatformSuggestion`
 
 ```ts
-const suggestion = await cloud.suggestions.get(suggestionId); // e.g. a suggest job's suggestionId
+const suggestion = await platform.suggestions.get(suggestionId); // e.g. a suggest job's suggestionId
 ```
 
 Fetch one proposal by id — typically the `suggestionId` an `intents.suggest` job produced.
@@ -1350,7 +1373,7 @@ Fetch one proposal by id — typically the `suggestionId` an `intents.suggest` j
 ##### `suggestions.list(options?) → { count, suggestions }`
 
 ```ts
-const pending = await cloud.suggestions.list({ status: "pending", limit: 100 });
+const pending = await platform.suggestions.list({ status: "pending", limit: 100 });
 ```
 
 Filters: `status` (`pending | approved | rejected | auto_applied | superseded`), `type`,
@@ -1378,13 +1401,13 @@ a `reason` telling you which one you lost — see the next section.
 
 ### Errors
 
-Every non-2xx response throws a `CloudSdkError`:
+Every non-2xx response throws a `PlatformError`:
 
 ```ts
 try {
-  await cloud.skills.update(id, { expectedVersion, body });
+  await platform.skills.update(id, { expectedVersion, body });
 } catch (err) {
-  if (err instanceof CloudSdkError && err.code === "conflict") {
+  if (err instanceof PlatformError && err.code === "conflict") {
     // err.reason === "version_conflict" here
   } else throw err;
 }
@@ -1420,12 +1443,12 @@ after you read it. Re-read, re-apply your edit on top, retry:
 ```ts
 async function updateWithRetry(id: string, edit: { body: string }, attempts = 3) {
   for (let i = 0; i < attempts; i++) {
-    const current = await cloud.skills.get(id);
+    const current = await platform.skills.get(id);
     try {
-      return await cloud.skills.update(id, { expectedVersion: current.version, ...edit });
+      return await platform.skills.update(id, { expectedVersion: current.version, ...edit });
     } catch (err) {
       const lostRace =
-        err instanceof CloudSdkError && err.code === "conflict" && err.reason === "version_conflict";
+        err instanceof PlatformError && err.code === "conflict" && err.reason === "version_conflict";
       if (!lostRace || i === attempts - 1) throw err;
     }
   }
@@ -1444,16 +1467,16 @@ state races. Treat them as outcomes, not failures:
 ```ts
 for (const s of pending.suggestions) {
   try {
-    await cloud.suggestions.approve(s.id);
+    await platform.suggestions.approve(s.id);
   } catch (err) {
-    if (!(err instanceof CloudSdkError) || err.code !== "conflict") throw err;
+    if (!(err instanceof PlatformError) || err.code !== "conflict") throw err;
     switch (err.reason) {
       case "not_pending":
         break; // someone else already reviewed it — nothing to do
       case "version_conflict":
         // the target skill changed since this edit was drafted; the patch may no
         // longer apply cleanly. Reject and let the next analysis re-draft it.
-        await cloud.suggestions.reject(s.id);
+        await platform.suggestions.reject(s.id);
         break;
       default:
         throw err;
@@ -1469,7 +1492,7 @@ layer — same `name` ⇒ the scoped skill wins for that user, everyone else kee
 
 ```ts
 // Tailor the global "deploy-checklist" for one user:
-await cloud.skills.create({
+await platform.skills.create({
   name: "deploy-checklist",            // same name as the global skill — no conflict:
   endUserId: "user-123",               // scoping makes the pair coexist
   description: "Deploy checklist for the EU cluster.",
@@ -1480,7 +1503,7 @@ await cloud.skills.create({
 // Agents synced with scope "user-123" get the overlaid view; everyone else is untouched.
 // Analysis with the same id sees the overlaid catalog too, and a skill drafted from one of its
 // intents (intents.suggest) inherits the scope:
-await cloud.intents.analyze({ messages, endUserId: "user-123" });
+await platform.intents.analyze({ messages, endUserId: "user-123" });
 ```
 
 #### Name lifecycle gotchas
@@ -1488,7 +1511,7 @@ await cloud.intents.analyze({ messages, endUserId: "user-123" });
 - Uniqueness is enforced only among **non-archived** skills: archive `foo`, and a new `foo` can
   be created. The archived row keeps its id and history.
 - `skills.import` never deletes: removing a skill from your source data does *not* archive it
-  in cloud on the next import. Archive explicitly.
+  in platform on the next import. Archive explicitly.
 - `edit_skill` suggestions never propose renames; renames are always a deliberate
   `skills.update`.
 
@@ -1504,7 +1527,7 @@ surface as `name_conflict` — which is your signal to `list` and reconcile rath
 
 ### Telemetry — `@ratel-ai/sdk/otel`
 
-Ratel Cloud's usage signals — the ones behind `suggestions.generate` — are fed by OpenTelemetry.
+Ratel Platform's usage signals — the ones behind `suggestions.generate` — are fed by OpenTelemetry.
 This package ships composable trace and Logs processors on a **subpath**, so the root import stays
 dependency-free for consumers who only manage a catalog:
 
@@ -1525,11 +1548,11 @@ import { RatelLogRecordProcessor, RatelSpanProcessor } from "@ratel-ai/sdk/otel"
 
 const sdk = new NodeSDK({
   spanProcessors: [
-    new RatelSpanProcessor(),    // → Ratel Cloud
+    new RatelSpanProcessor(),    // → Ratel Platform
     ...yourExistingProcessors,   // Langfuse, a generic OTLP exporter, … keep working untouched
   ],
   logRecordProcessors: [
-    new RatelLogRecordProcessor(), // → Ratel Cloud
+    new RatelLogRecordProcessor(), // → Ratel Platform
     ...yourExistingLogProcessors,
   ],
 });
@@ -1538,7 +1561,7 @@ sdk.start();
 
 **You own the provider.** Ratel ships no bootstrap, registers nothing globally, and installs no
 `ContextManager`; `service.name` and flush/shutdown belong to your host. The processors are thin
-sugar over the standard batch processors and OTLP exporters — Cloud defaults plus filters.
+sugar over the standard batch processors and OTLP exporters — Platform defaults plus filters.
 
 #### What gets sent
 
@@ -1547,7 +1570,7 @@ key under `gen_ai.*` / `ratel.*`. Your framework's wrapper noise (`ai.generateTe
 auto-instrumentation) is dropped.
 
 One narrow exception covers the Vercel AI SDK, whose telemetry predates the GenAI semconv and
-sits entirely under `ai.*` — spans Ratel Cloud normalizes on ingest, so they are signal that
+sits entirely under `ai.*` — spans Ratel Platform normalizes on ingest, so they are signal that
 simply doesn't say so in a key. `aiSdkSignalFilter` (exported, and composed into the default)
 admits exactly the `ai.toolCall` span and the **chat model** spans: an `ai.`-prefixed name
 containing `doGenerate` or `doStream` — `ai.generateText.doGenerate`, `ai.streamText.doStream`,
@@ -1555,10 +1578,10 @@ containing `doGenerate` or `doStream` — `ai.generateText.doGenerate`, `ai.stre
 different reasons:
 
 - The `ai.streamText` / `ai.generateText` **wrappers** duplicate the whole prompt of the model
-  span beneath them (~100 KB per call, so roughly double the egress), and Cloud would read them
+  span beneath them (~100 KB per call, so roughly double the egress), and Platform would read them
   as a second anchor for the same LLM call and double-count its tokens.
 - `ai.embed.doEmbed`, `ai.embedMany.doEmbed`, and `ai.rerank.doRerank` are the **wrong
-  operation**: Cloud stamps `gen_ai.operation.name = "chat"` on every model span it accepts, so
+  operation**: Platform stamps `gen_ai.operation.name = "chat"` on every model span it accepts, so
   these would ingest as phantom chat completions with no messages and no tools.
 
 **Emission and delivery are separate.** Every span reaches every processor on the provider
@@ -1572,7 +1595,7 @@ new RatelSpanProcessor({ spanFilter: (span) => span.name.startsWith("ratel.") })
 
 Note the filter keys on span *name* and *attribute keys*, never on the emitting scope: both the
 Ratel SDK and `@ai-sdk/otel` emit an `execute_tool <id>` span, and `gen_ai.*` attributes appear on
-both. Ratel Cloud wants the GenAI signal whoever produced it.
+both. Ratel Platform wants the GenAI signal whoever produced it.
 
 The Logs processor forwards only records whose `eventName` begins with `ratel.`. Unnamed logs and
 other namespaces stay with the host's other processors. Override this independently with
@@ -1584,11 +1607,11 @@ new RatelLogRecordProcessor({ logFilter: (record) => record.eventName === "custo
 
 > **Watch your attribute namespaces.** *Any* `ratel.*` attribute key opts a span in — including
 > one you added for your own bookkeeping. Tag incidental attributes outside `ratel.*` (and outside
-> `gen_ai.*`) unless you actually mean to send that span to Cloud.
+> `gen_ai.*`) unless you actually mean to send that span to Platform.
 
 **Captured content rides along.** When content capture is enabled, the
 `gen_ai.client.inference.operation.details` EventRecord is a span event on the inference span, and
-Cloud reads it from there. Forwarding the span forwards the captured messages with it — there is
+Platform reads it from there. Forwarding the span forwards the captured messages with it — there is
 nothing extra to wire up for captured messages. The Logs processor separately delivers named
 `ratel.*` event records.
 
@@ -1599,15 +1622,15 @@ halves of the SDK at one deployment:
 
 | Setting | Resolution order |
 |---|---|
-| Traces URL | `endpoint` → `RATEL_OTLP_ENDPOINT` → `${baseUrl}/traces` (default `https://cloud.ratel.sh/api/v1/traces`) |
-| Logs URL | `endpoint` → `RATEL_OTLP_LOGS_ENDPOINT` → `${baseUrl}/logs` (default `https://cloud.ratel.sh/api/v1/logs`) |
+| Traces URL | `endpoint` → `RATEL_OTLP_ENDPOINT` → `${baseUrl}/traces` (default `https://app.ratel.sh/api/v1/traces`) |
+| Logs URL | `endpoint` → `RATEL_OTLP_LOGS_ENDPOINT` → `${baseUrl}/logs` (default `https://app.ratel.sh/api/v1/logs`) |
 | Auth | `apiKey` → an `Authorization` header you passed → `RATEL_API_KEY` |
 
 Code-level config always beats ambient environment, and the `RATEL_API_KEY` fallback never
 clobbers an `Authorization` header you set on purpose. Point `RATEL_OTLP_ENDPOINT` and
-`RATEL_OTLP_LOGS_ENDPOINT` at any OTLP backend to use these processors without Ratel Cloud.
+`RATEL_OTLP_LOGS_ENDPOINT` at any OTLP backend to use these processors without Ratel Platform.
 
-Export is OTLP `http/protobuf`. Cloud accepts both protobuf and JSON, and replies `202 Accepted`.
+Export is OTLP `http/protobuf`. Platform accepts both protobuf and JSON, and replies `202 Accepted`.
 
 #### Turning it off
 
@@ -1636,20 +1659,20 @@ Spans join one trace only under an active host span. HTTP auto-instrumentation u
 that context; jobs, cron entrypoints, and other uninstrumented callers must create it themselves,
 or each span becomes its own root trace.
 
-### Testing with `MockCloud`
+### Testing with `MockPlatform`
 
 Your application's test suite shouldn't need a live API key, network access, or quota.
-`@ratel-ai/sdk/cloud/testing` (Node-only) ships `MockCloud` — an in-process, fetch-compatible
+`@ratel-ai/sdk/platform/testing` (Node-only) ships `MockPlatform` — an in-process, fetch-compatible
 mock of the v1 management surface plus both catalog pull versions, the same one this SDK's own
 test suite runs against. Routes, status codes, and error bodies mirror the server, which matters
 most for the failure modes you can't provoke against production on demand: version races, review
 races, auth errors — all the error-handling paths documented above become three-line test cases.
 
 ```ts
-import { RatelCloudSdk, CloudSdkError } from "@ratel-ai/sdk/cloud";
-import { MockCloud } from "@ratel-ai/sdk/cloud/testing";
+import { RatelPlatformClient, PlatformError } from "@ratel-ai/sdk/platform";
+import { MockPlatform } from "@ratel-ai/sdk/platform/testing";
 
-const mock = new MockCloud({
+const mock = new MockPlatform({
   catalog: {
     global: [{ id: "sk_1", name: "deploy-checklist", description: "…", tags: [], tools: [], metadata: {}, body: "…" }],
     subjects: { "user-123": [/* per-user layer */] },
@@ -1658,13 +1681,13 @@ const mock = new MockCloud({
   now: () => "2026-01-01T00:00:00.000Z",                     // injectable clock
 });
 
-const cloud = new RatelCloudSdk({ apiKey: mock.apiKey, fetch: mock.fetch });
+const platform = new RatelPlatformClient({ apiKey: mock.apiKey, fetch: mock.fetch });
 
 // State is inspectable for assertions:
-mock.skills;        // Map<id, CloudSkill>
-mock.suggestions;   // Map<id, CloudSuggestion>
+mock.skills;        // Map<id, PlatformSkill>
+mock.suggestions;   // Map<id, PlatformSuggestion>
 
-// Runtime-catalog overrides can be seeded and cleared without a live Cloud:
+// Runtime-catalog overrides can be seeded and cleared without a live Platform:
 mock.seedRuntimeCatalogOverride({
   kind: "tool",
   entryId: "weather_lookup",
@@ -1703,7 +1726,7 @@ import {
   canonicalSetV2,
   resolveV2,
   ifNoneMatchMatches,
-} from "@ratel-ai/sdk/cloud";
+} from "@ratel-ai/sdk/platform";
 import { createHash } from "node:crypto";
 
 const skills = resolveV2(catalog, "user-123");          // overlay a scope on the global layer

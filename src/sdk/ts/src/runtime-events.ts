@@ -194,7 +194,7 @@ export type ExperimentalDefinitionOverlayResponse =
 
 /**
  * Pluggable boundary implemented by whichever client owns the overlay; the Ratel
- * Cloud SDK's runtime client is the first implementation, not the only one.
+ * Platform SDK's runtime client is the first implementation, not the only one.
  */
 export interface ExperimentalDefinitionOverlaySource {
   /** Pull the overlay, conditionally when a previous strong entity tag is available. */
@@ -434,7 +434,7 @@ function normalizeRuntimeEvent(input: Record<string, unknown>): RuntimeEvent {
   }
 
   // The public subscribe API still delivers objects. Passing pre-serialized envelopes through so
-  // cloud-sdk can reuse them in its batcher is a deferred cross-repo design change.
+  // platform-sdk can reuse them in its batcher is a deferred cross-repo design change.
   let normalizedSize = serializedSize(normalized);
   if (normalizedSize <= RUNTIME_EVENT_MAX_PAYLOAD_BYTES) {
     return normalized as unknown as RuntimeEvent;

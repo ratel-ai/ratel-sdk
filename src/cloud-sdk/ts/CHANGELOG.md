@@ -4,7 +4,11 @@
 
 ### Deprecated
 
-- **This package is a shim over `@ratel-ai/sdk`.** Import `@ratel-ai/sdk/cloud` (for the root and `/runtime`), `@ratel-ai/sdk/otel` and `@ratel-ai/sdk/cloud/testing` instead. Each old entry point re-exports the same names with the same types, so current imports continue to work. `@ratel-ai/sdk` is now a regular dependency, not an optional peer, and the package needs Node >= 20.6.0. The examples moved to `examples/cloud/`.
+- **This package is a shim over `@ratel-ai/sdk`, the Ratel Platform SDK.** Import `@ratel-ai/sdk/platform` (for the root and `/runtime`), `@ratel-ai/sdk/otel` and `@ratel-ai/sdk/platform/testing` instead. Each old entry point re-exports the same names with the same types, as aliases of the new Platform names (for example `RatelCloudSdk` is `RatelPlatformClient`, `CloudSdkError` is `PlatformError`, `MockCloud` is `MockPlatform`), so current imports continue to work. The README has the full table. `@ratel-ai/sdk` is now a regular dependency, not an optional peer, and the package needs Node >= 20.6.0. The examples moved to `examples/platform/`.
+
+### Changed
+
+- **The default API root is `https://app.ratel.sh/api/v1`.** Set `RATEL_BASE_URL` to use a self-hosted platform. `RATEL_CLOUD_EVENTS` and `RATEL_CLOUD_INTENT_GRAPH` still work; the new `RATEL_PLATFORM_EVENTS` and `RATEL_PLATFORM_INTENT_GRAPH` win when both are set.
 
 ## [0.7.0-rc.5] - 2026-11-22
 

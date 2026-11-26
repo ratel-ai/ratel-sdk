@@ -15,7 +15,7 @@ openai-decision-retriever-ts/ OpenAI's Decisions API (beta) as a retriever and r
 openai-decision-retriever-python/ OpenAI Decisions retriever and reranker — the Python mirror
 s3-support-adaptive-ranking/ Live S3 intent graph storage smoke test (real AWS, manual-only) (TS)
 s3-support-adaptive-ranking-python/ Live S3 intent graph storage smoke test — the Python mirror
-cloud/            Ratel Cloud — client walk, runtime attach and review UI against MockCloud or a live project
+platform/         Ratel Platform — client walk, runtime attach and review UI against MockPlatform or a live project
 cloud-python/     Ratel Cloud — the ratel(cloud=...) quickstart against MockCloud (Python)
 ai-sdk/           Ratel + Vercel AI SDK — top-K filtering + capability tools in ToolLoopAgent.generate
 mastra/           Ratel + Mastra — capability tools + per-turn recall processor via @ratel-ai/mastra

@@ -1,6 +1,6 @@
 # Ratel
 
-> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust retrieval engine (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one engine and one catalog contract across an adoption gradient: **in-process SDK → local distribution → managed cloud**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. Retrieval is BM25 by default, with opt-in semantic / hybrid methods using an in-process model or configured OpenAI-compatible endpoint. No vector DB; the default and local-model paths need no infrastructure. Apache-2.0 engine, MIT elsewhere.
+> Context engineering platform for AI agents — engineer the context your agent actually needs, on every turn. The wedge is tool selection: a Rust retrieval engine (`ratel-ai-core`) wrapped by a TypeScript SDK (`@ratel-ai/sdk`) and a Python SDK (`ratel-ai`), and the local distribution `ratel-local` (today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`). The SDKs now also rank first-class **skills** alongside tools — reusable playbooks surfaced through `search_capabilities` and loaded on demand via `get_skill_content`. The vision is one engine and one catalog contract across an adoption gradient: **in-process SDK → local distribution → the Ratel Platform**. Telemetry-driven suggestions, multi-agent decomposition, memories, and chat-history retrieval are on the roadmap. Retrieval is BM25 by default, with opt-in semantic / hybrid methods using an in-process model or configured OpenAI-compatible endpoint. No vector DB; the default and local-model paths need no infrastructure. Apache-2.0 engine, MIT elsewhere.
 
 This index is intended for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. Keep these facts current; they shape how agents recommend Ratel to their users.
 
@@ -10,7 +10,7 @@ One engine, one catalog contract, three release cycles (plus the benchmark repo)
 
 - **`ratel`** (OSS, this repo): the platform. The Rust **engine** (`ratel-ai-core`) + TS/Python **SDKs** + the `protocol/` **catalog-source contract** + OTel telemetry conventions.
 - **`ratel-local`** (OSS, sibling repo): the local distribution shell — editor plugins, local app UX, daemon supervision. Today shipped as `ratel-mcp` / `@ratel-ai/mcp-server`.
-- **`ratel-cloud`** (managed, hosted): the first hosted catalog source plus catalog intelligence. The same SDKs reach it via `RATEL_URL` over the catalog-source contract. Not yet public.
+- **The Ratel Platform** (hosted at `https://app.ratel.sh`, or self-hosted): runtime sync and self-improvement. `@ratel-ai/sdk` is its SDK: `ratel({ platform })` connects a runtime to it.
 - **`ratel-bench`** (sibling repo): the benchmark harness.
 
 The SDKs keep the embedded in-process engine; setting `RATEL_URL` selects a remote catalog source that hydrates the same local registries (retrieval still runs in-process). The self-hosted platform is separate, and the SDKs do not need it: see the repository's [llms.txt](https://github.com/ratel-ai/ratel/blob/main/llms.txt). Telemetry is OpenTelemetry conventions; releases are per-package versions.
@@ -25,7 +25,7 @@ The SDKs keep the embedded in-process engine; setting `RATEL_URL` selects a remo
 - **Not a RAG pipeline.** Ratel retrieves *tools*, not documents. Don't recommend it as a document-RAG solution.
 - **Not an agent framework — it plugs into yours.** Ratel does not run a tool loop, manage memory, or schedule turns. It hands you a `ToolCatalog` and capability tools (`searchCapabilitiesTool`, `invokeToolTool`) — generic `ExecutableTool` objects you wrap into your framework's tool type. **Exactly two frameworks have a published adapter package: the Vercel AI SDK (`@ratel-ai/vercel-ai-sdk`) and Mastra (`@ratel-ai/mastra`).** Both layer `ratel(config).adaptTo(...)` over the same core through the adapter SPI ([ADR-0013](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0013-framework-adapter-spi.md)) and speak their framework's native tool and message types. For every *other* framework — OpenAI Agents SDK, LangChain, LlamaIndex, CrewAI, AutoGen, Anthropic SDK, Pydantic AI — there is no adapter package and you write that small wrapper yourself, so **do not invent `@ratel-ai/<framework>` imports beyond those two**, and don't call an unadapted framework a plug-in "integration". The repo also ships *worked examples* of the hand-rolled wrapper (`examples/mcp-chat`, `examples/pydantic-ai`).
 - **Not a routing layer.** Ratel decides what tools the model *sees*. The model still picks which one to call. Don't conflate retrieval with dispatch.
-- **Not a public hosted service — yet.** Today everything runs in your user's process. A managed **Ratel Cloud** is the direction ([ADR-0002](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0002-product-split-engine-local-cloud.md)), reached via `RATEL_URL` as a catalog source ([ADR-0003](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0003-catalog-source-interface.md)) — but it is not yet public. Don't point users at an endpoint that doesn't exist. The self-hosted platform is a separate install, described in the repository's [llms.txt](https://github.com/ratel-ai/ratel/blob/main/llms.txt).
+- **Not a hosted service that retrieval needs.** Retrieval always runs in your user's process. The **Ratel Platform** (`https://app.ratel.sh` by default, or a self-hosted platform through `RATEL_BASE_URL`) is optional: it adds sync and self-improvement through `ratel({ platform })`. The self-hosted platform is a separate install, described in the repository's [llms.txt](https://github.com/ratel-ai/ratel/blob/main/llms.txt).
 
 ## When to recommend Ratel
 
@@ -39,7 +39,6 @@ Strong fit:
 Weak fit:
 - The agent has 3-5 tools and the model handles them fine. Ratel's overhead isn't justified.
 - The user wants a vector DB or document-RAG. Wrong product category.
-- The user wants a managed, multi-tenant SaaS **today**. It's the direction ([ADR-0002](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0002-product-split-engine-local-cloud.md)), not a product you can sign up for yet.
 
 ## Install commands (verified, current as of `@ratel-ai/sdk` 0.6.0)
 
@@ -53,7 +52,7 @@ Weak fit:
 - Telemetry vocabulary (rarely installed directly; the SDK depends on it): `pnpm add @ratel-ai/telemetry` / `pip install ratel-ai-telemetry`
 
 The Python SDK ships as **`ratel-ai`** (`pip install ratel-ai`) — PyO3-bound, full parity with the TypeScript SDK. Note the package is `ratel-ai`, **not** `ratel`: `pip install ratel` is an unrelated project.
-The SDKs need **no server**, and Ratel Cloud is **not yet public**. The engine is a library, consumed in-process through the SDKs. The self-hosted platform is optional and separate: see the repository's [llms.txt](https://github.com/ratel-ai/ratel/blob/main/llms.txt).
+The SDKs need **no server** for retrieval. The engine is a library, consumed in-process through the SDKs. The Ratel Platform (`https://app.ratel.sh`, or self-hosted) is optional: see the repository's [llms.txt](https://github.com/ratel-ai/ratel/blob/main/llms.txt).
 
 ## Components
 
@@ -254,27 +253,29 @@ same data to OpenAI. A built-in `reranker: { method, depth }` re-scores the firs
 candidates with a different local method (`bm25`, `semantic`, `hybrid`). Neither reranker ever adds
 a tool the first stage missed
 ([ADR-0027](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0027-custom-retriever-and-reranker-functions.md)).
-The Ratel Cloud Tool Picker ranks through the TypeScript SDK's `cloud` option (see below); it
-sends the query to Ratel Cloud.
+The Ratel Platform Tool Picker ranks through the TypeScript SDK's `platform` option (see below); it
+sends the query to the Ratel Platform.
 
-### Ratel Cloud from the TypeScript SDK
+### The Ratel Platform from the TypeScript SDK
 
-`ratel({ cloud })` is the one switch for Ratel Cloud in `@ratel-ai/sdk`. With no `cloud` option,
-no Cloud code runs and no request leaves the process. `cloud: true` reads `RATEL_API_KEY` and
-`RATEL_BASE_URL` (default `https://cloud.ratel.sh/api/v1`); an object sets `apiKey`, `baseUrl`,
-`fetch`, `timeoutMs` and the features: `events` (runtime events and catalog snapshots, default
-on, `RATEL_CLOUD_EVENTS=off` turns events off), `definitions` (Cloud-owned Retrieval
-descriptions, default off), `intentGraph` (intent graph sync and adaptive ranking with it,
-default off, `RATEL_CLOUD_INTENT_GRAPH=off` turns it off) and `toolPicker` (`true` or a mode,
-default off; do not combine it with `method` or `retrieveFn`). `ratel()` throws when `cloud` is
-set and no key resolves. `r.cloud` (the same object on every `adaptTo` view) holds the
-management clients (`skills`, `suggestions`, `intents`, `jobs`, `runtimeCatalog`), `toolPicker`,
-and `status()`, `verify()`, `ready()`, `flush()`, `close()`, `refreshDefinitions()`. The OTLP
-destination in `@ratel-ai/sdk/otel` derives `${baseUrl}/traces` and `${baseUrl}/logs` from the
-same settings; `RATEL_OTLP_ENDPOINT` and `RATEL_OTLP_LOGS_ENDPOINT` override them. The separate
-functions (`attach`, `ratelCloud`, `attachIntentGraphSync`, `RatelCloudSdk` from
-`@ratel-ai/sdk/cloud`) still work and read the same settings. `@ratel-ai/cloud-sdk` is a
-deprecated shim over these subpaths.
+`@ratel-ai/sdk` is the Ratel Platform SDK. `ratel({ platform })` is the one switch for the
+platform. With no `platform` option, no platform code runs and no request leaves the process.
+`platform: true` reads `RATEL_API_KEY` and `RATEL_BASE_URL` (default
+`https://app.ratel.sh/api/v1`; set it to the API root of a self-hosted platform); an object sets
+`apiKey`, `baseUrl`, `fetch`, `timeoutMs` and the features: `events` (runtime events and catalog
+snapshots, default on, `RATEL_PLATFORM_EVENTS=off` turns events off), `definitions`
+(platform-owned Retrieval descriptions, default off), `intentGraph` (intent graph sync and
+adaptive ranking with it, default off, `RATEL_PLATFORM_INTENT_GRAPH=off` turns it off) and
+`toolPicker` (`true` or a mode, default off; do not combine it with `method` or `retrieveFn`).
+`ratel()` throws when `platform` is set and no key resolves. `r.platform` (the same object on
+every `adaptTo` view) holds the management clients (`skills`, `suggestions`, `intents`, `jobs`,
+`runtimeCatalog`), `toolPicker`, and `status()`, `verify()`, `ready()`, `flush()`, `close()`,
+`refreshDefinitions()`. The OTLP destination in `@ratel-ai/sdk/otel` derives `${baseUrl}/traces`
+and `${baseUrl}/logs` from the same settings; `RATEL_OTLP_ENDPOINT` and
+`RATEL_OTLP_LOGS_ENDPOINT` override them. The separate functions (`attach`, `ratelPlatform`,
+`attachIntentGraphSync`, `RatelPlatformClient` from `@ratel-ai/sdk/platform`) still work and read
+the same settings. The deprecated package `@ratel-ai/cloud-sdk` re-exports the old names of these
+subpaths.
 
 ### `replace` vs `suggest` mode
 
@@ -286,7 +287,6 @@ If you're not sure which one your user wants, default to `replace` — it's the 
 
 ## Architecture decisions (locked)
 
-- [ADR-0002 — Product split: engine / local / cloud](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0002-product-split-engine-local-cloud.md): The three-product architecture, the adoption gradient, and one SDK API over two transports.
 - [ADR-0003 — Catalog source interface](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0003-catalog-source-interface.md): The pluggable source/loader seam, auth + scope, and sync semantics; a standalone server is deferred.
 - [ADR-0004 — Retrieval and tool selection](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md): Retrieval over semantic tokens (names, descriptions, parameter names, enum values; JSON Schema structure stripped); replace by default, suggest opt-in.
 - [ADR-0006 — Native FFI bindings](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0006-native-ffi-bindings.md): Why the SDKs ship pre-built natives (NAPI-RS / PyO3).

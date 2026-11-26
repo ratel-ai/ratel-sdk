@@ -1267,7 +1267,7 @@ describe("policy on the live path", () => {
       catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
         // @ts-expect-error the runtime guard still has to hold for untyped callers
         origins: "nope",
-        graphKey: "cloud",
+        graphKey: "platform",
       }),
     ).toThrow(/unknown origins/);
 
@@ -1364,9 +1364,9 @@ describe("configuration guardrails", () => {
     const catalog = await buildCatalog();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), { graphKey: "cloud" });
+      catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), { graphKey: "platform" });
       expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0]?.[0]).toContain('graphKey "cloud"');
+      expect(warn.mock.calls[0]?.[0]).toContain('graphKey "platform"');
     } finally {
       warn.mockRestore();
     }
@@ -1377,7 +1377,7 @@ describe("configuration guardrails", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
-        graphKey: "cloud",
+        graphKey: "platform",
         warnOnModelMismatch: false,
       });
       expect(warn).not.toHaveBeenCalled();
@@ -1392,7 +1392,7 @@ describe("configuration guardrails", () => {
     try {
       catalog.experimentalEnableAdaptiveRanking(new IntentGraph(), {
         learn: false,
-        graphKey: "cloud",
+        graphKey: "platform",
       });
       expect(warn).not.toHaveBeenCalled();
     } finally {

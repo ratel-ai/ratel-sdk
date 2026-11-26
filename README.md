@@ -1,8 +1,9 @@
 # Ratel SDKs
 
 The client libraries of [Ratel](https://www.ratel.sh): the Rust core, the TypeScript and Python
-SDKs, their framework adapters, the rankers plugins, the telemetry helpers and the Cloud client.
-The platform (console and API) lives in [ratel-ai/ratel](https://github.com/ratel-ai/ratel).
+SDKs, their framework adapters, the rankers plugins, and the telemetry helpers.
+`@ratel-ai/sdk` and `ratel-ai` are the SDKs of the Ratel Platform (`https://app.ratel.sh`, or
+self-hosted). The platform (console and API) lives in [ratel-ai/ratel](https://github.com/ratel-ai/ratel).
 
 ## Packages
 
@@ -16,13 +17,13 @@ The platform (console and API) lives in [ratel-ai/ratel](https://github.com/rate
 | `@ratel-ai/mastra` | npm | `src/adapters/ts-mastra` |
 | `@ratel-ai/telemetry` | npm | `src/telemetry/ts` |
 | `@ratel-ai/rankers-plugin` | npm | `src/rankers/ts` |
-| `@ratel-ai/cloud-sdk` (deprecated shim over `@ratel-ai/sdk/cloud`) | npm | `src/cloud-sdk/ts` |
+| `@ratel-ai/cloud-sdk` (deprecated shim over `@ratel-ai/sdk/platform`) | npm | `src/cloud-sdk/ts` |
 | `ratel-ai` | PyPI | `src/sdk/python` |
 | `ratel-ai-telemetry` | PyPI | `src/telemetry/python` |
 | `ratel-ai-rankers-plugin` | PyPI | `src/rankers/python` |
 
 `protocol/` holds the wire contracts and their conformance vectors. `examples/` holds runnable
-examples for each SDK (`examples/cloud/` for Ratel Cloud). `packages/sdk/` holds the SDK docs (`llms.txt`).
+examples for each SDK (`examples/platform/` for the Ratel Platform). `packages/sdk/` holds the SDK docs (`llms.txt`).
 
 ## History
 

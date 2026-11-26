@@ -1,0 +1,407 @@
+/**
+ * Wire types for the Ratel Platform APIs.
+ *
+ * The shapes here mirror the server serializers in ratel-platform
+ * (`lib/catalog/wire.ts`, `lib/catalog/http.ts` `serializeSkill`,
+ * `lib/suggestions/http.ts` `serializeSuggestion`) field-for-field. The catalog
+ * wire shapes and their ETag algorithms are frozen protocol contracts;
+ * conformance is pinned by `wire.test.ts` and `wire-v2.test.ts` against the
+ * shared vectors in `protocol/v1/conformance` and `protocol/v2/conformance`.
+ */
+
+/* — protocol/v1 catalog wire ————————————————————————————————————————————— */
+
+/** The frozen v1 content projection: exactly these fields, in this order. */
+export const SKILL_FIELDS = [
+  "id",
+  "name",
+  "description",
+  "tags",
+  "tools",
+  "metadata",
+  "body",
+] as const;
+
+/** One skill as it crosses the wire. */
+export interface WireSkill {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  tools: string[];
+  metadata: Record<string, string[]>;
+  body: string;
+}
+
+/** A source-side catalog: a global layer + optional per-subject layers. */
+export interface Catalog {
+  global: WireSkill[];
+  subjects?: Record<string, WireSkill[]>;
+}
+
+/** The `GET /catalog` 200 body. */
+export interface CatalogResponse {
+  catalogVersion: string;
+  skills: WireSkill[];
+}
+
+/* — protocol/v2 catalog wire ————————————————————————————————————————————— */
+
+/** The frozen v2 content projection: v1 plus the Retrieval description. */
+export const V2_SKILL_FIELDS = [
+  "id",
+  "name",
+  "description",
+  "searchableDescription",
+  "tags",
+  "tools",
+  "metadata",
+  "body",
+] as const;
+
+/** One skill on the v2 wire. Omitted and null overrides are semantically unset. */
+export interface WireSkillV2 extends WireSkill {
+  searchableDescription?: string | null;
+}
+
+/** A source-side v2 catalog: a global layer + optional per-subject layers. */
+export interface CatalogV2 {
+  global: WireSkillV2[];
+  subjects?: Record<string, WireSkillV2[]>;
+}
+
+/** The `GET /v2/catalog` 200 body. */
+export interface CatalogResponseV2 {
+  catalogVersion: string;
+  skills: WireSkillV2[];
+}
+
+/* — runtime events envelope/v2 ——————————————————————————————————————————— */
+
+/** Frozen envelope shared by every runtime fact sent to Ratel Platform. */
+export interface RuntimeEvent {
+  readonly v: 2;
+  readonly event_id: string;
+  readonly ts: number;
+  readonly session_id: string;
+  readonly source_id: string;
+  readonly type: string;
+  readonly invocation_id?: string;
+  readonly catalog_version?: string;
+  readonly environment?: string;
+  readonly end_user_id?: string;
+  readonly trace_id?: string;
+  readonly span_id?: string;
+  /** The application turn (one user request) this event belongs to. */
+  readonly turn_id?: string;
+  readonly [field: string]: unknown;
+}
+
+/** Serializable tool state accepted by the runtime catalog snapshot publisher. */
+export interface RuntimeCatalogToolDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  /**
+   * ⚠️ Experimental (ADR-0021). What Platform matches prompts against, when it
+   * differs from what the agent reads. Mirrors the core SDK's spelling because
+   * this is the value `ToolCatalog.snapshot()` already carries; it reaches the
+   * wire as `searchable_description`. Omitted means "match on the description".
+   */
+  readonly experimentalSearchableDescription?: string;
+  readonly inputSchema?: Record<string, unknown> | null;
+  readonly outputSchema?: Record<string, unknown> | null;
+  readonly metadata?: Record<string, unknown> | null;
+}
+
+/** Complete tool state for one stable runtime source. */
+export interface RuntimeCatalogSnapshot {
+  readonly source_id: string;
+  readonly tools: readonly RuntimeCatalogToolDefinition[];
+  /** Accepted for parity with the core SDK snapshot; not part of Platform's tool inventory. */
+  readonly skills?: readonly unknown[];
+}
+
+/* — runtime catalog overrides ———————————————————————————————————————————— */
+
+export type RuntimeCatalogEntryKind = "tool" | "skill" | "fact";
+
+/** One operator-authored Retrieval description for a runtime catalog entry. */
+export interface RuntimeCatalogOverride {
+  kind: RuntimeCatalogEntryKind;
+  entryId: string;
+  searchableDescription: string;
+}
+
+/** The `GET /runtime-catalog/overrides` response. */
+export interface RuntimeCatalogOverridesResponse {
+  overrides: RuntimeCatalogOverride[];
+}
+
+/** Conditional request options for the runtime-catalog overlay. */
+export interface ListRuntimeCatalogOverridesOptions {
+  ifNoneMatch?: string | undefined;
+}
+
+/** A fresh runtime-catalog overlay response and its cache validator. */
+export interface RuntimeCatalogOverridesFreshResult extends RuntimeCatalogOverridesResponse {
+  notModified: false;
+  etag: string | null;
+}
+
+/** An unchanged runtime-catalog overlay; keep the caller's cached overrides. */
+export interface RuntimeCatalogOverridesNotModifiedResult {
+  notModified: true;
+  etag: string | null;
+}
+
+/** Fresh and not-modified outcomes from the conditional overlay pull. */
+export type RuntimeCatalogOverridesResult =
+  | RuntimeCatalogOverridesFreshResult
+  | RuntimeCatalogOverridesNotModifiedResult;
+
+/* — managed skills (write surface) ——————————————————————————————————————— */
+
+export const SKILL_STATUSES = ["draft", "published", "archived"] as const;
+export type SkillStatus = (typeof SKILL_STATUSES)[number];
+
+/** A managed skill row as the write surface serializes it. */
+export interface PlatformSkill {
+  id: string;
+  name: string;
+  description: string;
+  /** Optional Retrieval description; null means index the model-facing description. */
+  searchableDescription: string | null;
+  tags: string[];
+  tools: string[];
+  metadata: Record<string, string[]>;
+  body: string;
+  status: SkillStatus;
+  /** Optimistic-concurrency guard; mutations compare-and-swap on it. */
+  version: number;
+  /** Scope: null = project-global; set = tailored to one opaque end-user. */
+  endUserId: string | null;
+  /** The model that drafted this skill, when machine-generated. */
+  model: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
+/** Input for creating a skill. `name` must be kebab-case. */
+export interface NewSkillInput {
+  name: string;
+  description: string;
+  /** Optional Retrieval description; null or omitted uses `description`. */
+  searchableDescription?: string | null;
+  body: string;
+  tags?: string[];
+  tools?: string[];
+  metadata?: Record<string, string[]>;
+  status?: Exclude<SkillStatus, "archived">;
+  endUserId?: string | null;
+}
+
+/** Input for editing a skill; `expectedVersion` opts into the version CAS —
+ * omitted, the edit applies unconditionally. */
+export interface UpdateSkillInput {
+  expectedVersion?: number;
+  name?: string;
+  description?: string;
+  /** Set a Retrieval description, or clear it with null. */
+  searchableDescription?: string | null;
+  body?: string;
+  tags?: string[];
+  tools?: string[];
+  metadata?: Record<string, string[]>;
+  endUserId?: string | null;
+}
+
+/** The `POST /skills/import` change report. */
+export interface ImportReport {
+  created: string[];
+  updated: string[];
+  unchanged: string[];
+}
+
+/* — suggestions ——————————————————————————————————————————————————————————— */
+
+export const SUGGESTION_TYPES = ["edit_skill", "new_skill"] as const;
+export type SuggestionType = (typeof SUGGESTION_TYPES)[number];
+
+export const SUGGESTION_STATUSES = [
+  "pending",
+  "approved",
+  "rejected",
+  "auto_applied",
+  "superseded",
+] as const;
+export type SuggestionStatus = (typeof SUGGESTION_STATUSES)[number];
+
+export const SIGNAL_KINDS = ["coverage_gap", "surfaced_not_invoked", "tool_error"] as const;
+export type SignalKind = (typeof SIGNAL_KINDS)[number];
+
+/** The partial patch an `edit_skill` proposal carries — never `name`. */
+export interface EditSkillPatch {
+  description?: string;
+  tags?: string[];
+  body?: string;
+}
+
+/** The full drafted skill a `new_skill` proposal carries. */
+export interface NewSkillPatch {
+  name: string;
+  description: string;
+  tags: string[];
+  body: string;
+  model: string;
+}
+
+/** One representative query's rank/score in a catalog snapshot. */
+export interface RetrievabilityPreviewHit {
+  query: string;
+  rank: number | null;
+  score: number | null;
+}
+
+/** The before/after retrievability preview attached to a proposal. */
+export interface RetrievabilityPreview {
+  queries: string[];
+  before: RetrievabilityPreviewHit[];
+  after: RetrievabilityPreviewHit[];
+}
+
+/** A suggestion as `serializeSuggestion` emits it. */
+export interface PlatformSuggestion {
+  id: string;
+  projectId: string;
+  type: SuggestionType;
+  signalKind: SignalKind;
+  status: SuggestionStatus;
+  rationale: string;
+  evidence: Record<string, unknown>;
+  targetSkillId: string | null;
+  targetSkillExpectedVersion: number | null;
+  sourceQueryIntentId: string | null;
+  /** Proposal scope: null = project-global; set = drafted for one opaque end-user. */
+  endUserId: string | null;
+  patch: Record<string, unknown>;
+  retrievabilityPreview: Record<string, unknown>;
+  createdSkillId: string | null;
+  model: string | null;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt: string | null;
+  appliedAt: string | null;
+}
+
+export interface ListSuggestionsResult {
+  count: number;
+  suggestions: PlatformSuggestion[];
+}
+
+export interface GenerateSuggestionsResult {
+  jobId: string;
+  /** True when an in-flight generation run absorbed this request. */
+  coalesced: boolean;
+}
+
+/* — intent analysis ———————————————————————————————————————————————————————— */
+
+export type MessageRole = "user" | "assistant" | "system" | "tool";
+
+/** One conversation turn submitted for analysis. */
+export interface ConversationMessage {
+  role: MessageRole;
+  content: string;
+}
+
+export interface AnalyzeInput {
+  messages: ConversationMessage[];
+  /** Opaque end-user id; scopes coverage to that user's catalog layer and any
+   * gap-drafted skills to that user. Same id space as telemetry. */
+  endUserId?: string;
+  /** Reference a conversation Platform already ingested instead of (or alongside)
+   * inline messages. */
+  conversationId?: string;
+  /** Testing/debugging: skip the server's stored-run cache and REPLACE the
+   * stored run for this conversation with the fresh result, guaranteeing a live
+   * extraction. Leave unset in production — re-analyzing unchanged input is
+   * normally a free cache hit. */
+  noCache?: boolean;
+}
+
+/** One extracted intent with its skill-coverage verdict. Its `id` is a stable
+ * `query_intents` id — pass it to {@link IntentsClient.suggest} to draft a skill. */
+export interface ExtractedIntent {
+  id: string;
+  text: string;
+  covered: boolean;
+  matchedSkillId: string | null;
+  score: number | null;
+}
+
+/** The result of `POST /intents/analyze`. Analysis extracts intents and scores
+ * coverage — it does NOT draft skills. Draft one for an intent via
+ * {@link IntentsClient.suggest}, then poll the returned job. */
+export interface AnalyzeResult {
+  runId: string;
+  /** True when the conversation was unchanged since the last run and the
+   * previous result was returned. */
+  cached: boolean;
+  /** ETag hex of the catalog the coverage verdicts were computed against. */
+  catalogVersion: string | null;
+  intents: ExtractedIntent[];
+}
+
+/** One recurring ask in the project's intent ledger (`GET /intents`). */
+export interface QueryIntent {
+  id: string;
+  text: string;
+  /** How many times this ask has been seen. */
+  occurrences: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+/** The `GET /intents` page. */
+export interface ListIntentsResult {
+  count: number;
+  page: number;
+  pageSize: number;
+  total: number;
+  intents: QueryIntent[];
+}
+
+/* — async jobs (drafting) ——————————————————————————————————————————————————— */
+
+/** Response to `POST /intents/{id}/suggest`: a drafting job to poll. */
+export interface SuggestResult {
+  jobId: string;
+  /** True when an already in-flight job for the same intent was reused. */
+  coalesced?: boolean;
+}
+
+export const JOB_STATUSES = ["queued", "running", "done", "error"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
+/** Why a `suggest_skill` job finished without a suggestion. `not_configured` =
+ * no drafting key on the server; `exists` = a draft for this intent already exists. */
+export type SuggestJobReason = "not_configured" | "exists";
+
+/** The `result` of a completed `suggest_skill` job. */
+export interface SuggestJobResult {
+  suggestionId: string | null;
+  reason?: SuggestJobReason;
+}
+
+/** An async job as `GET /jobs/{id}` serializes it. `result`/`error` populate once
+ * `status` is terminal (`done`/`error`). `result` is typed per `kind`; for
+ * `suggest_skill` it is a {@link SuggestJobResult}. */
+export interface Job<TResult = unknown> {
+  id: string;
+  kind: string;
+  status: JobStatus;
+  result: TResult | null;
+  error: string | null;
+}

@@ -1,7 +1,7 @@
 {
   "name": "@ratel-ai/cloud-sdk",
   "version": "0.7.0-rc.5",
-  "description": "Deprecated: use @ratel-ai/sdk/cloud, @ratel-ai/sdk/otel and @ratel-ai/sdk/cloud/testing. This package re-exports them under the old entry points (root, /runtime, /otel, /testing) so that current imports continue to work.",
+  "description": "Deprecated: use @ratel-ai/sdk/platform, @ratel-ai/sdk/otel and @ratel-ai/sdk/platform/testing. This package re-exports them under the old entry points (root, /runtime, /otel, /testing) so that current imports continue to work.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -64,7 +64,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
     "test": "vitest run",
-    "example:shim-e2e": "node --import ./examples/use-shim.mjs ../../../examples/cloud/e2e.mjs && node --import ./examples/use-shim.mjs ../../../examples/cloud/runtime-attach-e2e.mjs"
+    "example:shim-e2e": "node --import ./examples/use-shim.mjs ../../../examples/platform/e2e.mjs && node --import ./examples/use-shim.mjs ../../../examples/platform/runtime-attach-e2e.mjs"
   },
   "dependencies": {
     "@ratel-ai/sdk": "workspace:^"

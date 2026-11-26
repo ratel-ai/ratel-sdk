@@ -45,7 +45,7 @@ const registerTelemetry = (ai as { registerTelemetry?: (...integrations: unknown
  * owns the provider, registers an in-memory exporter on it, and reads the spans
  * back. `RatelOtelIntegration` never registers a provider and never exports —
  * it only creates spans onto whatever provider is globally active. No network,
- * no Ratel Cloud import.
+ * no Ratel Platform import.
  */
 let exporter: InMemorySpanExporter;
 

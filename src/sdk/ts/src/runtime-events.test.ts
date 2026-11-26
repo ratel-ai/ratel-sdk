@@ -896,7 +896,7 @@ describe("public runtime events", () => {
 
     runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph, {
       learn: false,
-      graphKey: "cloud",
+      graphKey: "platform",
     });
     await subscription.flush();
 
@@ -904,7 +904,7 @@ describe("public runtime events", () => {
     expect(status?.status).toBe("active");
     expect(status?.reason).toBe("enabled");
     expect(status?.rev).toBe(graph.rev);
-    expect(status?.graph_key).toBe("cloud");
+    expect(status?.graph_key).toBe("platform");
     expect(status?.learn).toBe(false);
     expect("model" in (status as object)).toBe(false);
     subscription.unsubscribe();
@@ -943,7 +943,7 @@ describe("public runtime events", () => {
       execute: async () => "ok",
     });
     runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
-      graphKey: "cloud",
+      graphKey: "platform",
     });
     const received: RuntimeEvent[] = [];
     const subscription = runtime.events.subscribe((batch) => received.push(...batch));
@@ -1058,7 +1058,7 @@ describe("public runtime events", () => {
       });
       runtime.tools.catalog.experimentalEnableAdaptiveRanking(knownClusterGraph(), {
         learn: false,
-        graphKey: "cloud",
+        graphKey: "platform",
       });
       // The rebuild stamps the graph with the endpoint embedder's fingerprint.
       await runtime.tools.catalog.experimentalRebuildIntentGraph();
@@ -1095,14 +1095,14 @@ describe("public runtime events", () => {
 
     runtime.skills.experimentalEnableAdaptiveRanking(graph, {
       learn: false,
-      graphKey: "cloud",
+      graphKey: "platform",
     });
     await subscription.flush();
     const enabled = received.find((e) => e.type === "usage_ranking_status");
     expect(enabled?.status).toBe("active");
     expect(enabled?.reason).toBe("enabled");
     expect(enabled?.rev).toBe(graph.rev);
-    expect(enabled?.graph_key).toBe("cloud");
+    expect(enabled?.graph_key).toBe("platform");
     expect(enabled?.learn).toBe(false);
     received.length = 0;
 
@@ -1129,7 +1129,7 @@ describe("public runtime events", () => {
     const graph = knownClusterGraph();
     runtime.tools.catalog.experimentalEnableAdaptiveRanking(graph, {
       learn: false,
-      graphKey: "cloud",
+      graphKey: "platform",
     });
 
     // Subscribed only now: the enable-time event is long gone.
@@ -1141,7 +1141,7 @@ describe("public runtime events", () => {
     expect(status?.status).toBe("active");
     expect(status?.reason).toBe("enabled");
     expect(status?.rev).toBe(graph.rev);
-    expect(status?.graph_key).toBe("cloud");
+    expect(status?.graph_key).toBe("platform");
     expect(status?.learn).toBe(false);
     subscription.unsubscribe();
   });

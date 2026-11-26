@@ -79,7 +79,7 @@ export interface ResolveS3EndpointOptions {
    * what MinIO and most self-hosted S3-compatible services require, since
    * virtual-hosted style needs a wildcard DNS/TLS setup most self-hosted
    * deployments don't have. Pass `false` for a custom endpoint that does
-   * support virtual-hosted style (e.g. Cloudflare R2). No effect without
+   * support virtual-hosted style (e.g. R2). No effect without
    * `endpoint` — AWS S3 always uses virtual-hosted style.
    */
   readonly forcePathStyle?: boolean;

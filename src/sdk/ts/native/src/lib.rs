@@ -1525,7 +1525,7 @@ impl IntentGraph {
     }
 
     /// Adopt a graph serialized in the `protocol/v1` wire form — produced by
-    /// a previous `toJson` or by Ratel Cloud.
+    /// a previous `toJson` or by Ratel Platform.
     ///
     /// Throws if the JSON is malformed or declares a schema version this build
     /// does not read (a consumer rejects rather than degrading).
@@ -2101,7 +2101,7 @@ impl ToolRegistry {
     /// skill registries so both learn into one set of clusters.
     ///
     /// Pass `learn: false` to rank from `graph` without learning into it — the
-    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// consumer form for a graph produced elsewhere (Ratel Platform, for example).
     /// The flag is stored on the registry, not just applied at this call: every
     /// later sink install (`setTraceSink`, `setTraceSinkCallback`,
     /// `subscribeTraceEvents`) re-derives its sink through the same flag, so
@@ -3221,7 +3221,7 @@ impl SkillRegistry {
     /// skill registries so both learn into one set of clusters.
     ///
     /// Pass `learn: false` to rank from `graph` without learning into it — the
-    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// consumer form for a graph produced elsewhere (Ratel Platform, for example).
     /// The flag is stored on the registry, not just applied at this call: every
     /// later sink install (`setTraceSink`, `setTraceSinkCallback`,
     /// `subscribeTraceEvents`) re-derives its sink through the same flag, so

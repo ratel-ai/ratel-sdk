@@ -1,8 +1,8 @@
 /**
  * `@ratel-ai/cloud-sdk/otel` is deprecated. Import `@ratel-ai/sdk/otel` instead.
  *
- * This entry point re-exports the names it exported before the Cloud code moved into
- * `@ratel-ai/sdk`. It holds no Cloud logic.
+ * This entry point re-exports the names it exported before the platform code moved into
+ * `@ratel-ai/sdk`. It holds no logic.
  *
  * @deprecated Import `@ratel-ai/sdk/otel`.
  */

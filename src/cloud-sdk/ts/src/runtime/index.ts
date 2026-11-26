@@ -1,10 +1,11 @@
 /**
- * `@ratel-ai/cloud-sdk/runtime` is deprecated. Import `@ratel-ai/sdk/cloud` instead.
+ * `@ratel-ai/cloud-sdk/runtime` is deprecated. Import `@ratel-ai/sdk/platform` instead.
  *
- * This entry point re-exports the names it exported before the Cloud code moved into
- * `@ratel-ai/sdk`. It holds no Cloud logic.
+ * This entry point re-exports the names it exported before the platform code moved into
+ * `@ratel-ai/sdk`. Each old Cloud name is an alias of its new Platform name. It holds
+ * no logic.
  *
- * @deprecated Import `@ratel-ai/sdk/cloud`.
+ * @deprecated Import `@ratel-ai/sdk/platform`.
  */
 
 export {
@@ -13,7 +14,6 @@ export {
   attachIntentGraphSync,
   CatalogSnapshotsPublisher,
   type CatalogSnapshotsPublisherOptions,
-  type CloudDefinitionsRuntimeAttachment,
   type DeliveryKind,
   type DeliveryOverall,
   type DeliveryResult,
@@ -28,8 +28,9 @@ export {
   type IntentGraphSyncOptions,
   type IntentGraphSyncStatus,
   isRemotelyPublishable,
-  type RatelCloud,
-  type RatelCloudOptions,
+  type PlatformDefinitionsRuntimeAttachment as CloudDefinitionsRuntimeAttachment,
+  type RatelPlatform as RatelCloud,
+  type RatelPlatformOptions as RatelCloudOptions,
   type RatelRuntime,
   type RatelRuntimeCatalog,
   type RatelRuntimeCatalogToolDefinition,
@@ -49,8 +50,8 @@ export {
   type RuntimeEventsPublisherOptions,
   type RuntimeEventsRetryOptions,
   type RuntimeEventType,
-  ratelCloud,
+  ratelPlatform as ratelCloud,
   type SnapshotDeliveryStatus,
   type ToolPicker,
   type ToolPickerMode,
-} from "@ratel-ai/sdk/cloud";
+} from "@ratel-ai/sdk/platform";

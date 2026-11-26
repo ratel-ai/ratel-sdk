@@ -183,8 +183,8 @@ describe("registerMcpServer", () => {
     const otherFake = await startFakeMcpServer([
       {
         name: "read_file",
-        description: "Read a remote file from the cloud bucket.",
-        handler: ({ path }) => ({ remoteContents: `cloud:${path as string}` }),
+        description: "Read a remote file from the remote bucket.",
+        handler: ({ path }) => ({ remoteContents: `remote:${path as string}` }),
       },
     ]);
 
@@ -193,26 +193,26 @@ describe("registerMcpServer", () => {
       name: "local",
       transport: fake.clientTransport,
     });
-    const cloudHandle = await registerMcpServer(catalog, {
-      name: "cloud",
+    const remoteHandle = await registerMcpServer(catalog, {
+      name: "remote",
       transport: otherFake.clientTransport,
     });
 
     expect(catalog.has("local__read_file")).toBe(true);
-    expect(catalog.has("cloud__read_file")).toBe(true);
+    expect(catalog.has("remote__read_file")).toBe(true);
 
     const localResult = (await catalog.invoke("local__read_file", {
       path: "/etc/hosts",
     })) as { structuredContent?: { contents?: string } };
-    const cloudResult = (await catalog.invoke("cloud__read_file", {
+    const remoteResult = (await catalog.invoke("remote__read_file", {
       path: "/etc/hosts",
     })) as { structuredContent?: { remoteContents?: string } };
 
     expect(localResult.structuredContent?.contents).toBe("contents of /etc/hosts");
-    expect(cloudResult.structuredContent?.remoteContents).toBe("cloud:/etc/hosts");
+    expect(remoteResult.structuredContent?.remoteContents).toBe("remote:/etc/hosts");
 
     await localHandle.close();
-    await cloudHandle.close();
+    await remoteHandle.close();
     await otherFake.server.close();
   });
 

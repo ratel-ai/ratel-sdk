@@ -493,8 +493,8 @@ export class ToolRegistry {
    *
    * `graphKey` is a caller-supplied label carried on the `usage_ranking_status`
    * event this emits — it never reaches native. It's how a downstream consumer
-   * (Ratel Cloud's dashboard) tells the runtime's own graph apart from one it
-   * served, e.g. `graphKey: "cloud"`.
+   * (Ratel Platform's dashboard) tells the runtime's own graph apart from one it
+   * served, e.g. `graphKey: "platform"`.
    *
    * Four configuration mistakes warn once here (suppressed by the same
    * `warnOnModelMismatch: false`, since that option already means "I gate on
@@ -1020,8 +1020,8 @@ export class SkillRegistry {
    *
    * `graphKey` is a caller-supplied label carried on the `usage_ranking_status`
    * event this emits — it never reaches native. It's how a downstream consumer
-   * (Ratel Cloud's dashboard) tells the runtime's own graph apart from one it
-   * served, e.g. `graphKey: "cloud"`.
+   * (Ratel Platform's dashboard) tells the runtime's own graph apart from one it
+   * served, e.g. `graphKey: "platform"`.
    *
    * Four configuration mistakes warn once here (suppressed by the same
    * `warnOnModelMismatch: false`, since that option already means "I gate on
