@@ -1,0 +1,116 @@
+{
+  "$comment": "Each vector names a schema of ../schema. A valid document must pass. An invalid document must fail, and its first error must be at the JSON pointer `path`. Run: node protocol/sandbox/v1/verify.mjs",
+  "vectors": [
+    { "schema": "run-request", "name": "run-request.full", "valid": true, "document": {
+      "v": 1, "runId": "run_01", "input": { "messages": [{ "role": "user", "content": "Where is order 42?" }] },
+      "params": { "model": "claude-sonnet-5-5", "tone": "friendly", "maxTurns": 4, "verbose": false },
+      "tools": { "lookup_order": { "mode": "live" }, "refund_order": { "mode": "simulated" }, "get_weather": { "mode": "recorded" } },
+      "fixtures": [{ "tool": "get_weather", "args": { "city": "Rome" }, "result": { "tempC": 21 } }],
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" } },
+    { "schema": "run-request", "name": "run-request.minimal-scalar-input", "valid": true, "document": {
+      "v": 1, "runId": "r", "input": "hello", "params": {}, "tools": {}, "fixtures": [] } },
+    { "schema": "run-request", "name": "run-request.null-input-unknown-field", "valid": true, "document": {
+      "v": 1, "runId": "r", "input": null, "params": {}, "tools": {}, "fixtures": [], "later": true } },
+    { "schema": "run-request", "name": "run-request.wrong-version", "valid": false, "path": "/v", "document": {
+      "v": 2, "runId": "r", "input": 1, "params": {}, "tools": {}, "fixtures": [] } },
+    { "schema": "run-request", "name": "run-request.missing-run-id", "valid": false, "path": "/runId", "document": {
+      "v": 1, "input": 1, "params": {}, "tools": {}, "fixtures": [] } },
+    { "schema": "run-request", "name": "run-request.missing-input", "valid": false, "path": "/input", "document": {
+      "v": 1, "runId": "r", "params": {}, "tools": {}, "fixtures": [] } },
+    { "schema": "run-request", "name": "run-request.nested-param", "valid": false, "path": "/params/history", "document": {
+      "v": 1, "runId": "r", "input": 1, "params": { "history": [{ "role": "user" }] }, "tools": {}, "fixtures": [] } },
+    { "schema": "run-request", "name": "run-request.unknown-tool-mode", "valid": false, "path": "/tools/refund_order/mode", "document": {
+      "v": 1, "runId": "r", "input": 1, "params": {}, "tools": { "refund_order": { "mode": "real" } }, "fixtures": [] } },
+    { "schema": "run-request", "name": "run-request.fixture-without-result", "valid": false, "path": "/fixtures/0/result", "document": {
+      "v": 1, "runId": "r", "input": 1, "params": {}, "tools": {}, "fixtures": [{ "tool": "get_weather", "args": {} }] } },
+    { "schema": "run-request", "name": "run-request.bad-traceparent", "valid": false, "path": "/traceparent", "document": {
+      "v": 1, "runId": "r", "input": 1, "params": {}, "tools": {}, "fixtures": [], "traceparent": "abc" } },
+
+    { "schema": "run-response", "name": "run-response.full", "valid": true, "document": {
+      "output": { "reply": "Order 42 is refunded." },
+      "toolCalls": [
+        { "name": "lookup_order", "args": { "id": "42" }, "result": { "status": "shipped" }, "mode": "live" },
+        { "name": "refund_order", "args": { "id": "42" }, "result": { "refunded": true }, "mode": "simulated" },
+        { "name": "cancel_order", "args": { "id": "42" }, "mode": "simulated", "error": { "code": "no_fake", "message": "The tool cancel_order is simulated and has no fake handler." } }
+      ],
+      "usage": { "inputTokens": 1200, "outputTokens": 80, "costUsd": 0.0048 } } },
+    { "schema": "run-response", "name": "run-response.text-output", "valid": true, "document": { "output": "plain text" } },
+    { "schema": "run-response", "name": "run-response.null-output", "valid": true, "document": { "output": null } },
+    { "schema": "run-response", "name": "run-response.missing-output", "valid": false, "path": "/output", "document": { "toolCalls": [] } },
+    { "schema": "run-response", "name": "run-response.call-without-mode", "valid": false, "path": "/toolCalls/0/mode", "document": {
+      "output": 1, "toolCalls": [{ "name": "lookup_order", "args": {}, "result": 1 }] } },
+    { "schema": "run-response", "name": "run-response.call-without-result-or-error", "valid": false, "path": "/toolCalls/0/result", "document": {
+      "output": 1, "toolCalls": [{ "name": "lookup_order", "args": {}, "mode": "live" }] } },
+    { "schema": "run-response", "name": "run-response.negative-tokens", "valid": false, "path": "/usage/inputTokens", "document": {
+      "output": 1, "usage": { "inputTokens": -1 } } },
+
+    { "schema": "error", "name": "error.invalid-request", "valid": true, "document": {
+      "error": { "code": "invalid_request", "message": "/runId is required" } } },
+    { "schema": "error", "name": "error.limit", "valid": true, "document": {
+      "error": { "code": "limit_reached", "message": "The limit sandbox_vm_starts_per_day (20) is reached.", "limit": "sandbox_vm_starts_per_day", "max": 20, "current": 20 } } },
+    { "schema": "error", "name": "error.flat-code", "valid": false, "path": "/error", "document": {
+      "error": "invalid_request", "message": "flat shape" } },
+    { "schema": "error", "name": "error.no-message", "valid": false, "path": "/error/message", "document": {
+      "error": { "code": "run_failed" } } },
+    { "schema": "error", "name": "error.bad-code", "valid": false, "path": "/error/code", "document": {
+      "error": { "code": "Run Failed", "message": "x" } } },
+    { "schema": "error", "name": "error.limit-without-name", "valid": false, "path": "/error/limit", "document": {
+      "error": { "code": "limit_reached", "message": "x", "max": 1, "current": 1 } } },
+
+    { "schema": "ratel-yaml", "name": "ratel-yaml.minimal", "valid": true, "document": {
+      "name": "support-agent", "input": { "example": "Where is order 42?" } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.full-http", "valid": true, "document": {
+      "name": "support-agent",
+      "image": { "dockerfile": "Dockerfile", "context": "." },
+      "run": { "mode": "http", "port": 8080, "timeoutSeconds": 120 },
+      "input": { "example": { "message": "Refund order 42" }, "schema": { "type": "object", "required": ["message"] } },
+      "params": {
+        "model": { "type": "enum", "options": ["claude-sonnet-5-5", "claude-haiku-5-5"], "default": "claude-sonnet-5-5", "description": "The model." },
+        "tone": { "type": "string", "default": "friendly" },
+        "maxTurns": { "type": "number", "default": 4 },
+        "verbose": { "type": "boolean", "default": false }
+      },
+      "secrets": ["ANTHROPIC_API_KEY"],
+      "tools": { "lookup_order": { "mode": "live" }, "refund_order": { "mode": "simulated" }, "get_weather": { "mode": "recorded" } },
+      "network": { "allow": ["api.anthropic.com", "*.example.com"] } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.command-image-ref", "valid": true, "document": {
+      "name": "command-agent", "image": { "ref": "ghcr.io/acme/agent:1.2" },
+      "run": { "mode": "command", "command": ["python", "agent.py"] }, "input": { "example": { "text": "hi" } } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.missing-name", "valid": false, "path": "/name", "document": {
+      "input": { "example": 1 } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.bad-name", "valid": false, "path": "/name", "document": {
+      "name": "Support Agent", "input": { "example": 1 } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.missing-example", "valid": false, "path": "/input/example", "document": {
+      "name": "a", "input": {} } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.unknown-field", "valid": false, "path": "/entry", "document": {
+      "name": "a", "input": { "example": 1 }, "entry": "src/agent.ts" } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.image-both-forms", "valid": false, "path": "/image/ref", "document": {
+      "name": "a", "input": { "example": 1 }, "image": { "dockerfile": "Dockerfile", "ref": "x:1" } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.context-leaves-project", "valid": false, "path": "/image/context", "document": {
+      "name": "a", "input": { "example": 1 }, "image": { "context": "../other" } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.command-mode-without-command", "valid": false, "path": "/run/command", "document": {
+      "name": "a", "input": { "example": 1 }, "run": { "mode": "command" } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.unknown-run-mode", "valid": false, "path": "/run/mode", "document": {
+      "name": "a", "input": { "example": 1 }, "run": { "mode": "grpc" } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.timeout-too-long", "valid": false, "path": "/run/timeoutSeconds", "document": {
+      "name": "a", "input": { "example": 1 }, "run": { "timeoutSeconds": 7200 } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.enum-without-options", "valid": false, "path": "/params/model/options", "document": {
+      "name": "a", "input": { "example": 1 }, "params": { "model": { "type": "enum" } } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.options-on-string", "valid": false, "path": "/params/tone", "document": {
+      "name": "a", "input": { "example": 1 }, "params": { "tone": { "type": "string", "options": ["a"] } } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.default-wrong-type", "valid": false, "path": "/params/maxTurns/default", "document": {
+      "name": "a", "input": { "example": 1 }, "params": { "maxTurns": { "type": "number", "default": "4" } } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.enum-default-not-an-option", "valid": false, "path": "/params/model/default", "document": {
+      "name": "a", "input": { "example": 1 }, "params": { "model": { "type": "enum", "options": ["x", "y"], "default": "z" } } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.reserved-secret", "valid": false, "path": "/secrets/0", "document": {
+      "name": "a", "input": { "example": 1 }, "secrets": ["RATEL_API_KEY"] } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.secret-value", "valid": false, "path": "/secrets/0", "document": {
+      "name": "a", "input": { "example": 1 }, "secrets": [{ "ANTHROPIC_API_KEY": "sk-..." }] } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.unknown-tool-mode", "valid": false, "path": "/tools/refund_order/mode", "document": {
+      "name": "a", "input": { "example": 1 }, "tools": { "refund_order": { "mode": "real" } } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.side-effect-field", "valid": false, "path": "/tools/refund_order/sideEffect", "document": {
+      "name": "a", "input": { "example": 1 }, "tools": { "refund_order": { "sideEffect": true } } } },
+    { "schema": "ratel-yaml", "name": "ratel-yaml.allow-url-not-domain", "valid": false, "path": "/network/allow/0", "document": {
+      "name": "a", "input": { "example": 1 }, "network": { "allow": ["https://api.anthropic.com"] } } }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/run-request.schema.json",
+  "title": "RunRequest",
+  "description": "One run of an agent image. HTTP mode: the body of POST /ratel/run. Command mode: the JSON that Ratel writes on the stdin of the declared command. A receiver ignores fields that it does not know.",
+  "type": "object",
+  "required": ["v", "runId", "input", "params", "tools", "fixtures"],
+  "properties": {
+    "v": { "const": 1, "description": "The major version of the contract." },
+    "runId": { "type": "string", "minLength": 1, "description": "The id of this run. It is unique for each run." },
+    "input": { "description": "Any JSON. Conversation history belongs here, never in params." },
+    "params": {
+      "type": "object",
+      "description": "A flat object of the parameters that ratel.yaml declares, with their values for this run.",
+      "propertyNames": { "$ref": "#/$defs/paramName" },
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
+    "tools": {
+      "type": "object",
+      "description": "The mode of each tool for this run.",
+      "propertyNames": { "$ref": "#/$defs/toolName" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["mode"],
+        "properties": { "mode": { "$ref": "#/$defs/toolMode" } }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "description": "Recorded tool results. A tool in mode recorded answers from the fixture with the same tool name and the same normalized arguments.",
+      "items": {
+        "type": "object",
+        "required": ["tool", "args", "result"],
+        "properties": {
+          "tool": { "$ref": "#/$defs/toolName" },
+          "args": { "type": "object" },
+          "result": { "description": "Any JSON." }
+        }
+      }
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "A W3C trace context. The run continues this trace."
+    }
+  },
+  "$defs": {
+    "paramName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$" },
+    "toolName": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,128}$" },
+    "toolMode": { "enum": ["simulated", "recorded", "live"] }
+  }
+}
