@@ -96,14 +96,15 @@ export async function startEvalRun({
   return answer as StartedExperiment;
 }
 
-/** Reads the experiment until it is completed. */
+/** Reads the experiment until it is completed, or throws `wait_timeout` (exit 4) at the deadline. */
 export async function waitForEvalRun(
   experimentId: string,
   { url, apiKey }: Address,
-  sleep: Sleep = wait,
+  { timeoutMs, sleep = wait }: { timeoutMs: number; sleep?: Sleep },
 ): Promise<Experiment> {
   const address = `${origin(url)}/evals/experiments/${experimentId}`;
-  for (let failures = 0; ; await sleep(POLL_MS)) {
+  const deadline = Date.now() + timeoutMs;
+  for (let failures = 0; ; ) {
     try {
       const answer = await call("GET", address, apiKey);
       if (!Array.isArray(answer.cases) || !answer.counts) throw unreadable();
@@ -113,6 +114,15 @@ export async function waitForEvalRun(
       failures += 1;
       if (!mayTryAgain(error) || failures >= POLL_FAILURES) throw error;
     }
+    const left = deadline - Date.now();
+    if (left <= 0) {
+      const message = `The experiment ${experimentId} did not end in ${Math.round(timeoutMs / 1000)} s. It can still end on Ratel.`;
+      throw new EvalCallError(message, EVAL_EXIT.unavailable, {
+        error: "wait_timeout",
+        experimentId,
+      });
+    }
+    await sleep(Math.min(POLL_MS, left));
   }
 }
 

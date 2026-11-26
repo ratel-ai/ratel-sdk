@@ -21,18 +21,27 @@ import {
 } from "./run.js";
 
 export const EVAL_USAGE = `Usage: ratel eval run [--version <id|latest>] [--trials <n>] [-f ratel.yaml] [--param name=value]...
-                      [--label <label>] [--name <name>] [--json] [--no-wait] [--compare-baseline]
+                      [--label <label>] [--name <name>] [--timeout <seconds>] [--json] [--no-wait]
+                      [--compare-baseline]
        ratel eval baseline pin <experiment-id> [--json]
 
 Runs each approved case on an image version and prints the counts of each case. With
 --compare-baseline, prints the verdict against the pinned baseline, and it gives the exit code.
 --param takes a parameter that ratel.yaml declares. The defaults of ratel.yaml apply.
+--timeout is the longest wait for the end of the run. Default: trials (3 when not given) times
+run.timeoutSeconds of ratel.yaml (300 when not given), plus 600. At the deadline it exits with 4.
 
   RATEL_API_KEY   a project key with the permissions evals:read and evals:write
   RATEL_BASE_URL  the API root of Ratel, with /api/v1 (default https://app.ratel.sh/api/v1)
 `;
 
 const MAX_TRIALS = 20;
+/** The trials of Ratel when --trials is not given (protocol/evals/v1 start-experiment). */
+const DEFAULT_TRIALS = 3;
+/** The run.timeoutSeconds of ratel.yaml when it is not given (protocol/sandbox/v1). */
+const DEFAULT_RUN_TIMEOUT_SECONDS = 300;
+/** The time on top of the trials: the queue and the scorers. */
+const WAIT_MARGIN_SECONDS = 600;
 
 /** What `ratel eval` reads and writes. */
 export interface EvalIo {
@@ -81,7 +90,11 @@ export async function evalCommand(argv: string[], io: EvalIo): Promise<number> {
       return EVAL_EXIT.pass;
     }
     io.stderr(`ratel: experiment ${oneLine(started.experimentId)} started\n`);
-    const experiment = await waitForEvalRun(started.experimentId, { url, apiKey });
+    const experiment = await waitForEvalRun(
+      started.experimentId,
+      { url, apiKey },
+      { timeoutMs: options.timeoutMs },
+    );
     const exitCode = exitCodeOf(experiment);
     if (options.compare) {
       const comparison = await compareEvalRun(started.experimentId, { url, apiKey });
@@ -109,6 +122,8 @@ type Options = {
   name?: string;
   wait: boolean;
   compare: boolean;
+  /** The longest wait for the end of the run. */
+  timeoutMs: number;
   /** The experiment that `baseline pin` pins. */
   pin?: string;
   help: boolean;
@@ -125,6 +140,7 @@ async function read(argv: string[]): Promise<Options | string> {
   const { values, positionals } = parsed;
   const base = {
     sandboxVersion: values.version ?? "latest",
+    timeoutMs: 0,
     wait: !values["no-wait"],
     compare: values["compare-baseline"] ?? false,
     help: values.help ?? false,
@@ -144,18 +160,26 @@ async function read(argv: string[]): Promise<Options | string> {
   if (trials !== undefined && !(Number.isInteger(trials) && trials >= 1 && trials <= MAX_TRIALS)) {
     return `--trials is a whole number from 1 to ${MAX_TRIALS}.`;
   }
+  const timeout = values.timeout === undefined ? undefined : Number(values.timeout);
+  if (timeout !== undefined && !(Number.isInteger(timeout) && timeout >= 1)) {
+    return "--timeout is a whole number of seconds from 1.";
+  }
   for (const flag of ["label", "name"] as const) {
     if (values[flag] !== undefined && values[flag].trim() === "") return `--${flag} is empty.`;
   }
-  let params: Record<string, ParamValue> | undefined;
+  let config: Awaited<ReturnType<typeof readConfig>>;
   try {
-    params = await readParams(values.file, values.param);
+    config = await readConfig(values.file, values.param);
   } catch (error) {
     if (error instanceof CliError) return error.message;
     throw error;
   }
+  const { params, runTimeoutSeconds } = config;
+  const waitSeconds =
+    timeout ?? (trials ?? DEFAULT_TRIALS) * runTimeoutSeconds + WAIT_MARGIN_SECONDS;
   return {
     ...base,
+    timeoutMs: waitSeconds * 1000,
     ...(trials ? { trials } : {}),
     ...(params ? { params } : {}),
     ...(values.label ? { label: values.label } : {}),
@@ -165,14 +189,17 @@ async function read(argv: string[]): Promise<Options | string> {
 
 /**
  * The parameter values of the run: the defaults of `ratel.yaml` with each `--param` applied. With
- * no `ratel.yaml` and no `--param`, none: the version keeps its own defaults.
+ * no `ratel.yaml` and no `--param`, none: the version keeps its own defaults. Also the
+ * `run.timeoutSeconds` of `ratel.yaml`, for the default of `--timeout`.
  */
-async function readParams(
+async function readConfig(
   file: string | undefined,
   flags: string[],
-): Promise<Record<string, ParamValue> | undefined> {
+): Promise<{ params?: Record<string, ParamValue>; runTimeoutSeconds: number }> {
   const path = file ?? "ratel.yaml";
-  if (file === undefined && flags.length === 0 && !existsSync(path)) return undefined;
+  if (file === undefined && flags.length === 0 && !existsSync(path)) {
+    return { runTimeoutSeconds: DEFAULT_RUN_TIMEOUT_SECONDS };
+  }
   if (file === undefined && !existsSync(path)) {
     throw new CliError(
       "--param needs the ratel.yaml that declares it: give it with -f.",
@@ -181,7 +208,10 @@ async function readParams(
     );
   }
   const { config } = await loadConfig(path);
-  return parseParams(config, flags);
+  return {
+    params: parseParams(config, flags),
+    runTimeoutSeconds: config.run?.timeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS,
+  };
 }
 
 function parse(argv: string[]) {
@@ -195,6 +225,7 @@ function parse(argv: string[]) {
       param: { type: "string", multiple: true, default: [] as string[] },
       label: { type: "string" },
       name: { type: "string" },
+      timeout: { type: "string" },
       json: { type: "boolean" },
       "no-wait": { type: "boolean" },
       "compare-baseline": { type: "boolean" },

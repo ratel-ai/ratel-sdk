@@ -109,7 +109,8 @@ end and prints the output and a link. `--json` prints the run as one JSON docume
 
 ```
 ratel eval run [--version id|latest] [--trials n] [-f ratel.yaml] [--param name=value]...
-               [--label label] [--name name] [--json] [--no-wait] [--compare-baseline]
+               [--label label] [--name name] [--timeout seconds] [--json] [--no-wait]
+               [--compare-baseline]
 ratel eval baseline pin <experiment-id> [--json]
 ```
 
@@ -121,6 +122,12 @@ the label, and `--name` names the experiment. `--json` prints one JSON document:
 `params` and, with `--compare-baseline`, the `comparison` (verdict, rule and changed cases).
 `--compare-baseline` needs a pinned baseline: `ratel eval baseline pin <experiment-id>`.
 
+`--timeout` is the longest wait for the end of the run, in whole seconds. The default is
+`trials × run.timeoutSeconds + 600`: `trials` is `--trials` (3 when not given) and
+`run.timeoutSeconds` comes from `ratel.yaml` (300 when not given or with no `ratel.yaml`). Give a
+larger `--timeout` for many cases. At the deadline the command exits with 4, and `--json` prints
+`{"error": "wait_timeout", "message", "experimentId"}`. The run can still end on Ratel.
+
 The exit codes of `ratel eval` are a contract of CI gates, and they did not change:
 
 | Code | `ratel eval run` | With `--compare-baseline` |
@@ -129,7 +136,7 @@ The exit codes of `ratel eval` are a contract of CI gates, and they did not chan
 | 1 | A case fails | `regressed` |
 | 2 | A case is invalid and none fails | `inconclusive` |
 | 3 | Ratel refused the call, or a wrong flag or `ratel.yaml` | the same |
-| 4 | Ratel did not answer, or its answer is not readable | the same |
+| 4 | Ratel did not answer, its answer is not readable, or the run did not end in `--timeout` | the same |
 
 ## Try it with the test server
 

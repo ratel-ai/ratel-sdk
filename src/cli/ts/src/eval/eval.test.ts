@@ -182,6 +182,19 @@ describe("exit codes", () => {
     start = { status: 200, body: "<html>" };
     expect((await ratel(["run"])).code).toBe(4);
   });
+
+  it("4: a run that is still running at --timeout, with wait_timeout and the id of the run", async () => {
+    reads = [{ status: 200, body: { ...experiment, state: "running" } }];
+    const { code, out, err } = await ratel(["run", "--timeout", "1", "--json"]);
+    expect(code).toBe(4);
+    expect(JSON.parse(out)).toMatchObject({ error: "wait_timeout", experimentId: ID });
+    expect(err).toMatch(/did not end in 1 s/);
+  }, 15_000);
+
+  it.each(["0", "-1", "x", "1.5"])("3: --timeout %s is not a number of seconds", async (value) => {
+    expect((await ratel(["run", "--timeout", value])).code).toBe(3);
+    expect(calls).toHaveLength(0);
+  });
 });
 
 it("sends the options with the key", async () => {
