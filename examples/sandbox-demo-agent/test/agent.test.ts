@@ -35,7 +35,10 @@ let base = "";
 
 before(async () => {
   await new Promise<void>((done) => model.listen(0, "127.0.0.1", done));
-  agent = spawn("npx", ["tsx", fileURLToPath(new URL("../src/agent.ts", import.meta.url))], {
+  // One node process with the tsx loader: kill() stops the agent itself. Through npx, a shell
+  // between npx and the agent can keep the agent alive, and this test file never ends.
+  const entry = fileURLToPath(new URL("../src/agent.ts", import.meta.url));
+  agent = spawn(process.execPath, ["--import", "tsx", entry], {
     env: {
       ...process.env,
       PORT: "0",
@@ -55,7 +58,7 @@ before(async () => {
     });
     agent.on("exit", (code) => reject(new Error(`the agent exited with ${code}: ${logs}`)));
   });
-});
+}, { timeout: 60_000 });
 
 after(() => {
   agent.kill();
