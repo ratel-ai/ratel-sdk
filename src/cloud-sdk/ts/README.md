@@ -32,6 +32,22 @@ import { RatelSpanProcessor } from "@ratel-ai/sdk/otel";
 import { MockCloud } from "@ratel-ai/sdk/cloud/testing";
 ```
 
+When you create the runtime with `ratel()`, you can replace the separate calls with one option.
+`ratel({ cloud })` publishes events and snapshots, and `r.cloud` holds the management clients and
+the Tool Picker:
+
+```ts
+// Before
+const r = ratel();
+const attachment = attach(r, { apiKey: process.env.RATEL_API_KEY });
+const sdk = new RatelCloudSdk({ apiKey: process.env.RATEL_API_KEY! });
+
+// After
+const r = ratel({ cloud: true }); // reads RATEL_API_KEY and RATEL_BASE_URL
+await r.cloud.skills.list();
+await r.cloud.close(); // replaces attachment.close()
+```
+
 `@ratel-ai/sdk/otel` keeps the OpenTelemetry exporter packages as optional peers, as this package
 did. `@ratel-ai/sdk/cloud`, `@ratel-ai/sdk/otel` and `@ratel-ai/sdk/cloud/testing` do not load the
 native addon.

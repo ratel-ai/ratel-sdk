@@ -12,9 +12,8 @@ import { attach } from "@ratel-ai/sdk/cloud";
 import { MockCloud } from "@ratel-ai/sdk/cloud/testing";
 
 // Hybrid target:
-//   • RATEL_CLOUD_ROOT unset → runs in process against MockCloud, plus a small fake of
-//     the runtime ingest routes (`POST /events`, `PUT /catalog/snapshot`) that MockCloud
-//     does not serve. No network, no database, no credentials.
+//   • RATEL_CLOUD_ROOT unset → runs in process against MockCloud, plus its own small fake
+//     of the runtime ingest routes (`POST /events`, `PUT /catalog/snapshot`). No network, no database, no credentials.
 //   • RATEL_CLOUD_ROOT set → the live acceptance against a local ratel-cloud and its
 //     Postgres database (see README.md).
 if (!process.env.RATEL_CLOUD_ROOT?.trim()) {
@@ -333,7 +332,7 @@ async function runAgainstMockCloud() {
   }
 }
 
-/** MockCloud for every route, plus the two runtime ingest routes it does not serve. */
+/** MockCloud for every route, plus its own fake of the two runtime ingest routes. */
 function mockRuntimeIngest(cloud) {
   const events = [];
   const snapshots = [];

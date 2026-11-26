@@ -20,7 +20,8 @@ export class RatelCloudSdk {
   readonly jobs: JobsClient;
   readonly runtimeCatalog: RuntimeCatalogClient;
 
-  constructor(options: CloudSdkOptions) {
+  /** With no options, the client reads `RATEL_API_KEY` and `RATEL_BASE_URL`. */
+  constructor(options: CloudSdkOptions = {}) {
     const transport = new Transport(options);
     this.skills = new SkillsClient(transport);
     this.suggestions = new SuggestionsClient(transport);
