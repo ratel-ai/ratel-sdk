@@ -5,9 +5,9 @@ import { type Catalog, SKILL_FIELDS, type WireSkill } from "./types.js";
 import { canonicalSet, ifNoneMatchMatches, resolve } from "./wire.js";
 
 /**
- * protocol/v1 conformance: reproduce every vendored vector byte-for-byte
- * (`catalog-vectors.json`, a copy of the protocol's `vectors.json`). A failure
- * here means this port has drifted from the frozen contract.
+ * protocol/v1 conformance: reproduce every vector in the shared
+ * `protocol/v1/conformance/vectors.json` byte-for-byte. A failure here means
+ * this port has drifted from the frozen contract.
  */
 
 interface EtagVector {
@@ -35,7 +35,10 @@ interface Vectors {
 }
 
 const vectors: Vectors = JSON.parse(
-  readFileSync(new URL("./testing/catalog-vectors.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../../../../../protocol/v1/conformance/vectors.json", import.meta.url),
+    "utf8",
+  ),
 );
 
 function etagFor(vectorName: string): { etag: string; skills: WireSkill[] } {

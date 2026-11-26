@@ -36,7 +36,10 @@ interface Vectors {
 }
 
 const vectors: Vectors = JSON.parse(
-  readFileSync(new URL("./testing/catalog-vectors-v2.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../../../../../protocol/v2/conformance/vectors.json", import.meta.url),
+    "utf8",
+  ),
 );
 
 function etagFor(vectorName: string): { etag: string; skills: WireSkillV2[] } {

@@ -6,7 +6,7 @@
  * `lib/suggestions/http.ts` `serializeSuggestion`) field-for-field. The catalog
  * wire shapes and their ETag algorithms are frozen protocol contracts;
  * conformance is pinned by `wire.test.ts` and `wire-v2.test.ts` against the
- * vendored vectors.
+ * shared vectors in `protocol/v1/conformance` and `protocol/v2/conformance`.
  */
 
 /* — protocol/v1 catalog wire ————————————————————————————————————————————— */

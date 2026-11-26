@@ -26,7 +26,10 @@ interface Vectors {
 }
 
 const vectors: Vectors = JSON.parse(
-  readFileSync(new URL("./catalog-vectors-v2.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../../../../../../protocol/v2/conformance/vectors.json", import.meta.url),
+    "utf8",
+  ),
 );
 
 describe("MockCloud catalog protocol v2", () => {

@@ -3,7 +3,8 @@
  * conditional-GET matching. These are faithful, dependency-free ports of the
  * protocol reference verifiers. Pure string/byte functions only: the SHA-256
  * that turns canonical bytes into an ETag is intentionally NOT here, so this
- * module runs on any runtime. Tests pin both versions against vendored vectors.
+ * module runs on any runtime. Tests pin both versions against the shared
+ * `protocol/v1` and `protocol/v2` conformance vectors.
  *
  * Anything that changes a version's bytes — field set, order, canonicalization,
  * or resolve/overlay rule — requires a new protocol version.
