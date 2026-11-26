@@ -2,7 +2,7 @@ import type {
   ExperimentalDefinitionOverlaySource,
   ExperimentalDefinitionOverridesAttachment,
   ExperimentalDefinitionOverridesRuntimeCatalog,
-} from "@ratel-ai/sdk";
+} from "../../index.js";
 import { RuntimeCatalogClient } from "../runtime-catalog.js";
 import { type CloudSdkOptions, Transport } from "../transport.js";
 

@@ -34,6 +34,53 @@ export class RatelCloudSdk {
 export { CloudSdkError, type CloudSdkErrorCode } from "./errors.js";
 export { IntentsClient, type ListIntentsOptions } from "./intents.js";
 export { JobsClient, type WaitForJobOptions } from "./jobs.js";
+// The runtime names: fail-open runtime facts delivery, plus Tool Picker ranking.
+// `RuntimeCatalogSnapshot`, `RuntimeCatalogToolDefinition` and `RuntimeEvent` come from
+// `./types.js` above.
+export {
+  type AttachOptions,
+  attach,
+  attachIntentGraphSync,
+  CatalogSnapshotsPublisher,
+  type CatalogSnapshotsPublisherOptions,
+  type CloudDefinitionsRuntimeAttachment,
+  type DeliveryKind,
+  type DeliveryOverall,
+  type DeliveryResult,
+  DeliveryStatus,
+  type DeliveryStatusOptions,
+  type EventsDeliveryStatus,
+  hashCatalogSnapshot,
+  type IntentGraphSync,
+  type IntentGraphSyncCatalog,
+  type IntentGraphSyncError,
+  type IntentGraphSyncErrorKind,
+  type IntentGraphSyncOptions,
+  type IntentGraphSyncStatus,
+  isRemotelyPublishable,
+  type RatelCloud,
+  type RatelCloudOptions,
+  type RatelRuntime,
+  type RatelRuntimeCatalog,
+  type RatelRuntimeCatalogToolDefinition,
+  type RatelRuntimeEvents,
+  RUNTIME_EVENT_BATCH_MAX_BYTES,
+  RUNTIME_EVENT_BATCH_MAX_EVENTS,
+  RUNTIME_EVENT_MAX_BYTES,
+  RUNTIME_EVENT_TYPES,
+  type RuntimeAttachment,
+  type RuntimeDeliveryStatus,
+  type RuntimeEventRejection,
+  type RuntimeEventSubscription,
+  RuntimeEventsPublisher,
+  type RuntimeEventsPublisherOptions,
+  type RuntimeEventsRetryOptions,
+  type RuntimeEventType,
+  ratelCloud,
+  type SnapshotDeliveryStatus,
+  type ToolPicker,
+  type ToolPickerMode,
+} from "./runtime/index.js";
 export { RuntimeCatalogClient } from "./runtime-catalog.js";
 export { type ListSkillsOptions, type ListSkillsResult, SkillsClient } from "./skills.js";
 export { type ListSuggestionsOptions, SuggestionsClient } from "./suggestions.js";

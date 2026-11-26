@@ -1,14 +1,14 @@
 /**
- * `@ratel-ai/cloud-sdk/otel` — the Ratel Cloud telemetry destination.
+ * `@ratel-ai/sdk/otel` — the Ratel Cloud telemetry destination.
  *
- * Imported from a subpath on purpose: the package root stays dependency-free for
+ * Imported from a subpath on purpose: `@ratel-ai/sdk/cloud` stays free of the exporters for
  * consumers who only manage a catalog, and the OpenTelemetry packages are optional
  * peers that only telemetry users install. A missing peer fails at module resolution
  * — explicitly, at import time — rather than somewhere deep in a runtime code path.
  *
  * ```ts
  * import { NodeSDK } from "@opentelemetry/sdk-node";
- * import { RatelLogRecordProcessor, RatelSpanProcessor } from "@ratel-ai/cloud-sdk/otel";
+ * import { RatelLogRecordProcessor, RatelSpanProcessor } from "@ratel-ai/sdk/otel";
  *
  * const sdk = new NodeSDK({
  *   spanProcessors: [new RatelSpanProcessor()],

@@ -1,5 +1,5 @@
-import { RetrieverError, ratel } from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
+import { RetrieverError, ratel } from "../../index.js";
 import { attach } from "./attach.js";
 import { ratelCloud } from "./tool-picker.js";
 

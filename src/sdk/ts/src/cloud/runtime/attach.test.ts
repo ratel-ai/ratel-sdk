@@ -1,5 +1,5 @@
-import { ratel } from "@ratel-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
+import { ratel } from "../../index.js";
 import { MockCloud } from "../testing/mock-cloud.js";
 import type { RuntimeEvent } from "../types.js";
 import { attach, type RatelRuntime, type RatelRuntimeEvents } from "./attach.js";

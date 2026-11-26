@@ -1,4 +1,4 @@
-import type { IntentGraph as IntentGraphType } from "@ratel-ai/sdk";
+import type { IntentGraph as IntentGraphType } from "../../index.js";
 import { DEFAULT_BASE_URL, DEFAULT_TIMEOUT_MS } from "../transport.js";
 import type { RuntimeEvent } from "../types.js";
 import type { RatelRuntimeEvents } from "./attach.js";
@@ -808,7 +808,7 @@ export async function attachIntentGraphSync(
 
 async function loadIntentGraph(): Promise<typeof IntentGraphType> {
   try {
-    const sdk = (await import("@ratel-ai/sdk")) as { IntentGraph?: typeof IntentGraphType };
+    const sdk = (await import("../../registry.js")) as { IntentGraph?: typeof IntentGraphType };
     if (typeof sdk.IntentGraph !== "function") {
       throw new Error("missing IntentGraph export");
     }

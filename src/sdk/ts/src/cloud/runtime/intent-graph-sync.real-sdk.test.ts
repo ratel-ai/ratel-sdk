@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
-import { IntentGraph, ratel } from "@ratel-ai/sdk";
 import { describe, expect, it } from "vitest";
+import { IntentGraph, ratel } from "../../index.js";
 import { attachIntentGraphSync } from "./intent-graph-sync.js";
 
 const require = createRequire(import.meta.url);

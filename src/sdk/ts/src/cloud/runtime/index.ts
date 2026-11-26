@@ -1,4 +1,4 @@
-/** `@ratel-ai/cloud-sdk/runtime` — fail-open runtime facts delivery, plus Tool Picker ranking. */
+/** The runtime part of `@ratel-ai/sdk/cloud` — fail-open runtime facts delivery, plus Tool Picker ranking. */
 
 export type {
   RuntimeCatalogSnapshot,
