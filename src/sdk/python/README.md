@@ -532,6 +532,91 @@ It records `requests`, `received_event_batches`, `runtime_events`, `received_sna
 `seed_runtime_catalog_override`, `seed_intent_graph` and `seed_tool_ranking`, script failures with
 `script_responses`, and add routes with `add_route`.
 
+## Retrieval experiments (experimental)
+
+`experimental_define_experiment` wraps host-supplied async selectors with a deterministic A/B
+assignment and bounded shadow evaluation, like `experimentalDefineExperiment` in `@ratel-ai/sdk`.
+It is opt-in. It does not change the ranking of `ToolCatalog` or `SkillCatalog`. This API may
+change without a major version bump.
+
+```python
+from ratel_ai import experimental_define_experiment, ratel
+
+r = ratel()
+
+
+async def control(query, context):
+    return [{"id": "inspect-ci", "score": 1.0}, {"id": "search-logs", "score": 0.8}]
+
+
+async def candidate(query, context):
+    return [{"id": "search-logs", "score": 0.9}, {"id": "inspect-ci", "score": 0.7}]
+
+
+experiment = experimental_define_experiment(
+    {
+        "id": "retrieval-v2",
+        "arms": {"control": {"select": control}, "candidate": {"select": candidate}},
+        "split": [{"arm": "control", "weight": 90}, {"arm": "candidate", "weight": 10}],
+        "ranking": lambda hits: [{"id": h["id"], "score": h["score"]} for h in hits],
+        "evaluation": {
+            "k": 2,
+            "references": [
+                "peer-selection",
+                {"kind": "invocation", "window": {"turns": 5, "max_age_ms": 300_000}},
+            ],
+            "outcome": True,
+        },
+        "fallback_arm": "control",
+        "shadow_policy": {"concurrency": 1},
+    },
+    r.events,
+)
+
+selection = await experiment.select("build failure", unit_id="account-42", shadow=True, k=2)
+if selection.result:
+    experiment.report_invocation(unit_id="account-42", tool_id=selection.result[0]["id"])
+experiment.report_outcome(selection_id=selection.selection_id, label="accepted", score=1)
+print(selection.assigned_arm, selection.effective_arm, selection.result)
+await experiment.drain()
+```
+
+An `Experiment` has five operations:
+
+| operation | contract |
+| --- | --- |
+| `await select(params, *, unit_id, arm=None, shadow=False, k=None, transform=None, attributes=None)` | Returns an `ExperimentSelection`: the transformed `result`, `selection_id`, `assigned_arm`, `effective_arm` and the arm-callback `duration_ms`. An explicit `arm` overrides `split`. |
+| `await warm()` | Starts the unresolved arm warmups at once. It never raises. A failed warmup stays cold and retries on the next call. A selection never waits for a warmup. |
+| `await drain()` | Waits for the shadow and comparison work that started before the call. It never raises, can run again and does not close the experiment. |
+| `report_invocation(*, unit_id, tool_id, turn=None)` | Attributes a tool to the configured in-process invocation window. It does nothing without an invocation reference. |
+| `report_outcome(*, selection_id, label=None, score=None)` | Appends a delayed outcome when `evaluation.outcome` is true. It needs a non-empty label or a finite score. Repeated reports stay distinct. |
+
+The assignment hashes the compact JSON array `[experiment_id, unit_id]` with SHA-256 into the
+ordered integer weights, as TypeScript does: the same ids get the same arm in both SDKs
+([`protocol/v1/conformance/experiment-split-vectors.json`](../../../protocol/v1/conformance/experiment-split-vectors.json)
+pins it). Pass an opaque stable unit id. Telemetry records only the first 16 hex characters of
+`SHA-256(unit_id)`. `shadow=True` runs every other arm in declaration order. Capacity is per
+experiment instance, and an arm over it is skipped (`experiment_skip`, reason `capacity`), never
+queued. The selection never waits for a shadow, and a shadow failure never changes the served
+result: it records `experiment_drop` with the reason `arm-failed`, `selection-failed`,
+`fallback-consumed`, `served-ranking-failed` or `comparison-failed`. When the assigned selector
+raises, `fallback_arm` serves and can reuse a running shadow of that arm. The fallback does not run
+for an empty ranking, a ranking failure or a `transform` error.
+
+`transform` runs synchronously after the arm callback and before the ranking, the telemetry and the
+return. An arm selector receives the caller params and an `ExperimentArmContext` with its `role`
+(`serving` or `shadow`). It owns its deadlines: a `TimeoutError` is classified as a timeout. The
+comparison uses ids only (top-1, exact order, overlap and Jaccard@K), never scores. The request `k`
+overrides the configured value (default 10) and does not cut the result.
+
+Each arm run opens a `ratel.experiment.arm` span with the five `ratel.experiment.*` baggage
+entries, and its facts are OpenTelemetry log events (`ratel.experiment.results`, `.comparison`,
+`.skip`, `.fallback`, `.drop`, `.invocation`, `.outcome`) with the attribute names of
+`ratel_ai_telemetry`. With `r.events`, each fact also arrives as an `experiment_*` runtime event,
+with the same `event_id` as its span or log event. Call descendant model and tool work inside the
+arm selector so it inherits the experiment baggage. The runnable
+[`examples/experiments-python`](../../../examples/experiments-python) runs a two-arm experiment.
+
 ## Facts (experimental)
 
 Tools and skills are **pulled** — a query ranks them and only the winners reach the model. Facts are the opposite: constant content the agent should always work from (a shop's address, hours, a brand's voice), **pushed** into the context and deduplicated so it is injected once rather than every turn.

@@ -26,6 +26,8 @@ from ratel_ai_telemetry import (
     RATEL_EXPERIMENT_ARM,
     RATEL_EXPERIMENT_ARM_BAGGAGE_KEY,
     RATEL_EXPERIMENT_COLD,
+    RATEL_EXPERIMENT_COMPARISON,
+    RATEL_EXPERIMENT_DROP,
     RATEL_EXPERIMENT_DROP_REASON,
     RATEL_EXPERIMENT_DURATION_MS,
     RATEL_EXPERIMENT_EFFECTIVE_ARM,
@@ -35,6 +37,7 @@ from ratel_ai_telemetry import (
     RATEL_EXPERIMENT_HIT_COUNT,
     RATEL_EXPERIMENT_ID,
     RATEL_EXPERIMENT_ID_BAGGAGE_KEY,
+    RATEL_EXPERIMENT_INVOCATION,
     RATEL_EXPERIMENT_INVOCATION_AGE_MS,
     RATEL_EXPERIMENT_INVOCATION_ATTRIBUTED,
     RATEL_EXPERIMENT_INVOCATION_RANK,
@@ -60,6 +63,7 @@ from ratel_ai_telemetry import (
     RATEL_EXPERIMENT_SHADOW_DURATION_MS,
     RATEL_EXPERIMENT_SHADOW_HIT_COUNT,
     RATEL_EXPERIMENT_SHADOW_OUTCOME,
+    RATEL_EXPERIMENT_SKIP,
     RATEL_EXPERIMENT_SKIP_ARM,
     RATEL_EXPERIMENT_SKIP_CONCURRENCY,
     RATEL_EXPERIMENT_SKIP_REASON,
@@ -67,6 +71,7 @@ from ratel_ai_telemetry import (
     RATEL_EXPERIMENT_UNIT,
     RATEL_EXPERIMENT_UNIT_BAGGAGE_KEY,
     ExperimentArmOutcome,
+    ExperimentSkipReason,
 )
 
 from .. import telemetry as _sdk_telemetry
@@ -76,8 +81,13 @@ from .sink import (
     ExperimentArmCompletionEvaluation,
     ExperimentArmEvaluation,
     ExperimentArmEvaluationHandle,
+    ExperimentComparisonEvaluation,
+    ExperimentDropEvaluation,
     ExperimentEvaluationSink,
     ExperimentFallbackEvaluation,
+    ExperimentInvocationEvaluation,
+    ExperimentOutcomeEvaluation,
+    ExperimentSkipEvaluation,
 )
 
 T = TypeVar("T")
@@ -175,6 +185,93 @@ class _TelemetrySink(ExperimentEvaluationSink):
                 },
                 evaluation.event_id,
             )
+
+    def comparison(
+        self,
+        evaluation: ExperimentComparisonEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        if arm is None:
+            return
+        agreement = evaluation.agreement
+        attributes: dict[str, Any] = {
+            RATEL_EXPERIMENT_SERVED_ARM: evaluation.served.arm,
+            RATEL_EXPERIMENT_SERVED_OUTCOME: evaluation.served.outcome.value,
+            RATEL_EXPERIMENT_SERVED_DURATION_MS: evaluation.served.duration_ms,
+            RATEL_EXPERIMENT_SERVED_HIT_COUNT: evaluation.served.hit_count,
+            RATEL_EXPERIMENT_SHADOW_ARM: evaluation.shadow.arm,
+            RATEL_EXPERIMENT_SHADOW_OUTCOME: evaluation.shadow.outcome.value,
+            RATEL_EXPERIMENT_SHADOW_DURATION_MS: evaluation.shadow.duration_ms,
+            RATEL_EXPERIMENT_SHADOW_HIT_COUNT: evaluation.shadow.hit_count,
+            RATEL_EXPERIMENT_AGREEMENT_TOP1: agreement.top1,
+            RATEL_EXPERIMENT_AGREEMENT_EXACT_ORDER: agreement.exact_order,
+            RATEL_EXPERIMENT_AGREEMENT_OVERLAP_COUNT: agreement.overlap_count,
+            RATEL_EXPERIMENT_AGREEMENT_JACCARD_AT_K: agreement.jaccard_at_k,
+            RATEL_EXPERIMENT_AGREEMENT_K: agreement.k,
+        }
+        if agreement.item_attrs is not None:
+            attributes[RATEL_EXPERIMENT_AGREEMENT_ITEM_ATTRS] = agreement.item_attrs
+        if agreement.result_attrs is not None:
+            attributes[RATEL_EXPERIMENT_AGREEMENT_RESULT_ATTRS] = agreement.result_attrs
+        arm.event(RATEL_EXPERIMENT_COMPARISON, attributes, evaluation.event_id)
+
+    def skip(
+        self,
+        evaluation: ExperimentSkipEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        if arm is not None:
+            arm.event(
+                RATEL_EXPERIMENT_SKIP,
+                {
+                    RATEL_EXPERIMENT_SKIP_ARM: evaluation.skipped_arm,
+                    RATEL_EXPERIMENT_SKIP_CONCURRENCY: evaluation.concurrency,
+                    RATEL_EXPERIMENT_SKIP_REASON: ExperimentSkipReason.CAPACITY.value,
+                },
+                evaluation.event_id,
+            )
+
+    def drop(
+        self,
+        evaluation: ExperimentDropEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        if arm is not None:
+            arm.event(
+                RATEL_EXPERIMENT_DROP,
+                {RATEL_EXPERIMENT_DROP_REASON: evaluation.reason.value},
+                evaluation.event_id,
+            )
+
+    def invocation(self, evaluation: ExperimentInvocationEvaluation) -> None:
+        attribution = evaluation.attribution
+        attributes: dict[str, Any] = {
+            _sdk_telemetry.RATEL_EVENT_ID: evaluation.event_id or new_runtime_event_id(),
+            RATEL_EXPERIMENT_ID: evaluation.experiment_id,
+            RATEL_EXPERIMENT_UNIT: evaluation.unit_hash,
+            GEN_AI_TOOL_NAME: evaluation.tool_id,
+            RATEL_EXPERIMENT_INVOCATION_ATTRIBUTED: attribution.attributed,
+        }
+        if evaluation.turn is not None:
+            attributes[RATEL_EXPERIMENT_TURN] = evaluation.turn
+        if attribution.attributed:
+            attributes[RATEL_EXPERIMENT_SELECTION_ID] = attribution.selection_id
+            attributes[RATEL_EXPERIMENT_EFFECTIVE_ARM] = attribution.effective_arm
+            attributes[RATEL_EXPERIMENT_INVOCATION_RANK] = attribution.rank
+            attributes[RATEL_EXPERIMENT_INVOCATION_AGE_MS] = attribution.age_ms
+        _sdk_telemetry._logger().emit(event_name=RATEL_EXPERIMENT_INVOCATION, attributes=attributes)
+
+    def outcome(self, evaluation: ExperimentOutcomeEvaluation) -> None:
+        attributes: dict[str, Any] = {
+            _sdk_telemetry.RATEL_EVENT_ID: evaluation.event_id or new_runtime_event_id(),
+            RATEL_EXPERIMENT_ID: evaluation.experiment_id,
+            RATEL_EXPERIMENT_SELECTION_ID: evaluation.selection_id,
+        }
+        if evaluation.label is not None:
+            attributes[RATEL_EXPERIMENT_OUTCOME_LABEL] = evaluation.label
+        if evaluation.score is not None:
+            attributes[RATEL_EXPERIMENT_OUTCOME_SCORE] = evaluation.score
+        _sdk_telemetry._logger().emit(event_name=RATEL_EXPERIMENT_OUTCOME, attributes=attributes)
 
 
 class _TelemetryArmHandle(ExperimentArmEvaluationHandle):

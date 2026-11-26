@@ -13,10 +13,17 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
-from ratel_ai_telemetry import ExperimentArmOutcome, ExperimentArmRole
+from ratel_ai_telemetry import (
+    ExperimentArmOutcome,
+    ExperimentArmRole,
+    ExperimentDropReason,
+    ExperimentSkipReason,
+)
 
 from ..runtime_events import new_runtime_event_id
 from .definitions import ExperimentRankedItem
+from .evaluation import ExperimentRankingAgreement
+from .invocation import ExperimentInvocationAttribution
 
 if TYPE_CHECKING:
     from ..runtime_events import RuntimeEvents
@@ -69,6 +76,69 @@ class ExperimentFallbackEvaluation:
     event_id: str | None = None
 
 
+@dataclass(frozen=True)
+class ExperimentArmSummary:
+    """The served or shadow side of one comparison."""
+
+    arm: str
+    outcome: ExperimentArmOutcome
+    duration_ms: float
+    hit_count: int
+
+
+@dataclass(frozen=True)
+class ExperimentComparisonEvaluation:
+    """One completed served-vs-shadow ranking comparison."""
+
+    selection_id: str
+    served: ExperimentArmSummary
+    shadow: ExperimentArmSummary
+    agreement: ExperimentRankingAgreement
+    event_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ExperimentDropEvaluation:
+    """One admitted shadow that could not produce a comparison."""
+
+    selection_id: str
+    shadow_arm: str
+    reason: ExperimentDropReason
+    event_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ExperimentSkipEvaluation:
+    """One shadow dispatch skipped because the instance capacity was full."""
+
+    skipped_arm: str
+    concurrency: int
+    event_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ExperimentInvocationEvaluation:
+    """One invocation attribution."""
+
+    experiment_id: str
+    unit_hash: str
+    tool_id: str
+    attribution: ExperimentInvocationAttribution
+    turn: int | None = None
+    event_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ExperimentOutcomeEvaluation:
+    """One valid delayed outcome."""
+
+    experiment_id: str
+    selection_id: str
+    label: str | None = None
+    score: float | None = None
+    event_id: str | None = None
+
+
 class ExperimentArmEvaluationHandle:
     """Keeps the explicit context of one arm and its span together."""
 
@@ -98,6 +168,33 @@ class ExperimentEvaluationSink:
         arm: ExperimentArmEvaluationHandle | None = None,
     ) -> None:
         """Record one fallback decision."""
+
+    def comparison(
+        self,
+        evaluation: ExperimentComparisonEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        """Record one served-vs-shadow comparison."""
+
+    def drop(
+        self,
+        evaluation: ExperimentDropEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        """Record one shadow that produced no comparison."""
+
+    def skip(
+        self,
+        evaluation: ExperimentSkipEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        """Record one shadow skipped at capacity."""
+
+    def invocation(self, evaluation: ExperimentInvocationEvaluation) -> None:
+        """Record one invocation attribution."""
+
+    def outcome(self, evaluation: ExperimentOutcomeEvaluation) -> None:
+        """Record one delayed outcome."""
 
 
 def compose_experiment_evaluation_sinks(
@@ -170,6 +267,46 @@ class _ComposedSink(ExperimentEvaluationSink):
         self._first.fallback(stamped, first)
         self._second.fallback(stamped, second)
 
+    def comparison(
+        self,
+        evaluation: ExperimentComparisonEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        stamped = _stamp(evaluation)
+        first, second = _split(arm)
+        self._first.comparison(stamped, first)
+        self._second.comparison(stamped, second)
+
+    def drop(
+        self,
+        evaluation: ExperimentDropEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        stamped = _stamp(evaluation)
+        first, second = _split(arm)
+        self._first.drop(stamped, first)
+        self._second.drop(stamped, second)
+
+    def skip(
+        self,
+        evaluation: ExperimentSkipEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        stamped = _stamp(evaluation)
+        first, second = _split(arm)
+        self._first.skip(stamped, first)
+        self._second.skip(stamped, second)
+
+    def invocation(self, evaluation: ExperimentInvocationEvaluation) -> None:
+        stamped = _stamp(evaluation)
+        self._first.invocation(stamped)
+        self._second.invocation(stamped)
+
+    def outcome(self, evaluation: ExperimentOutcomeEvaluation) -> None:
+        stamped = _stamp(evaluation)
+        self._first.outcome(stamped)
+        self._second.outcome(stamped)
+
 
 def _split(
     handle: ExperimentArmEvaluationHandle | None,
@@ -232,6 +369,107 @@ class _RuntimeEventSink(ExperimentEvaluationSink):
                 "reused_shadow": evaluation.reused_shadow,
             },
         )
+
+    def comparison(
+        self,
+        evaluation: ExperimentComparisonEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        self.emit(
+            "experiment_comparison",
+            evaluation.event_id,
+            {
+                **_handle_fields(arm),
+                "selection_id": evaluation.selection_id,
+                "served_arm": evaluation.served.arm,
+                "served_outcome": evaluation.served.outcome.value,
+                "served_duration_ms": evaluation.served.duration_ms,
+                "served_hit_count": evaluation.served.hit_count,
+                "shadow_arm": evaluation.shadow.arm,
+                "shadow_outcome": evaluation.shadow.outcome.value,
+                "shadow_duration_ms": evaluation.shadow.duration_ms,
+                "shadow_hit_count": evaluation.shadow.hit_count,
+                "agreement": agreement_fields(evaluation.agreement),
+            },
+        )
+
+    def skip(
+        self,
+        evaluation: ExperimentSkipEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        self.emit(
+            "experiment_skip",
+            evaluation.event_id,
+            {
+                **_handle_fields(arm),
+                "skipped_arm": evaluation.skipped_arm,
+                "concurrency": evaluation.concurrency,
+                "reason": ExperimentSkipReason.CAPACITY.value,
+            },
+        )
+
+    def drop(
+        self,
+        evaluation: ExperimentDropEvaluation,
+        arm: ExperimentArmEvaluationHandle | None = None,
+    ) -> None:
+        self.emit(
+            "experiment_drop",
+            evaluation.event_id,
+            {
+                **_handle_fields(arm),
+                "selection_id": evaluation.selection_id,
+                "shadow_arm": evaluation.shadow_arm,
+                "reason": evaluation.reason.value,
+            },
+        )
+
+    def invocation(self, evaluation: ExperimentInvocationEvaluation) -> None:
+        attribution = evaluation.attribution
+        fields: dict[str, Any] = {
+            "experiment_id": evaluation.experiment_id,
+            "unit": evaluation.unit_hash,
+            "tool_id": evaluation.tool_id,
+        }
+        if evaluation.turn is not None:
+            fields["turn"] = evaluation.turn
+        fields["attributed"] = attribution.attributed
+        if attribution.attributed:
+            fields.update(
+                selection_id=attribution.selection_id,
+                effective_arm=attribution.effective_arm,
+                rank=attribution.rank,
+                age_ms=attribution.age_ms,
+            )
+        self.emit("experiment_invocation", evaluation.event_id, fields)
+
+    def outcome(self, evaluation: ExperimentOutcomeEvaluation) -> None:
+        fields: dict[str, Any] = {
+            "experiment_id": evaluation.experiment_id,
+            "selection_id": evaluation.selection_id,
+        }
+        if evaluation.label is not None:
+            fields["label"] = evaluation.label
+        if evaluation.score is not None:
+            fields["score"] = evaluation.score
+        self.emit("experiment_outcome", evaluation.event_id, fields)
+
+
+def agreement_fields(agreement: ExperimentRankingAgreement) -> dict[str, Any]:
+    """The runtime-event form of an agreement: the TypeScript camelCase keys."""
+    fields: dict[str, Any] = {
+        "top1": agreement.top1,
+        "exactOrder": agreement.exact_order,
+        "overlapCount": agreement.overlap_count,
+        "jaccardAtK": agreement.jaccard_at_k,
+        "k": agreement.k,
+    }
+    if agreement.item_attrs is not None:
+        fields["itemAttrs"] = agreement.item_attrs
+    if agreement.result_attrs is not None:
+        fields["resultAttrs"] = agreement.result_attrs
+    return fields
 
 
 def _arm_fields(evaluation: ExperimentArmEvaluation) -> dict[str, Any]:

@@ -1,0 +1,368 @@
+{
+  "description": "Served-vs-shadow ranking agreement (compareRankings). Ids only; scores are never compared. The TypeScript and Python SDK tests read this file.",
+  "vectors": [
+    {
+      "name": "identical",
+      "served": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "options": {
+        "k": 10
+      },
+      "agreement": {
+        "top1": true,
+        "exactOrder": true,
+        "overlapCount": 3,
+        "jaccardAtK": 1,
+        "k": 10,
+        "itemAttrs": {}
+      }
+    },
+    {
+      "name": "swapped-top",
+      "served": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "b"
+        },
+        {
+          "id": "a"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "options": {
+        "k": 10
+      },
+      "agreement": {
+        "top1": false,
+        "exactOrder": false,
+        "overlapCount": 3,
+        "jaccardAtK": 1,
+        "k": 10,
+        "itemAttrs": {}
+      }
+    },
+    {
+      "name": "disjoint",
+      "served": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "c"
+        },
+        {
+          "id": "d"
+        }
+      ],
+      "options": {
+        "k": 10
+      },
+      "agreement": {
+        "top1": false,
+        "exactOrder": false,
+        "overlapCount": 0,
+        "jaccardAtK": 0,
+        "k": 10,
+        "itemAttrs": {}
+      }
+    },
+    {
+      "name": "partial-overlap-k2",
+      "served": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        },
+        {
+          "id": "d"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "x"
+        },
+        {
+          "id": "c"
+        },
+        {
+          "id": "y"
+        }
+      ],
+      "options": {
+        "k": 2
+      },
+      "agreement": {
+        "top1": true,
+        "exactOrder": false,
+        "overlapCount": 2,
+        "jaccardAtK": 0.3333333333333333,
+        "k": 2,
+        "itemAttrs": {}
+      }
+    },
+    {
+      "name": "overlap-outside-window",
+      "served": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "c"
+        },
+        {
+          "id": "d"
+        },
+        {
+          "id": "a"
+        }
+      ],
+      "options": {
+        "k": 1
+      },
+      "agreement": {
+        "top1": false,
+        "exactOrder": false,
+        "overlapCount": 2,
+        "jaccardAtK": 0,
+        "k": 1,
+        "itemAttrs": {}
+      }
+    },
+    {
+      "name": "both-empty",
+      "served": [],
+      "shadow": [],
+      "options": {
+        "k": 10
+      },
+      "agreement": {
+        "top1": true,
+        "exactOrder": true,
+        "overlapCount": 0,
+        "jaccardAtK": 1,
+        "k": 10
+      }
+    },
+    {
+      "name": "served-empty",
+      "served": [],
+      "shadow": [
+        {
+          "id": "a"
+        }
+      ],
+      "options": {
+        "k": 3
+      },
+      "agreement": {
+        "top1": false,
+        "exactOrder": false,
+        "overlapCount": 0,
+        "jaccardAtK": 0,
+        "k": 3
+      }
+    },
+    {
+      "name": "prefix-not-exact",
+      "served": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "options": {
+        "k": 2
+      },
+      "agreement": {
+        "top1": true,
+        "exactOrder": false,
+        "overlapCount": 2,
+        "jaccardAtK": 1,
+        "k": 2,
+        "itemAttrs": {}
+      }
+    },
+    {
+      "name": "thirds",
+      "served": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "d"
+        },
+        {
+          "id": "e"
+        }
+      ],
+      "options": {
+        "k": 3
+      },
+      "agreement": {
+        "top1": true,
+        "exactOrder": false,
+        "overlapCount": 1,
+        "jaccardAtK": 0.2,
+        "k": 3,
+        "itemAttrs": {}
+      }
+    },
+    {
+      "name": "item-attrs",
+      "served": [
+        {
+          "id": "a",
+          "attrs": {
+            "source": "bm25",
+            "rank": 1,
+            "extra": true
+          }
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "a",
+          "attrs": {
+            "source": "dense",
+            "rank": 1,
+            "other": null
+          }
+        }
+      ],
+      "options": {
+        "k": 10
+      },
+      "agreement": {
+        "top1": true,
+        "exactOrder": false,
+        "overlapCount": 1,
+        "jaccardAtK": 0.5,
+        "k": 10,
+        "itemAttrs": {
+          "source": false,
+          "rank": true
+        }
+      }
+    },
+    {
+      "name": "result-attrs",
+      "served": [
+        {
+          "id": "a"
+        }
+      ],
+      "shadow": [
+        {
+          "id": "a"
+        }
+      ],
+      "options": {
+        "k": 10,
+        "servedResultAttrs": {
+          "model": "v1",
+          "n": 2,
+          "only_served": 1
+        },
+        "shadowResultAttrs": {
+          "model": "v2",
+          "n": 2,
+          "only_shadow": null
+        }
+      },
+      "agreement": {
+        "top1": true,
+        "exactOrder": true,
+        "overlapCount": 1,
+        "jaccardAtK": 1,
+        "k": 10,
+        "itemAttrs": {},
+        "resultAttrs": {
+          "model": false,
+          "n": true,
+          "only_served": false,
+          "only_shadow": false
+        }
+      }
+    }
+  ]
+}

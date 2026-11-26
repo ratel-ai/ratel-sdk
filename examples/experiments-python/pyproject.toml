@@ -1,0 +1,15 @@
+[project]
+name = "ratel-example-experiments-python"
+version = "0.0.0"
+description = "Ratel retrieval experiments — a two-arm experimental_define_experiment run (Python)"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+    # Direct so uv applies the local source to ratel-ai's telemetry floor.
+    "ratel-ai-telemetry>=0.3.0",
+]
+
+[tool.uv.sources]
+# Use the local SDK and telemetry vocabulary from this monorepo.
+ratel-ai = { path = "../../src/sdk/python" }
+ratel-ai-telemetry = { path = "../../src/telemetry/python" }

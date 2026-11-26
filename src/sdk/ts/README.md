@@ -370,7 +370,8 @@ Facts are **host-driven, on their own path**: `ground()`/`groundSnapshot()` are 
 ## Retrieval experiments (experimental)
 
 `experimentalDefineExperiment` wraps host-supplied async selectors with deterministic A/B
-assignment and bounded shadow evaluation. It is opt-in and TypeScript-only. It does not change
+assignment and bounded shadow evaluation. It is opt-in. The Python SDK has the same API as
+`experimental_define_experiment`, with the same deterministic split. It does not change
 `ToolCatalog` or `SkillCatalog` ranking, and there is deliberately no stable `defineExperiment`
 alias yet.
 

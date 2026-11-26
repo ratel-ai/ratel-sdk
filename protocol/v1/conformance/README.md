@@ -19,6 +19,9 @@ normative.
   deterministic split of `experimentalDefineExperiment` / `experimental_define_experiment`
   MUST assign. The TypeScript and Python SDK tests read this file. `verify.mjs` does not
   check it.
+- `experiment-agreement-vectors.json` — served and shadow rankings and the agreement (top-1,
+  exact order, overlap, Jaccard@K, item and result attributes) that every SDK comparison MUST
+  produce. The TypeScript and Python SDK tests read this file. `verify.mjs` does not check it.
 
 ## Running
 
