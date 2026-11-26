@@ -76,7 +76,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/sdk/ts/native
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -150,7 +150,7 @@ jobs:
         with:
           workspaces: src/sdk/ts/native
           key: ${{ matrix.triple }}-${{ matrix.container }}
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -204,7 +204,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/sdk/ts/native
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -445,7 +445,7 @@ jobs:
           workspaces: |
             src/sdk/ts/native
             src/rankers/ts/native
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
