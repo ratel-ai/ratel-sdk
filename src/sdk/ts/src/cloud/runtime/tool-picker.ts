@@ -1,5 +1,11 @@
 import type { RankCandidate, RankedId, RankFn, RetrieverError } from "../../index.js";
+import { RatelCloudSdk } from "../client.js";
 import { type CloudConfig, resolveCloudConfig } from "../config.js";
+import type { IntentsClient } from "../intents.js";
+import type { JobsClient } from "../jobs.js";
+import type { RuntimeCatalogClient } from "../runtime-catalog.js";
+import type { SkillsClient } from "../skills.js";
+import type { SuggestionsClient } from "../suggestions.js";
 
 /**
  * How the Tool Picker ranks: `instant` is BM25 only (free), `precise` puts a
@@ -25,9 +31,24 @@ export interface ToolPicker extends RankFn {
   withMode(mode: ToolPickerMode): ToolPicker;
 }
 
+/**
+ * The Ratel Cloud API from one configuration: the management clients and the
+ * Tool Picker. `ratelCloud()` returns it. `ratel({ cloud }).cloud` returns it with
+ * the runtime methods added (`RatelCloudRuntime`).
+ */
 export interface RatelCloud {
-  /** Ranks tools with the Tool Picker in `precise` mode. */
+  /** Ranks tools with the Tool Picker. `precise` mode unless `ratel({ cloud: { toolPicker } })` sets another. */
   readonly toolPicker: ToolPicker;
+  /** Skill catalog management: create, update, publish and import skills. */
+  readonly skills: SkillsClient;
+  /** Review of the improvement suggestions that Cloud drafts. */
+  readonly suggestions: SuggestionsClient;
+  /** Intent analysis of conversations and the recurring-ask ledger. */
+  readonly intents: IntentsClient;
+  /** Status of the asynchronous jobs that Cloud runs. */
+  readonly jobs: JobsClient;
+  /** The Cloud-owned Retrieval descriptions of the runtime catalog. */
+  readonly runtimeCatalog: RuntimeCatalogClient;
 }
 
 /** Cloud's `top_k` ceiling for `/tools/pick`. */
@@ -40,7 +61,23 @@ const EXHAUSTIVE_TIMEOUT_MS = 60_000;
 
 /** Ratel Cloud features for a `ratel()` runtime from `@ratel-ai/sdk`. */
 export function ratelCloud(options: RatelCloudOptions = {}): RatelCloud {
-  return { toolPicker: createToolPicker(options, "precise") };
+  return createRatelCloud(options, "precise");
+}
+
+/**
+ * The {@link RatelCloud} of `options`, with its Tool Picker in `mode`. Builds no
+ * connection: a client sends its first request when the caller calls it.
+ */
+export function createRatelCloud(options: RatelCloudOptions, mode: ToolPickerMode): RatelCloud {
+  const sdk = new RatelCloudSdk(options);
+  return {
+    toolPicker: createToolPicker(options, mode),
+    skills: sdk.skills,
+    suggestions: sdk.suggestions,
+    intents: sdk.intents,
+    jobs: sdk.jobs,
+    runtimeCatalog: sdk.runtimeCatalog,
+  };
 }
 
 function createToolPicker(options: RatelCloudOptions, mode: ToolPickerMode): ToolPicker {

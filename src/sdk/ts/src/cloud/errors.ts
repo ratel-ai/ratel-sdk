@@ -15,7 +15,9 @@ export type CloudSdkErrorCode =
   | "quota_exceeded"
   | "unavailable"
   | "server_error"
-  | "network_error";
+  | "network_error"
+  /** The client is not configured: no request was sent (for example, no API key). */
+  | "config";
 
 export class CloudSdkError extends Error {
   /** HTTP status, or null when the request never got a response. */

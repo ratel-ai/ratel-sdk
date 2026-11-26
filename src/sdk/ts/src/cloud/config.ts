@@ -26,12 +26,12 @@ export interface CloudConfig {
   apiKey?: string;
   /**
    * API root, including the `/api/v1` prefix. Defaults to `RATEL_BASE_URL`, then
-   * {@link DEFAULT_BASE_URL}.
+   * `https://cloud.ratel.sh/api/v1` (`DEFAULT_BASE_URL`).
    */
   baseUrl?: string;
   /** Injectable for testing. Defaults to the global `fetch`. */
   fetch?: typeof fetch;
-  /** Per-request timeout. Defaults to {@link DEFAULT_TIMEOUT_MS}. */
+  /** Per-request timeout in ms. Each feature has its own default (30 s for most requests). */
   timeoutMs?: number;
 }
 

@@ -282,6 +282,15 @@ function attachRuntime(runtime: RatelRuntime, options: AttachOptions): RuntimeAt
 
 const CLOUD_DEFINITION_CONTROLLERS = new WeakMap<object, CloudDefinitionsController>();
 
+/**
+ * Resolves when the first Cloud definitions pull of `runtime` ends, with success or
+ * not. Resolves at once when Cloud definitions are off. Internal to `ratel({ cloud })`.
+ */
+export async function cloudDefinitionsReady(runtime: RatelRuntime): Promise<void> {
+  const controller = CLOUD_DEFINITION_CONTROLLERS.get(runtime);
+  if (controller?.enabled) await controller.waitForInitialPull();
+}
+
 class CloudDefinitionsController {
   readonly #catalog: RatelRuntimeCatalog;
   readonly #warnOnFailure: boolean;

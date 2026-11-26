@@ -112,7 +112,7 @@ export class Transport {
     if (this.apiKey === undefined || this.apiKey === "") {
       throw new CloudSdkError("Ratel Cloud needs an API key: pass apiKey or set RATEL_API_KEY", {
         status: null,
-        code: "unauthorized",
+        code: "config",
       });
     }
     let suffix = "";
