@@ -93,11 +93,11 @@ Save as `quickstart.py`, then run `python quickstart.py`:
 
 ```python
 import asyncio
-from ratel_ai import ExecutableTool, ToolCatalog
+from ratel_ai import ExecutableTool, ratel
 
 async def main():
-    catalog = ToolCatalog()
-    await catalog.register(
+    r = ratel()
+    await r.tools.register(
         ExecutableTool(
             id="get_weather",
             name="get_weather",
@@ -108,16 +108,26 @@ async def main():
         )
     )
 
-    hit = catalog.search("What is the weather in Rome?", 1)[0]
-    print(await catalog.invoke(hit.tool_id, {"city": "Rome"}))
+    recall = await r.recall("What is the weather in Rome?")
+    tool_id = recall["tools"]["groups"][0]["hits"][0]["toolId"]
+    print(await r.tools.invoke(tool_id, {"city": "Rome"}))
 
 
 asyncio.run(main())
 ```
 
+`ratel()` is the one construction point. It builds a `ToolCatalog` (`r.tools.catalog`), a
+`SkillCatalog` (`r.skills`), one runtime-event stream (`r.events`) and a snapshot view
+(`r.catalog`). Give the model `r.model_tools()`: `search_capabilities`, `invoke_tool` and
+`get_skill_content`, the same three tools however many tools and skills you register, and in
+any order. `r.recall(query)` ranks tools and skills for one turn, or returns `None` when nothing
+matched. A tool id equal to a capability tool id raises `ValueError`. The keyword arguments
+(`method`, `embedding`, `reranker`, `recall_top_k`, `trace`, `events`, ...) go to every catalog.
+The experimental fact catalog is `r.facts`, with `r.ground(...)` and `r.ground_snapshot(...)`.
+
 ### Mark each request as one turn
 
-Wrap the work for one user request in `catalog.turn(...)`. Every search, skill load, and tool
+Wrap the work for one user request in `catalog.turn(...)` (or `r.turn(...)` on a `ratel()` core). Every search, skill load, and tool
 call inside it, across `await` and the tasks it starts, carries the same `turn_id`, and one
 `turn_start` event opens the turn. Concurrent requests keep their own turns.
 

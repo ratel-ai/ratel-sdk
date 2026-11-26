@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **`ratel()` and `Ratel`: one construction point, like `ratel()` in `@ratel-ai/sdk`.** `ratel(method=, embedding=, recall_top_k=, facts_top_k=, events=, ...)` builds a tool catalog, a skill catalog and one `RuntimeEvents` stream with one `source_id`. The core has `tools`, `skills`, `facts` (experimental, built on first access), `events`, `catalog`, `model_tools()`, `recall()`, `ground()`, `ground_snapshot()`, `turn()`, `record_tool_call()` and `current_turn_id()`. `model_tools()` always returns the three capability tools. A tool id equal to a capability tool id raises `ValueError`. Host searches clamp `top_k` to 50. The TypeScript `adaptTo` is not ported yet.
+- `search_capabilities_tool(advertise_skills=)` pins the skills clause of the description, so the description does not change when skills register later.
+
 ## [0.13.0-rc.13] - 2026-11-22
 
 ### Changed
