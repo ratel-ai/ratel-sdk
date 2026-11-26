@@ -27,6 +27,10 @@
       "types": "./dist/platform/otel/index.d.ts",
       "default": "./dist/platform/otel/index.js"
     },
+    "./serve": {
+      "types": "./dist/serve/index.d.ts",
+      "default": "./dist/serve/index.js"
+    },
     "./package.json": "./package.json"
   },
   "license": "MIT",

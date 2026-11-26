@@ -277,6 +277,23 @@ and `${baseUrl}/logs` from the same settings; `RATEL_OTLP_ENDPOINT` and
 the same settings. The deprecated package `@ratel-ai/cloud-sdk` re-exports the old names of these
 subpaths.
 
+### Run an agent image on Ratel: `@ratel-ai/sdk/serve`
+
+`@ratel-ai/sdk/serve` makes the Docker image of an agent answer the Ratel run contract
+(`protocol/sandbox/v1`). It uses Node built-ins only and never loads the native addon.
+`serve(run)` listens on `$PORT` (default 8080) on `0.0.0.0`, answers `GET /ratel/health` with 200
+and `POST /ratel/run` with `{output, toolCalls, usage?}`. It validates the request
+(`{v: 1, runId, input, params, tools, fixtures, traceparent?}`), calls
+`run({input, params, tools, runId, traceparent})` and returns the output. An invalid request answers
+400 and a thrown error answers 500, both with `{error: {code, message}}`. Wrap each tool with
+`tool(name, {execute, fake})`: the request sets its mode. `simulated` (the default) answers from
+`fake` (no `fake`: the call fails with `no_fake`), `recorded` answers from the fixture with the same
+normalized arguments (none: `no_fixture`), `live` runs `execute`. Outside a run, a tool runs
+`execute`. `currentRun()` gives the run id and the traceparent, and `recordUsage()` adds model usage.
+Values of the secrets in `$RATEL_SECRET_NAMES` are redacted from each response. Configuration lives in
+`ratel.yaml`, not in code: there is no `defineSandbox` and no `ratel.sandbox.ts`. A command-mode image
+needs no SDK: it reads the request on stdin and writes JSON on stdout.
+
 ### `replace` vs `suggest` mode
 
 Tool injection runs in two modes ([ADR-0004](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-retrieval-and-tool-selection.md)):

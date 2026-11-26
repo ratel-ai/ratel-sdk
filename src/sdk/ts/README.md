@@ -1739,6 +1739,31 @@ ifNoneMatchMatches(`"${etagHex}"`, currentEtag);        // RFC 7232 weak compari
 The hashing step is intentionally left to you — the helpers are pure string/byte functions with
 no crypto dependency, so the module runs on any runtime.
 
+## Serve an agent image (`@ratel-ai/sdk/serve`)
+
+Ratel runs the Docker image of an agent and sends one request for each run
+([`protocol/sandbox/v1`](../../../protocol/sandbox/v1/README.md)). `serve(run)` makes the image
+answer the contract: `GET /ratel/health` and `POST /ratel/run` on `$PORT` (default 8080). The subpath
+uses Node built-ins only and never loads the native addon.
+
+```ts
+import { serve, tool } from "@ratel-ai/sdk/serve";
+
+const refundOrder = tool("refund_order", {
+  execute: async ({ id }: { id: string }) => payments.refund(id), // mode live
+  fake: async ({ id }: { id: string }) => ({ refunded: id }), // mode simulated (the default)
+});
+
+serve(async ({ input, params }) => supportAgent(input, { model: params.model, tools: { refundOrder } }));
+```
+
+The request of each run sets the mode of each tool, from `ratel.yaml`: `simulated` answers from
+`fake`, `recorded` answers from the fixture with the same normalized arguments, and `live` runs
+`execute`. A simulated tool with no `fake` fails the call with the code `no_fake`. The response lists
+each call with its mode. An invalid request answers 400 and a thrown error answers 500, with
+`{"error": {"code", "message"}}`. `currentRun()` gives the run id and the W3C `traceparent`, and
+`recordUsage({inputTokens, outputTokens, costUsd})` adds model usage to the response.
+
 ## Package layout
 
 `src/` is the TypeScript surface (including `embedding-artifact.ts` for build/warm helpers), `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, build with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk... build`; test with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk test`.
