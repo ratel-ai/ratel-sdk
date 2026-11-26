@@ -1,6 +1,6 @@
 {
   "name": "@ratel-ai/sdk",
-  "version": "0.13.0-rc.13",
+  "version": "0.14.0",
   "description": "TypeScript SDK for the Ratel Platform: runtime context for AI agents (BM25 tool retrieval, MCP ingestion, framework-neutral capability tools), plus sync and self-improvement through the platform.",
   "private": false,
   "type": "module",

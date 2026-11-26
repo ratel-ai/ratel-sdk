@@ -6,6 +6,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-26
+
+This is a breaking minor release. It includes all the work of the `0.13.0-rc.*` releases below. `0.13.0` has no GA release: upgrade from `0.12.x` or a `0.13.0-rc.*` straight to `0.14.0`.
+
+### Breaking changes
+
+- **"Cloud" is now "Platform".** `ratel-ai` is the Ratel Platform SDK, with the same interface as `@ratel-ai/sdk`. The platform client is `ratel_ai.platform` and the option is `ratel(platform=...)` (see the table).
+- **The default API root is `https://app.ratel.sh/api/v1`** (before: `https://cloud.ratel.sh/api/v1`). Set `RATEL_BASE_URL` or `platform["base_url"]` to use a self-hosted platform. `configure_telemetry()` uses the same base URL for `${base_url}/traces` and `${base_url}/logs`.
+- **`RATEL_CLOUD_EVENTS` and `RATEL_CLOUD_INTENT_GRAPH` are deprecated** for `RATEL_PLATFORM_EVENTS` and `RATEL_PLATFORM_INTENT_GRAPH`. The SDK still reads the old names when the new name is not set.
+- **The TypeScript `@ratel-ai/cloud-sdk` is deprecated and gets no new version.** Its users move to `@ratel-ai/sdk/platform` and `@ratel-ai/sdk/otel` (see the `@ratel-ai/sdk` 0.14.0 CHANGELOG). Python users need no package change.
+- **The `ratel-ai-telemetry` floor is now `>=0.6.0`**, in the base install and in the `otlp` extra. `0.6.0` has `base_url=` and `RATEL_OTLP_LOGS_ENDPOINT`.
+
+| Cloud name (only on `main`, never published) | Platform name |
+| --- | --- |
+| `ratel(cloud=...)`, `r.cloud` | `ratel(platform=...)`, `r.platform` |
+| `ratel_ai.cloud` | `ratel_ai.platform` |
+| `RatelCloudClient` | `RatelPlatformClient` |
+| `CloudError`, `CloudErrorCode` | `PlatformError`, `PlatformErrorCode` |
+| `CloudConfig`, `resolve_cloud_config` | `PlatformConfig`, `resolve_platform_config` |
+| `CloudHttpClient`, `CloudTransport`, `CloudResponse` | `PlatformHttpClient`, `PlatformTransport`, `PlatformResponse` |
+| `CloudLogEvent`, `CloudLogger` | `PlatformLogEvent`, `PlatformLogger` |
+| `ratel_cloud` | `ratel_platform` |
+| `MockCloud` | `MockPlatform` |
+| `RATEL_CLOUD_EVENTS`, `RATEL_CLOUD_INTENT_GRAPH` (deprecated, still read) | `RATEL_PLATFORM_EVENTS`, `RATEL_PLATFORM_INTENT_GRAPH` |
+| `https://cloud.ratel.sh/api/v1` | `https://app.ratel.sh/api/v1` |
+
 ### Added
 
 - **`ratel-ai` is the Ratel Platform SDK.** The platform is `https://app.ratel.sh` by default, or a self-hosted platform through `RATEL_BASE_URL` or `platform["base_url"]`. The default API root is `https://app.ratel.sh/api/v1`. The env switches are `RATEL_PLATFORM_EVENTS` and `RATEL_PLATFORM_INTENT_GRAPH`; the deprecated `RATEL_CLOUD_EVENTS` and `RATEL_CLOUD_INTENT_GRAPH` still apply when the new name is not set.
@@ -13,12 +39,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **`ratel(platform=...)`: one option turns on Ratel Platform, like `ratel({ platform })` in `@ratel-ai/sdk`.** `platform=True` reads `RATEL_API_KEY` and `RATEL_BASE_URL`. A `PlatformOptions` dict sets `api_key`, `base_url`, `timeout`, `transport`, `source_id`, `events` (default on), `definitions`, `intent_graph` and `tool_picker` (default off), with the TypeScript defaults and env switches (`RATEL_PLATFORM_EVENTS=off`, `RATEL_PLATFORM_INTENT_GRAPH=off`). `r.platform` has the management clients (`skills`, `suggestions`, `intents`, `jobs`, `runtime_catalog`), `tool_picker`, and `status()`, `verify()`, `ready()`, `flush()`, `close()` and `refresh_definitions()`. With no API key, `ratel()` raises `PlatformError` (code `config`) that names `RATEL_API_KEY`. `tool_picker` with `method` or `retrieve_fn` raises. Without `platform`, `r.platform` is `None` and `ratel_ai.platform` is not imported. Called before the event loop starts, `r.platform` holds the runtime events and starts on the first awaited `r.platform` call. The new `ratel_ai.platform` package (standard library only) has the management client, `attach`, `attach_intent_graph_sync`, `ratel_platform` (the Tool Picker) and `MockPlatform`. `ratel(method=)` now defaults to `None`, which means `"bm25"`.
 - **`ratel()` and `Ratel`: one construction point, like `ratel()` in `@ratel-ai/sdk`.** `ratel(method=, embedding=, recall_top_k=, facts_top_k=, events=, ...)` builds a tool catalog, a skill catalog and one `RuntimeEvents` stream with one `source_id`. The core has `tools`, `skills`, `facts` (experimental, built on first access), `events`, `catalog`, `model_tools()`, `recall()`, `ground()`, `ground_snapshot()`, `turn()`, `record_tool_call()` and `current_turn_id()`. `model_tools()` always returns the three capability tools. A tool id equal to a capability tool id raises `ValueError`. Host searches clamp `top_k` to 50. The TypeScript `adaptTo` is not ported yet.
 - **Experimental definition overrides.** `RuntimeCatalog.experimental_attach_definition_overrides(source)` lets an external source own the retrieval descriptions of live tools, skills and facts, like `experimentalAttachDefinitionOverrides` in `@ratel-ai/sdk`. A complete overlay replaces the previous one, snapshots keep the local definitions, removing an override restores the local value, and a failed update restores every catalog. Invalid source responses raise `DefinitionOverlayError` with the TypeScript codes. The types live in `ratel_ai.experimental`.
-- **`configure_telemetry(base_url=)` and the Ratel Platform OTLP defaults, like `@ratel-ai/sdk`.** With no endpoint, an API key or a base URL (`base_url=`, then `RATEL_BASE_URL`) sends traces to `${base_url}/traces` and logs to `${base_url}/logs` (default `https://app.ratel.sh/api/v1`). `RATEL_OTLP_LOGS_ENDPOINT` sets the logs URL. These defaults need the next `ratel-ai-telemetry` release (`base_url=` and `RATEL_OTLP_LOGS_ENDPOINT`).
+- **`configure_telemetry(base_url=)` and the Ratel Platform OTLP defaults, like `@ratel-ai/sdk`.** With no endpoint, an API key or a base URL (`base_url=`, then `RATEL_BASE_URL`) sends traces to `${base_url}/traces` and logs to `${base_url}/logs` (default `https://app.ratel.sh/api/v1`). `RATEL_OTLP_LOGS_ENDPOINT` sets the logs URL. These defaults need `ratel-ai-telemetry` 0.6.0.
 - `search_capabilities_tool(advertise_skills=)` pins the skills clause of the description, so the description does not change when skills register later.
-
-### Changed
-
-- The `ratel-ai-telemetry` floor is now `>=0.3.0`, the first release with the experiment vocabulary.
 
 ## [0.13.0-rc.13] - 2026-11-22
 

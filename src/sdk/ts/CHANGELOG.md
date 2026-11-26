@@ -6,6 +6,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-26
+
+This is a breaking minor release. It includes all the work of the `0.13.0-rc.*` releases below. `0.13.0` has no GA release: upgrade from `0.12.x` or a `0.13.0-rc.*` straight to `0.14.0`.
+
+### Breaking changes
+
+- **"Cloud" is now "Platform".** `@ratel-ai/sdk` is the Ratel Platform SDK. The code of `@ratel-ai/cloud-sdk` is in this package under the Platform names (see the table).
+- **`@ratel-ai/cloud-sdk` is deprecated and gets no new version.** Its published versions (`latest` 0.6.0, `rc` 0.7.0-rc.5) keep their own code and the old default host. Move its imports to `@ratel-ai/sdk`: `@ratel-ai/cloud-sdk` and `@ratel-ai/cloud-sdk/runtime` to `@ratel-ai/sdk/platform`, `@ratel-ai/cloud-sdk/otel` to `@ratel-ai/sdk/otel`, and `@ratel-ai/cloud-sdk/testing` to `@ratel-ai/sdk/platform/testing`. The table gives the names.
+- **The default API root is `https://app.ratel.sh/api/v1`** (before: `https://cloud.ratel.sh/api/v1`). Set `RATEL_BASE_URL` or `platform.baseUrl` to use a self-hosted platform. The OTLP defaults follow the base URL: `${baseUrl}/traces` and `${baseUrl}/logs`.
+- **`RATEL_CLOUD_EVENTS` and `RATEL_CLOUD_INTENT_GRAPH` are deprecated** for `RATEL_PLATFORM_EVENTS` and `RATEL_PLATFORM_INTENT_GRAPH`. The SDK still reads the old names when the new name is not set.
+
+| Cloud name (`@ratel-ai/cloud-sdk`) | Platform name (`@ratel-ai/sdk`) |
+| --- | --- |
+| `@ratel-ai/cloud-sdk`, `@ratel-ai/cloud-sdk/runtime` | `@ratel-ai/sdk/platform` |
+| `@ratel-ai/cloud-sdk/otel` | `@ratel-ai/sdk/otel` |
+| `@ratel-ai/cloud-sdk/testing` | `@ratel-ai/sdk/platform/testing` |
+| `RatelCloudSdk` | `RatelPlatformClient` |
+| `CloudSdkError`, `CloudSdkErrorCode` | `PlatformError`, `PlatformErrorCode` |
+| `CloudSdkOptions` | `PlatformClientOptions` |
+| `CloudSdkLogEvent` | `PlatformLogEvent` |
+| `CloudSkill`, `CloudSuggestion` | `PlatformSkill`, `PlatformSuggestion` |
+| `ratelCloud`, `RatelCloud`, `RatelCloudOptions` | `ratelPlatform`, `RatelPlatform`, `RatelPlatformOptions` |
+| `CloudDefinitionsRuntimeAttachment` | `PlatformDefinitionsRuntimeAttachment` |
+| `MockCloud`, `MockCloudOptions` | `MockPlatform`, `MockPlatformOptions` |
+| `ratel({ cloud })` (only on `main`, never published) | `ratel({ platform })` |
+| `RATEL_CLOUD_EVENTS`, `RATEL_CLOUD_INTENT_GRAPH` | `RATEL_PLATFORM_EVENTS`, `RATEL_PLATFORM_INTENT_GRAPH` |
+| `https://cloud.ratel.sh/api/v1` | `https://app.ratel.sh/api/v1` |
+
 ### Added
 
 - **`@ratel-ai/sdk` is the Ratel Platform SDK.** The platform is `https://app.ratel.sh` by default, or a self-hosted platform through `RATEL_BASE_URL` or `platform.baseUrl`. The default API root is `https://app.ratel.sh/api/v1`.

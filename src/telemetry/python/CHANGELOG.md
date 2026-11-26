@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-26
+
+This is a breaking minor release for the Ratel Platform SDK (`ratel-ai` 0.14.0 needs it).
+
+### Breaking changes
+
+- **The OTLP endpoints default to the Ratel Platform at `https://app.ratel.sh/api/v1`.** The base URL is `base_url=`, then `RATEL_BASE_URL`, then `https://app.ratel.sh/api/v1`. With no endpoint, an API key or a base URL selects `${base_url}/traces` and `${base_url}/logs`.
+- **An API key alone no longer raises `ValueError`.** `api_key=` or `RATEL_API_KEY` with no endpoint now exports to the Ratel Platform.
+- **Two cases keep the old behavior.** First: a custom traces endpoint with no logs setting still sends logs to the `/v1/logs` sibling of the traces endpoint. Second: with no API key, no base URL and no endpoint, `ValueError` comes as before, so no telemetry leaves the process by accident. The error now names `RATEL_API_KEY` and `RATEL_BASE_URL`.
+
+| Cloud name | Platform name |
+| --- | --- |
+| Ratel Cloud | Ratel Platform |
+| `https://cloud.ratel.sh/api/v1` | `https://app.ratel.sh/api/v1` (`DEFAULT_BASE_URL`) |
+| no base URL setting | `base_url=`, `RATEL_BASE_URL` (`BASE_URL_ENV`) |
+| logs URL from `logs_endpoint=` or the traces sibling | `logs_endpoint=`, then `RATEL_OTLP_LOGS_ENDPOINT` (`OTLP_LOGS_ENDPOINT_ENV`), then `${base_url}/logs` |
+
 ### Added
 
 - **The default OTLP root is the Ratel Platform at `https://app.ratel.sh/api/v1`.** Set `base_url=` or `RATEL_BASE_URL` to use a self-hosted platform.

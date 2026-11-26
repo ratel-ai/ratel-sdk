@@ -20,7 +20,7 @@ each unit carries its own version in its own manifest and ships on its own caden
 | `mastra` | `mastra-v*` | `@ratel-ai/mastra` on npm | `src/adapters/ts-mastra/package.json` |
 | `rankers-ts` | `rankers-ts-v*` | `@ratel-ai/rankers-plugin` + 5 platform packages on npm | `src/rankers/ts/package.json` |
 | `rankers-py` | `rankers-py-v*` | `ratel-ai-rankers-plugin` on PyPI | `src/rankers/python/pyproject.toml` |
-| `cloud-sdk` | `cloud-sdk-v*` | `@ratel-ai/cloud-sdk` (deprecated shim) on npm | `src/cloud-sdk/ts/package.json` |
+| `cloud-sdk` | `cloud-sdk-v*` | `@ratel-ai/cloud-sdk` (deprecated, frozen: no new tag) on npm | `src/cloud-sdk/ts/package.json` |
 
 The units are registered once, in [`scripts/release-units.mjs`](scripts/release-units.mjs)
 — the single source of truth that the tag gate, the `releasable` helper, the changelog
@@ -78,6 +78,11 @@ and `@ratel-ai/sdk/platform/testing`. The shim re-exports them under its old ent
 `cloud-sdk-v*`. It has a `workspace:^` runtime dependency on `@ratel-ai/sdk`: the
 `publish-cloud-sdk` job pins it to `^<sdk version>` before publish and fails when that SDK is
 not on npm, so publish `sdk-ts` first. Platform code changes ship with the `sdk-ts` unit.
+
+**The `cloud-sdk` unit is frozen.** `@ratel-ai/cloud-sdk` is deprecated on npm and is not
+published again: do not push a `cloud-sdk-v*` tag. Its published versions (`latest` 0.6.0,
+`rc` 0.7.0-rc.5) keep working as they are. The source, the unit and the `publish-cloud-sdk`
+job stay in the repository until the owner decides their removal.
 
 The SDKs moved here from `ratel-ai/ratel` (the platform repo). ADR links below point at
 `ratel-ai/ratel`'s `docs/adr/`.
