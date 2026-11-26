@@ -1,56 +1,66 @@
+/**
+ * Catalog snapshot hashes: reproduce every vector in the shared
+ * `protocol/v1/conformance/snapshot-hash-vectors.json`. The Python SDK reads the
+ * same file, so a failure here means the two publishers disagree with Cloud.
+ */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { RuntimeCatalogSnapshot, RuntimeCatalogToolDefinition } from "../types.js";
 import { hashCatalogSnapshot } from "./hash.js";
 
-describe("hashCatalogSnapshot", () => {
-  it("produces the canonical Cloud hash regardless of definition or object-key order", () => {
-    const first = {
-      source_id: "worker-a",
-      tools: [
-        {
-          id: "weather.lookup",
-          name: "weather.lookup",
-          description: "Fetch a forecast.",
-          inputSchema: {
-            required: ["city"],
-            properties: { city: { type: "string" } },
-            type: "object",
-          },
-        },
-        {
-          id: "calendar.create",
-          name: "calendar.create",
-          description: "Create an event.",
-        },
-      ],
-    };
-    const reordered = {
-      tools: [
-        {
-          description: "Create an event.",
-          name: "calendar.create",
-          id: "calendar.create",
-        },
-        {
-          description: "Fetch a forecast.",
-          name: "weather.lookup",
-          id: "weather.lookup",
-          inputSchema: {
-            type: "object",
-            properties: { city: { type: "string" } },
-            required: ["city"],
-          },
-        },
-      ],
-      source_id: "worker-a",
-    };
+interface WireTool {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly searchable_description?: string;
+  readonly input_schema?: Record<string, unknown> | null;
+  readonly output_schema?: Record<string, unknown> | null;
+  readonly metadata?: Record<string, unknown> | null;
+}
 
-    expect(hashCatalogSnapshot(first)).toBe(
-      "dc0d168a666020cfe2386f0867d4f1ebe0097034ca424edd477f77317665593e",
-    );
-    expect(hashCatalogSnapshot(reordered)).toBe(
-      "dc0d168a666020cfe2386f0867d4f1ebe0097034ca424edd477f77317665593e",
-    );
-  });
+interface HashVector {
+  readonly name: string;
+  readonly snapshot: { readonly source_id: string; readonly tools: readonly WireTool[] };
+  readonly hash: string;
+}
+
+interface HashVectors {
+  readonly vectors: readonly HashVector[];
+  readonly equalHashes: readonly (readonly string[])[];
+  readonly distinctHashes: readonly (readonly string[])[];
+}
+
+const vectors: HashVectors = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../../../../protocol/v1/conformance/snapshot-hash-vectors.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
+
+describe("hashCatalogSnapshot", () => {
+  for (const vector of vectors.vectors) {
+    it(`reproduces the shared vector ${vector.name}`, () => {
+      expect(hashCatalogSnapshot(toSnapshot(vector))).toBe(vector.hash);
+    });
+  }
+
+  for (const group of vectors.equalHashes) {
+    it(`gives one hash to ${group.join(" = ")}`, () => {
+      expect(new Set(group.map((name) => hashCatalogSnapshot(toSnapshot(byName(name))))).size).toBe(
+        1,
+      );
+    });
+  }
+
+  for (const group of vectors.distinctHashes) {
+    it(`gives distinct hashes to ${group.join(", ")}`, () => {
+      const hashes = group.map((name) => hashCatalogSnapshot(toSnapshot(byName(name))));
+      expect(new Set(hashes).size).toBe(group.length);
+    });
+  }
 
   it("preserves JSON omission and array-null semantics for undefined values", () => {
     expect(
@@ -67,7 +77,7 @@ describe("hashCatalogSnapshot", () => {
           },
         ],
       }),
-    ).toBe("e00a087a6859a9ff16708743dafa9266f534f140c3b9b44f26a231cf19ff41b0");
+    ).toBe(byName("null-in-array").hash);
   });
 
   it("preserves JSON coercion semantics for exotic schema values", () => {
@@ -87,36 +97,32 @@ describe("hashCatalogSnapshot", () => {
           },
         ],
       }),
-    ).toBe("941bde1721281135461e8566e5c6c83dec23ef3db9ee12bea6cc4f2193d75c92");
-  });
-
-  it("moves when only the searchable description changes, and again when it is cleared", () => {
-    // The publisher skips any snapshot whose hash matches the last one it sent.
-    // A tool whose retrieval text changed on its own would otherwise look
-    // unchanged and sit unsent until the five-minute reconcile.
-    const withText = (searchable?: string) => ({
-      source_id: "worker-a",
-      tools: [
-        {
-          id: "add_task_comment",
-          name: "add_task_comment",
-          description: "Add a markdown comment to a task.",
-          ...(searchable === undefined ? {} : { experimentalSearchableDescription: searchable }),
-        },
-      ],
-    });
-
-    const none = hashCatalogSnapshot(withText());
-    const edited = hashCatalogSnapshot(withText("comment note retro ping"));
-    const rewritten = hashCatalogSnapshot(withText("comment note retro ping followup"));
-    const cleared = hashCatalogSnapshot(withText());
-
-    expect(edited).not.toBe(none);
-    expect(rewritten).not.toBe(edited);
-    // Clearing it returns to the original hash: an absent field and an unset
-    // one are the same catalog, which is what keeps old publishers stable.
-    expect(cleared).toBe(none);
-    // Blank after trimming is also "unset", matching the snapshot serializer.
-    expect(hashCatalogSnapshot(withText("   "))).not.toBe(none);
+    ).toBe(byName("json-coerced-values").hash);
   });
 });
+
+function byName(name: string): HashVector {
+  const vector = vectors.vectors.find((candidate) => candidate.name === name);
+  if (vector === undefined) throw new Error(`no snapshot hash vector named ${name}`);
+  return vector;
+}
+
+/** Map the wire field names of a vector to the TypeScript snapshot input. */
+function toSnapshot(vector: HashVector): RuntimeCatalogSnapshot {
+  return {
+    source_id: vector.snapshot.source_id,
+    tools: vector.snapshot.tools.map(
+      (tool): RuntimeCatalogToolDefinition => ({
+        id: tool.id,
+        name: tool.name,
+        ...(tool.description === undefined ? {} : { description: tool.description }),
+        ...(tool.searchable_description === undefined
+          ? {}
+          : { experimentalSearchableDescription: tool.searchable_description }),
+        ...(tool.input_schema === undefined ? {} : { inputSchema: tool.input_schema }),
+        ...(tool.output_schema === undefined ? {} : { outputSchema: tool.output_schema }),
+        ...(tool.metadata === undefined ? {} : { metadata: tool.metadata }),
+      }),
+    ),
+  };
+}

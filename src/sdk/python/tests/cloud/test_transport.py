@@ -310,7 +310,7 @@ async def test_mock_cloud_serves_an_added_route_and_records_requests() -> None:
         seen.append(request)
         return json_response({"accepted": len(request.body["events"])}, status=202)
 
-    mock.add_route("POST", r"/events", receive_events)
+    mock.add_route("POST", r"/events", receive_events, first=True)
     client = RatelCloudClient(
         api_key=mock.api_key, base_url="https://mock.test/api/v1", transport=mock
     )

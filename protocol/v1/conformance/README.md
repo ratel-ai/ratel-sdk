@@ -12,6 +12,9 @@ normative.
   field rule.
 - `verify.mjs` — a conformant reference implementation of the ETag / canonicalization
   algorithm, the scope overlay, and the `If-None-Match` matcher, plus the vector runner.
+- `snapshot-hash-vectors.json` — runtime catalog snapshots (`PUT /catalog/snapshot`, wire field
+  names) and the SHA-256 content hash that every SDK publisher MUST produce for each. The
+  TypeScript and Python SDK tests read this file. `verify.mjs` does not check it.
 
 ## Running
 

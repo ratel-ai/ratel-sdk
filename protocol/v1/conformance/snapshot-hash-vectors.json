@@ -1,0 +1,213 @@
+{
+  "description": "Catalog snapshot content hashes (PUT /catalog/snapshot). Every SDK publisher MUST produce the same SHA-256 hex hash for each snapshot. Tool fields use the wire names: id, name, description, searchable_description, input_schema, output_schema, metadata. An SDK maps them to its own snapshot input before it hashes.",
+  "vectors": [
+    {
+      "name": "basic",
+      "snapshot": {
+        "source_id": "worker-a",
+        "tools": [
+          {
+            "id": "weather.lookup",
+            "name": "weather.lookup",
+            "description": "Fetch a forecast.",
+            "input_schema": {
+              "required": ["city"],
+              "properties": { "city": { "type": "string" } },
+              "type": "object"
+            }
+          },
+          { "id": "calendar.create", "name": "calendar.create", "description": "Create an event." }
+        ]
+      },
+      "hash": "dc0d168a666020cfe2386f0867d4f1ebe0097034ca424edd477f77317665593e"
+    },
+    {
+      "name": "basic-reordered",
+      "note": "Tool order and object-key order do not change the hash.",
+      "snapshot": {
+        "tools": [
+          { "description": "Create an event.", "name": "calendar.create", "id": "calendar.create" },
+          {
+            "description": "Fetch a forecast.",
+            "name": "weather.lookup",
+            "id": "weather.lookup",
+            "input_schema": {
+              "type": "object",
+              "properties": { "city": { "type": "string" } },
+              "required": ["city"]
+            }
+          }
+        ],
+        "source_id": "worker-a"
+      },
+      "hash": "dc0d168a666020cfe2386f0867d4f1ebe0097034ca424edd477f77317665593e"
+    },
+    {
+      "name": "null-in-array",
+      "note": "The JSON form of a JavaScript schema with an undefined property (omitted) and an undefined array item (null).",
+      "snapshot": {
+        "source_id": "worker-exotic",
+        "tools": [
+          {
+            "id": "undefined",
+            "name": "undefined",
+            "input_schema": {
+              "properties": { "kept": { "type": "string" } },
+              "required": ["kept", null]
+            }
+          }
+        ]
+      },
+      "hash": "e00a087a6859a9ff16708743dafa9266f534f140c3b9b44f26a231cf19ff41b0"
+    },
+    {
+      "name": "json-coerced-values",
+      "note": "The JSON form of a JavaScript schema with a Date, NaN, Infinity and a RegExp.",
+      "snapshot": {
+        "source_id": "worker-exotic",
+        "tools": [
+          {
+            "id": "exotic",
+            "name": "exotic",
+            "input_schema": {
+              "createdAt": "2026-08-14T00:00:00.000Z",
+              "nan": null,
+              "infinity": null,
+              "pattern": {}
+            }
+          }
+        ]
+      },
+      "hash": "941bde1721281135461e8566e5c6c83dec23ef3db9ee12bea6cc4f2193d75c92"
+    },
+    {
+      "name": "searchable-none",
+      "snapshot": {
+        "source_id": "worker-a",
+        "tools": [
+          {
+            "id": "add_task_comment",
+            "name": "add_task_comment",
+            "description": "Add a markdown comment to a task."
+          }
+        ]
+      },
+      "hash": "61bf818957db9d5bd7b716703e2d2768624ac26ee575d895865cd9b8b6270b05"
+    },
+    {
+      "name": "searchable-empty",
+      "note": "An empty searchable description is unset: same hash as searchable-none.",
+      "snapshot": {
+        "source_id": "worker-a",
+        "tools": [
+          {
+            "id": "add_task_comment",
+            "name": "add_task_comment",
+            "description": "Add a markdown comment to a task.",
+            "searchable_description": ""
+          }
+        ]
+      },
+      "hash": "61bf818957db9d5bd7b716703e2d2768624ac26ee575d895865cd9b8b6270b05"
+    },
+    {
+      "name": "searchable-edited",
+      "snapshot": {
+        "source_id": "worker-a",
+        "tools": [
+          {
+            "id": "add_task_comment",
+            "name": "add_task_comment",
+            "description": "Add a markdown comment to a task.",
+            "searchable_description": "comment note retro ping"
+          }
+        ]
+      },
+      "hash": "5cbb2abe392619596e2daf936b24e78e3c64a8e900c2e04883d8cd9bbdeacfa2"
+    },
+    {
+      "name": "searchable-rewritten",
+      "snapshot": {
+        "source_id": "worker-a",
+        "tools": [
+          {
+            "id": "add_task_comment",
+            "name": "add_task_comment",
+            "description": "Add a markdown comment to a task.",
+            "searchable_description": "comment note retro ping followup"
+          }
+        ]
+      },
+      "hash": "5f551fae2fd52c9a05b362ceaf9997f316f9da05c3e15f463aed92357dda8ad3"
+    },
+    {
+      "name": "searchable-blank",
+      "note": "The hash does not trim: a blank value is set. The snapshot publisher trims before it hashes.",
+      "snapshot": {
+        "source_id": "worker-a",
+        "tools": [
+          {
+            "id": "add_task_comment",
+            "name": "add_task_comment",
+            "description": "Add a markdown comment to a task.",
+            "searchable_description": "   "
+          }
+        ]
+      },
+      "hash": "5f2177143b772e406d9b34300dbddd1d812aadb8ccf3e44d4e4cb0159e1d1ce6"
+    },
+    {
+      "name": "numbers",
+      "note": "Numbers serialize like JavaScript JSON.stringify: 2.0 is 2, -0.0 is 0, exponents start at 1e21 and 1e-7.",
+      "snapshot": {
+        "source_id": "worker-numbers",
+        "tools": [
+          {
+            "id": "numbers",
+            "name": "numbers",
+            "description": "Number formatting.",
+            "input_schema": {
+              "half": 0.5,
+              "two": 2.0,
+              "negativeZero": -0.0,
+              "big": 1e21,
+              "belowBig": 123456789012345680000,
+              "small": 1e-7,
+              "aboveSmall": 0.000001,
+              "precise": 0.1,
+              "negative": -12.75,
+              "integer": 42
+            }
+          }
+        ]
+      },
+      "hash": "b353c65b471964d6d2311b2dc3dd99825efdc81f67853360250617ee68d39de1"
+    },
+    {
+      "name": "unicode-and-metadata",
+      "note": "Keys and tool ids sort by UTF-8 bytes; strings keep raw UTF-8 with minimal escaping.",
+      "snapshot": {
+        "source_id": "worker-ü",
+        "tools": [
+          {
+            "id": "zeta",
+            "name": "zeta",
+            "description": "Line separator, tab\t, quote \" and control \u0001.",
+            "metadata": { "z": 1, "é": 2, "a": { "d": [3, 1], "c": null }, "😀": true, "￿": false },
+            "output_schema": { "type": "string" }
+          },
+          { "id": "émoji", "name": "émoji 😀", "description": "Non-ASCII id." },
+          { "id": "Zulu", "name": "Zulu", "description": "Upper case sorts first." }
+        ]
+      },
+      "hash": "4314e52648e6dd7e580e84f88691f4f8e1521d51450a7de267e07625aab02608"
+    }
+  ],
+  "equalHashes": [
+    ["basic", "basic-reordered"],
+    ["searchable-none", "searchable-empty"]
+  ],
+  "distinctHashes": [
+    ["searchable-none", "searchable-edited", "searchable-rewritten", "searchable-blank"]
+  ]
+}

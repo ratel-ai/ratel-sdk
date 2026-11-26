@@ -6,18 +6,25 @@ covered when every name token of a published skill appears in it), not a
 reimplementation of the server pipeline.
 
 Extend it with more endpoints through `MockCloud.add_route`. Every request it
-receives is kept in `MockCloud.requests`.
+receives is kept in `MockCloud.requests`. `MockCloud.script_responses` queues
+the answers of one endpoint (e.g. 503, then 200) before its normal handler.
+
+`ManualClock` is a fake ``clock`` and ``sleep`` for the runtime publishers, so a
+test moves time forward with `ManualClock.advance` instead of a real wait.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import heapq
 import json
 import re
+from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, cast
+from typing import Any, Callable, Union, cast
 from urllib.parse import parse_qsl, urlsplit
 
 from .transport import TransportRequest, TransportResponse
@@ -38,7 +45,14 @@ from .types import (
 )
 from .wire import canonical_set, if_none_match_matches, resolve
 
-__all__ = ["MockCloud", "MockHandler", "MockRequest", "json_response"]
+__all__ = [
+    "ManualClock",
+    "MockCloud",
+    "MockHandler",
+    "MockRequest",
+    "ScriptedResponse",
+    "json_response",
+]
 
 _PROJECT_ID = "proj_mock"
 _KEBAB_CASE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -71,6 +85,10 @@ class MockRequest:
 #: A route handler: it receives the parsed request and returns the response.
 MockHandler = Callable[[MockRequest], TransportResponse]
 
+#: One scripted answer: a status (2xx runs the normal handler), a full response,
+#: or an exception that `MockCloud.send` raises as a network failure.
+ScriptedResponse = Union[int, TransportResponse, BaseException]
+
 
 @dataclass(frozen=True)
 class _Route:
@@ -87,6 +105,13 @@ class MockCloud:
         skills: The managed skills by id.
         suggestions: The suggestions by id.
         requests: Every request received, in arrival order (also unauthorized ones).
+        received_event_batches: The ``events`` of every authorized ``POST /events``,
+            in arrival order. Retries, scripted failures and the empty batch of
+            ``verify()`` are included.
+        runtime_events: The events that ``POST /events`` accepted, in arrival order.
+        received_snapshots: The body of every authorized ``PUT /catalog/snapshot``,
+            in arrival order, also of scripted failures.
+        catalog_snapshots: The snapshots that ``PUT /catalog/snapshot`` accepted.
     """
 
     def __init__(
@@ -109,6 +134,11 @@ class MockCloud:
         self.skills: dict[str, CloudSkill] = {}
         self.suggestions: dict[str, CloudSuggestion] = {}
         self.requests: list[TransportRequest] = []
+        self.received_event_batches: list[list[dict[str, Any]]] = []
+        self.runtime_events: list[dict[str, Any]] = []
+        self.received_snapshots: list[dict[str, Any]] = []
+        self.catalog_snapshots: list[dict[str, Any]] = []
+        self._scripts: dict[tuple[str, str], deque[ScriptedResponse]] = {}
         self._now = now if now is not None else _utc_now
         self._seq = 0
         # Keeps source layers even when a conformance vector reuses an id across scopes.
@@ -146,6 +176,15 @@ class MockCloud:
         parsed = json.loads(request.body.decode("utf-8")) if request.body else {}
         body = parsed if isinstance(parsed, dict) else {}
         method = request.method.upper()
+        self._record_received(method, path, body)
+
+        scripted = self._next_scripted(method, path)
+        if isinstance(scripted, BaseException):
+            raise scripted
+        if isinstance(scripted, TransportResponse):
+            return scripted
+        if scripted is not None and not 200 <= scripted < 300:
+            return json_response({"error": f"scripted HTTP {scripted}"}, status=scripted)
 
         for route in self._routes:
             match = route.pattern.fullmatch(path)
@@ -183,6 +222,25 @@ class MockCloud:
             self._routes.insert(0, route)
         else:
             self._routes.append(route)
+
+    def script_responses(self, method: str, path: str, *responses: ScriptedResponse) -> None:
+        """Queue the next answers of one endpoint, before its normal handler.
+
+        Each request to the endpoint takes the next answer. When the queue is
+        empty, the normal handler serves the request again. For example,
+        ``script_responses("POST", "/events", 503, 200)`` fails the first batch
+        and accepts its retry.
+
+        Args:
+            method: The HTTP method, e.g. ``"POST"``.
+            path: The exact path after the ``/v1`` prefix, e.g. ``"/events"``.
+            *responses: The answers, in order. A 2xx status runs the normal
+                handler. Another status returns ``{"error": ...}`` with that
+                status. A `TransportResponse` is returned as it is (use
+                `json_response` to add a ``Retry-After`` header). An exception
+                is raised, as a network failure.
+        """
+        self._scripts.setdefault((method.upper(), path), deque()).extend(responses)
 
     def next_id(self, prefix: str) -> str:
         """Return a new id such as ``"sk_3"``. Ids share one counter.
@@ -271,9 +329,22 @@ class MockCloud:
             ("POST", r"/intents/([^/]+)/suggest", self._suggest_intent),
             ("GET", r"/jobs/([^/]+)", self._get_job),
             ("GET", r"/runtime-catalog/overrides", self._get_runtime_catalog_overrides),
+            ("POST", r"/events", self._receive_events),
+            ("PUT", r"/catalog/snapshot", self._receive_snapshot),
         ]
         for method, pattern, handler in routes:
             self.add_route(method, pattern, handler)
+
+    def _record_received(self, method: str, path: str, body: dict[str, Any]) -> None:
+        if method == "POST" and path == "/events":
+            events = body.get("events")
+            self.received_event_batches.append(list(events) if isinstance(events, list) else [])
+        elif method == "PUT" and path == "/catalog/snapshot":
+            self.received_snapshots.append(body)
+
+    def _next_scripted(self, method: str, path: str) -> ScriptedResponse | None:
+        queue = self._scripts.get((method, path))
+        return queue.popleft() if queue else None
 
     # — catalog —————————————————————————————————————————————————————————————
 
@@ -694,6 +765,104 @@ class MockCloud:
         if if_none_match_matches(request.headers.get("if-none-match"), headers["etag"]):
             return TransportResponse(status=304, headers=headers, body=b"")
         return json_response(body, headers=headers)
+
+    # — runtime events and catalog snapshots ——————————————————————————————————
+
+    def _receive_events(self, request: MockRequest) -> TransportResponse:
+        events = request.body.get("events")
+        accepted = list(events) if isinstance(events, list) else []
+        self.runtime_events.extend(accepted)
+        return json_response(
+            {"accepted": len(accepted), "duplicates": 0, "rejected": []}, status=202
+        )
+
+    def _receive_snapshot(self, request: MockRequest) -> TransportResponse:
+        snapshot = request.body
+        self.catalog_snapshots.append(snapshot)
+        catalog_version = self.next_id("cv")
+        tools = snapshot.get("tools")
+        return json_response(
+            {
+                "sourceId": snapshot.get("source_id"),
+                "catalogVersion": catalog_version,
+                "tools": len(tools) if isinstance(tools, list) else 0,
+                "unchanged": False,
+            },
+            headers={"etag": f'"{catalog_version}"'},
+        )
+
+
+class ManualClock:
+    """A fake ``clock`` and ``sleep`` that move only when a test calls `advance`.
+
+    Pass `now` as ``clock=`` and `sleep` as ``sleep=``. A sleep resolves when
+    `advance` reaches its deadline. Sleeps of zero resolve at the next `advance`.
+
+    Attributes:
+        sleeps: Every requested sleep in seconds, in call order.
+    """
+
+    def __init__(self, start: float = 1_750_000_000.0) -> None:
+        """Create the clock.
+
+        Args:
+            start: The start time in seconds since the epoch.
+        """
+        self._now = start
+        self._seq = 0
+        self._sleepers: list[tuple[float, int, asyncio.Future[None]]] = []
+        self.sleeps: list[float] = []
+
+    def now(self) -> float:
+        """Return the current fake time in seconds since the epoch."""
+        return self._now
+
+    async def sleep(self, seconds: float) -> None:
+        """Wait until `advance` reaches ``now() + seconds``.
+
+        Args:
+            seconds: The delay.
+        """
+        self.sleeps.append(seconds)
+        future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self._seq += 1
+        heapq.heappush(self._sleepers, (self._now + max(seconds, 0.0), self._seq, future))
+        await future
+
+    @property
+    def pending(self) -> list[float]:
+        """The remaining seconds of each sleep that has not resolved, soonest first."""
+        return sorted(
+            deadline - self._now for deadline, _, future in self._sleepers if not future.done()
+        )
+
+    async def advance(self, seconds: float = 0.0) -> None:
+        """Move the time forward and resolve each sleep whose deadline it reaches.
+
+        Sleeps resolve in deadline order, and the tasks they wake run before
+        the next one resolves. A sleep that starts meanwhile resolves too when
+        its deadline is in the window.
+
+        Args:
+            seconds: How far to move. Zero resolves only the due sleeps.
+        """
+        target = self._now + seconds
+        await _settle()
+        while self._sleepers and self._sleepers[0][0] <= target:
+            deadline, _, future = heapq.heappop(self._sleepers)
+            if future.done():
+                continue
+            self._now = max(self._now, deadline)
+            future.set_result(None)
+            await _settle()
+        self._now = target
+        await _settle()
+
+
+async def _settle() -> None:
+    """Let the woken tasks run until they wait again."""
+    for _ in range(50):
+        await asyncio.sleep(0)
 
 
 def json_response(
