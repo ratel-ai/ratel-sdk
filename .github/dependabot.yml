@@ -12,7 +12,6 @@ updates:
       - "/src/telemetry/ts"
       - "/src/rankers/ts"
       - "/src/adapters/*"
-      - "/src/cloud-sdk/ts"
     schedule:
       interval: weekly
     commit-message:

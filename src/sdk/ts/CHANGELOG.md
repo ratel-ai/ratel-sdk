@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Documentation
+
+- The source of the deprecated `@ratel-ai/cloud-sdk` is removed from the repository. The README keeps a migration table from `@ratel-ai/cloud-sdk` to `@ratel-ai/sdk`.
+
 ## [0.14.0] - 2026-11-26
 
 This is a breaking minor release. It includes all the work of the `0.13.0-rc.*` releases below. `0.13.0` has no GA release: upgrade from `0.12.x` or a `0.13.0-rc.*` straight to `0.14.0`.
