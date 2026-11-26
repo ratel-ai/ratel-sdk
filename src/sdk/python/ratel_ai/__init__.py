@@ -14,7 +14,11 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `ToolCatalog.turn` / `current_turn_id`: mark one user request as one turn
   so everything inside carries its `turn_id` (ADR-0026).
 - `RuntimeEvents` / `RuntimeCatalog` — subscribe to runtime facts and snapshot
-  executor-free tool/skill state (ADR-0020; no Python Cloud transport).
+  executor-free tool/skill state (ADR-0020).
+- `ratel(cloud=...)` / `CloudOptions` — turn on Ratel Cloud for one core: runtime
+  events, catalog snapshots, Cloud definitions, intent graph sync and the Tool
+  Picker, plus the Cloud API on `Ratel.cloud`. The `ratel_ai.cloud` package
+  loads only when `cloud` is set.
 
 The facts/grounding surface (`FactCatalog` / `Fact`, the push-path grounding
 analogue: constant content injected into the context, gated by the pure
@@ -22,6 +26,8 @@ analogue: constant content injected into the context, gated by the pure
 `ratel_ai.experimental` namespace, not here — it may change without a major
 version bump.
 """
+
+from typing import TYPE_CHECKING, Any
 
 from ._custom_ranking import (
     RankCandidate,
@@ -113,6 +119,20 @@ from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 from .telemetry import configure_telemetry
 from .turns import TURN_USER_MESSAGE_MAX_BYTES, Turn, current_turn_id
 
+if TYPE_CHECKING:
+    from .cloud.ratel_cloud import (
+        CloudEventsOptions,
+        CloudIntentGraphOptions,
+        CloudOptions,
+        RatelCloudRuntime,
+    )
+
+# The `ratel(cloud=...)` types live in `ratel_ai.cloud`. They load on first access,
+# so `import ratel_ai` never loads the Cloud package.
+_CLOUD_EXPORTS = frozenset(
+    {"CloudEventsOptions", "CloudIntentGraphOptions", "CloudOptions", "RatelCloudRuntime"}
+)
+
 __all__ = [
     "AdaptiveRankingStatus",
     "ArtifactError",
@@ -177,6 +197,10 @@ __all__ = [
     "StaleIntentGraphError",
     "Tool",
     "BaselineTurn",
+    "CloudEventsOptions",
+    "CloudIntentGraphOptions",
+    "CloudOptions",
+    "RatelCloudRuntime",
     "ToolCatalog",
     "ToolCollection",
     "ToolRegistry",
@@ -196,3 +220,12 @@ __all__ = [
     "search_capabilities_tool",
     "search_tools_tool",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Load the `ratel(cloud=...)` types from `ratel_ai.cloud` on first access."""
+    if name in _CLOUD_EXPORTS:
+        from .cloud import ratel_cloud
+
+        return getattr(ratel_cloud, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

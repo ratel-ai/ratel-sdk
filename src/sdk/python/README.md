@@ -258,8 +258,8 @@ accepted by the bounded native queues and for async handlers to settle. Subscrib
 publisher must set `experimental_catalog_definitions=True` to consent to public
 `catalog_definition` fields regardless of the OTel message-content capture setting. Definition events are lossy and change-sensitive; snapshots are
 the authoritative full replacement for removals and recovery. They contain sorted public
-definitions only—never tool executors or skill bodies. Python exposes no Cloud transport;
-applications may publish these events and snapshots through their own adapter.
+definitions only—never tool executors or skill bodies. To publish them to Ratel Cloud, use
+`ratel(cloud=...)` (see [Ratel Cloud](#ratel-cloud)), or publish them through your own adapter.
 
 ## Definition overrides from an external source (experimental)
 
@@ -307,6 +307,225 @@ always shows the local definitions. The model-facing description, schemas, bodie
 executors stay local. Definition events after an attach carry
 `ratel.catalog.use_definition_overrides=true`. Opting in is one-way for the life of the process.
 These APIs may change without a major-version bump.
+
+## Ratel Cloud
+
+One option turns on Ratel Cloud for a core: `ratel(cloud=...)`. With `RATEL_API_KEY` set,
+`cloud=True` is enough. The core then publishes its runtime events and its catalog snapshots,
+and `r.cloud` reaches the Cloud API with the same key:
+
+```python
+from ratel_ai import ratel
+
+
+async def main() -> None:
+    r = ratel(cloud=True)  # reads RATEL_API_KEY (and RATEL_BASE_URL)
+
+    await r.tools.register([deploy_tool, rollback_tool])
+    async with r.turn():
+        hits = r.tools.search("roll back the production deploy", 2)
+        if hits:
+            await r.tools.invoke(hits[0].tool_id, {"service": "billing"})
+
+    # The Cloud API, from the same object and the same key.
+    skills = (await r.cloud.skills.list())["skills"]
+
+    await r.cloud.flush()  # deliver what is queued (also called by close())
+    print(r.cloud.status())  # delivery health of events and snapshots
+    await r.cloud.close()  # at shutdown
+```
+
+Without `cloud`, `ratel()` runs no Cloud code, does not import `ratel_ai.cloud` and sends no
+request, and `r.cloud` is `None`. With `cloud` and no API key, `ratel()` raises a
+`ratel_ai.cloud.CloudError` (code `config`) that names `RATEL_API_KEY`. Delivery is fail-open: a
+Cloud failure never fails a search or an invoke. A runnable version is
+[`examples/cloud-python/main.py`](../../../examples/cloud-python/main.py).
+
+Pass a `CloudOptions` dict to set the key and the URL in code, or to turn on more features:
+
+```python
+r = ratel(
+    cloud={
+        "api_key": "rtl_…",
+        "base_url": "https://cloud.ratel.sh/api/v1",
+        "events": {"warn_on_failure": False},  # on by default; False turns it off
+        "definitions": True,  # Cloud owns the retrieval descriptions
+        "intent_graph": True,  # sync the intent graph and rank with it
+        "tool_picker": "precise",  # rank tools with the Cloud Tool Picker (method="custom")
+    }
+)
+await r.cloud.ready()  # the first definitions pull and intent graph load ended
+```
+
+`r.cloud` has `skills`, `suggestions`, `intents`, `jobs` and `runtime_catalog` (the management
+clients), `tool_picker`, and the lifecycle methods `status()`, `verify()`, `ready()`, `flush()`,
+`close()` and `refresh_definitions()`. Do not set `method` or `retrieve_fn` with `tool_picker`:
+`ratel()` raises. `ratel(cloud=...)` returns a `Ratel[RatelCloudRuntime]`, so a type checker knows
+that `r.cloud` is set. `ratel()` returns a `Ratel[None]`.
+
+**The event loop.** `ratel()` is synchronous, and the Cloud features run on an asyncio event
+loop. When you call `ratel(cloud=...)` inside a running loop (for example in `async def main()` or
+in the startup hook of your web framework), the features start at once on that loop. When you call
+it before the loop starts (for example at import time), `r.cloud` holds the runtime events (at
+most `queue_capacity`, default 1,024, oldest dropped first). The features then start on the first
+awaited `r.cloud` call: `ready()`, `flush()`, `verify()`, `refresh_definitions()` or `close()`. That
+call replays the held events. In that case, call `await r.cloud.ready()` one time inside the loop,
+at startup. The features stay on the loop that they started on.
+
+### Cloud settings
+
+Each Cloud feature resolves its key and URL in one place (`resolve_cloud_config` of
+`ratel_ai.cloud`): the option, then the env variable, then the default.
+
+| Option | Env variable | Default |
+| --- | --- | --- |
+| `cloud["api_key"]` | `RATEL_API_KEY` | none: required |
+| `cloud["base_url"]` | `RATEL_BASE_URL` | `https://cloud.ratel.sh/api/v1` |
+| `cloud["events"]` | `RATEL_CLOUD_EVENTS=off` turns runtime events off | on |
+| `cloud["definitions"]` | — | off |
+| `cloud["intent_graph"]` | `RATEL_CLOUD_INTENT_GRAPH=off` turns it off | off |
+| `cloud["tool_picker"]` | — | off (`True` means `"precise"`) |
+| `cloud["source_id"]` | — | the runtime's event source id |
+| `cloud["timeout"]` | — | the default of each feature (30 s for most requests) |
+| `endpoint` of `configure_telemetry` | `RATEL_OTLP_ENDPOINT` | none: required |
+| `logs_endpoint` of `configure_telemetry` | — | the `/v1/logs` sibling of `endpoint` |
+
+`cloud["timeout"]` is in seconds. `cloud["transport"]` replaces the HTTP transport of every
+feature (default `ratel_ai.cloud.UrllibTransport`). Tests pass a `MockCloud`.
+
+### Advanced: the separate functions
+
+`ratel(cloud=...)` wires the functions below. Use them directly to wire one feature yourself, or
+for a runtime that `ratel()` does not create. They read the same settings. The Cloud code uses the
+standard library only:
+
+| Import | What it holds |
+| --- | --- |
+| `ratel_ai.cloud` | `RatelCloudClient` (catalog writes, intent analysis, suggestion review over the v1 HTTP API), `resolve_cloud_config`, `CloudError` and the transports |
+| `ratel_ai.cloud.runtime` | Runtime attachment: `attach`, `attach_intent_graph_sync`, `ratel_cloud` |
+| `ratel_ai.cloud.testing` | `MockCloud`, an in-process fake of the Cloud API, and `ManualClock` |
+
+### Runtime events and catalog snapshots
+
+`attach(runtime)` subscribes one runtime to fail-open delivery. Call it from a running event loop:
+
+```python
+from ratel_ai import ratel
+from ratel_ai.cloud.runtime import attach
+
+runtime = ratel()
+cloud_runtime = attach(runtime, source_id="checkout-worker")
+...
+await cloud_runtime.flush()  # in serverless handlers, before each invocation ends
+await cloud_runtime.close()  # at shutdown
+```
+
+Only the remotely publishable event types (`RUNTIME_EVENT_TYPES` of `ratel_ai.cloud.runtime`)
+leave the process. `attach()` publishes an initial catalog snapshot and refreshes it after
+registration churn, behind a debounce (`snapshot_debounce_ms`, default 500 ms) with a maximum wait
+of four debounce windows. Durable snapshots reconcile every five minutes
+(`snapshot_reconcile_interval_ms`). Transient failures retry with an exponential backoff
+(`retry=RetryOptions(...)`). Payload rejects (HTTP 400/413/415) go one time to `on_rejected` and
+are dropped. Set `RATEL_CLOUD_EVENTS=off` before `attach()` to turn event delivery off. Catalog
+snapshots stay on.
+
+`cloud_runtime.status()` returns JSON-serializable delivery health (`overall`, `events`,
+`snapshots`), and `await cloud_runtime.verify()` probes event ingestion without a change to the
+queues. `status()["overall"]` is `pending`, `ok`, `degraded`, `blocked` or `disabled`. The first
+transition into each failing kind warns one time. Pass `warn_on_failure=False` to stop the
+warnings, or `on_status_change` to observe the transitions.
+
+#### Cloud definitions
+
+`attach(runtime, use_cloud_definitions=True)` gives Ratel Cloud ownership of the retrieval
+descriptions of the live tools, skills and facts (`cloud["definitions"]` of `ratel()`). It uses
+`RuntimeCatalog.experimental_attach_definition_overrides` with a Cloud source. The initial pull
+runs in the background, and `flush()` and `close()` wait for it. Later pulls send the last ETag:
+
+```python
+await cloud_runtime.refresh_cloud_definitions()  # True when a changed overlay was applied
+```
+
+A failed initial pull keeps the local descriptions. A later failed refresh keeps the last applied
+Cloud descriptions.
+
+#### Intent graph sync (adaptive usage ranking)
+
+`attach_intent_graph_sync` moves the in-memory `IntentGraph` of a runtime to and from the
+per-project, per-source-id graph storage of Ratel Cloud (`cloud["intent_graph"]` of `ratel()`). It
+does not turn ranking on: you do that.
+
+```python
+from ratel_ai.cloud.runtime import attach_intent_graph_sync
+
+sync = await attach_intent_graph_sync(
+    runtime,
+    source_id="billing-agent",
+    on_replaced=lambda graph: runtime.tools.catalog.experimental_enable_adaptive_ranking(graph),
+)
+runtime.tools.catalog.experimental_enable_adaptive_ranking(sync.graph)
+```
+
+In `"push"` mode (the default), it saves local usage behind a debounce (`debounce_ms`, default
+15 s) and a maximum wait (`max_wait_ms`, default 60 s). A 409 loads the newer graph and calls
+`on_replaced`. In `"consume"` mode, it reads a graph that Cloud owns (`graph_key`) and polls for
+newer revisions (`poll_interval_ms`, default 5 minutes, minimum 15 s). It never writes. Rank a
+consumed graph with `learn=False`. A second call for the same runtime raises.
+`RATEL_CLOUD_INTENT_GRAPH=off` turns the sync off. Every failure is fail-open.
+
+#### Tool Picker ranking (`retrieve_fn`)
+
+`ratel_cloud()` returns the Cloud API of one configuration. Its `tool_picker` is a `RankFn` that
+ranks with the Ratel Cloud Tool Picker (`cloud["tool_picker"]` of `ratel()`):
+
+```python
+from ratel_ai import ratel
+from ratel_ai.cloud.runtime import attach, ratel_cloud
+
+rc = ratel_cloud()  # api_key defaults to RATEL_API_KEY
+runtime = ratel(method="custom", retrieve_fn=rc.tool_picker)
+cloud_runtime = attach(runtime)
+
+await runtime.tools.register(tools)
+await cloud_runtime.flush()  # publish the catalog snapshot before the first search
+
+hits = await runtime.tools.search_async("roll back the last deploy", 5)
+```
+
+| Mode | Ranking | Client timeout |
+|---|---|---|
+| `instant` | BM25 only, no credits | 15 s |
+| `precise` (default) | BM25 shortlist, then Jev | 15 s |
+| `exhaustive` | Jev over the whole catalog. Cloud stops at 45 s | 60 s |
+
+`rc.tool_picker.with_mode("exhaustive")` returns a picker for another mode. The picker ranks the
+tool catalog that the project synced to Cloud, and sends only `{query, mode, top_k}`. Before the
+first search, register your tools and `await flush()`. Skill candidates return `[]` without a
+request. Every failure raises `ratel_ai.RetrieverError` with the same `code` and `transient`
+value as the TypeScript SDK (`Config`, `InvalidRequest`, `Unauthorized`, `InsufficientCredits`,
+`NoSyncedTools`, `RateLimited`, `Unavailable`, `Timeout`, `Unreachable`, `Malformed`, `Http`).
+
+### Testing with `MockCloud`
+
+`MockCloud` serves the Cloud wire contract in process. Pass it as the transport:
+
+```python
+from ratel_ai import ratel
+from ratel_ai.cloud.testing import MockCloud
+
+mock = MockCloud()
+r = ratel(cloud={"api_key": mock.api_key, "transport": mock})
+await r.tools.register(tools)
+await r.cloud.flush()
+
+assert mock.catalog_snapshots[-1]["tools"]
+assert mock.runtime_events
+```
+
+It records `requests`, `received_event_batches`, `runtime_events`, `received_snapshots`,
+`catalog_snapshots`, `intent_graphs` and `tool_picks`. Seed it with
+`seed_runtime_catalog_override`, `seed_intent_graph` and `seed_tool_ranking`, script failures with
+`script_responses`, and add routes with `add_route`.
 
 ## Facts (experimental)
 

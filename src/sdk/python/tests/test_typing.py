@@ -33,3 +33,8 @@ def test_registry_consumer_invalid_calls_are_rejected() -> None:
     output = result.stdout + result.stderr
     assert result.returncode == 1, output
     assert output.count(": error:") == 12, output
+
+
+def test_ratel_cloud_slot_typechecks() -> None:
+    result = _run_mypy("ratel_cloud_types.py")
+    assert result.returncode == 0, result.stdout + result.stderr

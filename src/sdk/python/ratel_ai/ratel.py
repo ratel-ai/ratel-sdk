@@ -6,13 +6,16 @@
 ids, top-K clamping and the fixed set of three capability tools. The fact
 catalog is experimental and built on first access to `Ratel.facts`.
 
+``ratel(cloud=...)`` turns on Ratel Cloud (`ratel_ai.cloud.ratel_cloud`); with no
+``cloud``, this module never imports `ratel_ai.cloud`.
+
 The TypeScript `adaptTo` and the adapter SPI are not ported yet.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Iterable, Sequence
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, Generic, Literal, Optional, TypedDict, TypeVar, overload
 
 from ._custom_ranking import RankFn
 from ._native import SearchHit
@@ -41,6 +44,7 @@ from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 from .turns import Turn, current_turn_id
 
 if TYPE_CHECKING:
+    from .cloud.ratel_cloud import CloudOptions, RatelCloudRuntime
     from .fact_catalog import FactCatalog
     from .grounding import GroundingResult, GroundingSnapshotItem
 
@@ -60,13 +64,17 @@ class RatelEventsOptions(TypedDict, total=False):
     experimental_catalog_definitions: bool
 
 
+# The type of `Ratel.cloud`: the handle for a core made with `cloud`, `None` without.
+_CloudT = TypeVar("_CloudT", bound=Optional["RatelCloudRuntime"])
+
 # The capability-tool ids: an app tool may not shadow them (registration raises).
 _RESERVED_TOOL_IDS = frozenset({SEARCH_CAPABILITIES_ID, INVOKE_TOOL_ID, GET_SKILL_CONTENT_ID})
 
 
+@overload
 def ratel(
     *,
-    method: SearchMethod = "bm25",
+    method: SearchMethod | None = None,
     embedding: EmbeddingSpec | None = None,
     experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
     reranker: RerankerConfig | None = None,
@@ -77,7 +85,61 @@ def ratel(
     facts_top_k: int | None = None,
     trace: TraceSinkConfig | None = None,
     events: RatelEventsOptions | None = None,
-) -> Ratel:
+    cloud: Literal[True] | CloudOptions,
+) -> Ratel[RatelCloudRuntime]: ...
+
+
+@overload
+def ratel(
+    *,
+    method: SearchMethod | None = None,
+    embedding: EmbeddingSpec | None = None,
+    experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+    reranker: RerankerConfig | None = None,
+    retrieve_fn: RankFn | None = None,
+    reranker_fn: RankFn | None = None,
+    reranker_depth: int | None = None,
+    recall_top_k: int | None = None,
+    facts_top_k: int | None = None,
+    trace: TraceSinkConfig | None = None,
+    events: RatelEventsOptions | None = None,
+    cloud: Literal[False] | None = None,
+) -> Ratel[None]: ...
+
+
+@overload
+def ratel(
+    *,
+    method: SearchMethod | None = None,
+    embedding: EmbeddingSpec | None = None,
+    experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+    reranker: RerankerConfig | None = None,
+    retrieve_fn: RankFn | None = None,
+    reranker_fn: RankFn | None = None,
+    reranker_depth: int | None = None,
+    recall_top_k: int | None = None,
+    facts_top_k: int | None = None,
+    trace: TraceSinkConfig | None = None,
+    events: RatelEventsOptions | None = None,
+    cloud: bool | CloudOptions | None = None,
+) -> Ratel[RatelCloudRuntime | None]: ...
+
+
+def ratel(
+    *,
+    method: SearchMethod | None = None,
+    embedding: EmbeddingSpec | None = None,
+    experimental_embedding_artifact: ExperimentalEmbeddingArtifact | None = None,
+    reranker: RerankerConfig | None = None,
+    retrieve_fn: RankFn | None = None,
+    reranker_fn: RankFn | None = None,
+    reranker_depth: int | None = None,
+    recall_top_k: int | None = None,
+    facts_top_k: int | None = None,
+    trace: TraceSinkConfig | None = None,
+    events: RatelEventsOptions | None = None,
+    cloud: bool | CloudOptions | None = None,
+) -> Ratel[Any]:
     """Create a framework-neutral Ratel core.
 
     Register tools on `r.tools` and skills on `r.skills`, hand the model
@@ -105,15 +167,31 @@ def ratel(
             Capped at 50; invalid values fall back to 3. **Experimental.**
         trace: local trace-stream destination of every catalog (default: discard).
         events: identity and delivery options of `Ratel.events`.
+        cloud: turn on Ratel Cloud: `True` reads ``RATEL_API_KEY`` (and
+            ``RATEL_BASE_URL``), a `ratel_ai.cloud.ratel_cloud.CloudOptions` dict
+            sets the key and the features in code. Gives `Ratel.cloud`. With no
+            ``cloud`` (or `False`), the core runs no Cloud code and sends no request.
 
     Returns:
         The core.
 
     Raises:
         ValueError: if the ranking options are invalid.
+        ratel_ai.cloud.CloudError: code ``config``, if ``cloud`` is set with no API
+            key, or ``cloud`` sets ``tool_picker`` with ``method`` or ``retrieve_fn``.
     """
+    # The one Cloud wiring point: validated before the catalogs exist, because the
+    # Tool Picker replaces the ranking. The Cloud package loads only here.
+    cloud_setup = None
+    if cloud is not None and cloud is not False:
+        from .cloud.ratel_cloud import setup_ratel_cloud
+
+        cloud_setup = setup_ratel_cloud(cloud, method=method, retrieve_fn=retrieve_fn)
+        if cloud_setup.retrieve_fn is not None:
+            method, retrieve_fn = "custom", cloud_setup.retrieve_fn
+    resolved_method: SearchMethod = method if method is not None else "bm25"
     ranking: dict[str, Any] = {
-        "method": method,
+        "method": resolved_method,
         "embedding": embedding,
         "trace": trace,
         "experimental_embedding_artifact": experimental_embedding_artifact,
@@ -122,16 +200,19 @@ def ratel(
         "reranker_fn": reranker_fn,
         "reranker_depth": reranker_depth,
     }
-    return Ratel(
+    core: Ratel[Any] = Ratel(
         ToolCatalog(**ranking),
         SkillCatalog(**ranking),
-        method=method,
+        method=resolved_method,
         embedding=embedding,
         recall_top_k=recall_top_k,
         facts_top_k=facts_top_k,
         trace=trace,
         events=events,
     )
+    if cloud_setup is not None:
+        core.cloud = cloud_setup.connect(core)
+    return core
 
 
 class ToolCollection:
@@ -204,10 +285,15 @@ class ToolCollection:
         return await self.catalog.invoke(tool_id, args, turn_id)
 
 
-class Ratel:
+class Ratel(Generic[_CloudT]):
     """One `ratel(...)` core: shared tool, skill and fact catalogs, one event stream.
 
     Build it with `ratel`.
+
+    Attributes:
+        cloud: The Ratel Cloud handle when the core was made with ``cloud``: the
+            management clients, the Tool Picker and the lifecycle of the Cloud
+            features. `None` for a core made without ``cloud``.
     """
 
     def __init__(
@@ -238,6 +324,7 @@ class Ratel:
         self._facts_top_k = facts_top_k
         self._trace = trace
         self._facts: FactCatalog | None = None
+        self.cloud: _CloudT = None  # type: ignore[assignment] # `ratel` sets it with `cloud`
 
     @property
     def facts(self) -> FactCatalog:
