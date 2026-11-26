@@ -1,11 +1,10 @@
 import type { IntentGraph as IntentGraphType } from "../../index.js";
-import { DEFAULT_BASE_URL, DEFAULT_TIMEOUT_MS } from "../transport.js";
+import { DEFAULT_TIMEOUT_MS, resolveCloudConfig } from "../config.js";
 import type { RuntimeEvent } from "../types.js";
 import type { RatelRuntimeEvents } from "./attach.js";
 import { nonNegative, parseRetryAfter } from "./retry.js";
 import { normalizeSourceId } from "./snapshots.js";
 
-const DEFAULT_ENDPOINT = `${DEFAULT_BASE_URL}/intent-graph`;
 const DEFAULT_DEBOUNCE_MS = 15_000;
 const DEFAULT_MAX_WAIT_MS = 60_000;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -49,8 +48,13 @@ export interface IntentGraphSyncOptions {
   /** Consume mode only: how often to poll with a conditional GET. Defaults to 300000 ms
    * (5 minutes). Minimum 15000 ms; lower values are clamped. */
   readonly pollIntervalMs?: number;
-  /** Defaults to `https://cloud.ratel.sh/api/v1/intent-graph`. */
+  /** Full intent graph URL. Overrides {@link baseUrl}. Defaults to `${baseUrl}/intent-graph`. */
   readonly endpoint?: string;
+  /**
+   * API root, including the `/api/v1` prefix. Defaults to `RATEL_BASE_URL`, then
+   * `https://cloud.ratel.sh/api/v1`.
+   */
+  readonly baseUrl?: string;
   /** Project API key. Defaults to `RATEL_API_KEY`. */
   readonly apiKey?: string;
   /** Quiet period after a qualifying invoke before saving. Defaults to 15000 ms. */
@@ -171,12 +175,13 @@ export async function attachIntentGraphSync(
     nonNegative(options.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS),
     MIN_POLL_INTERVAL_MS,
   );
-  const endpoint = options.endpoint ?? DEFAULT_ENDPOINT;
-  const apiKey = options.apiKey ?? process.env.RATEL_API_KEY ?? "";
+  const config = resolveCloudConfig(options);
+  const endpoint = options.endpoint ?? `${config.baseUrl}/intent-graph`;
+  const apiKey = config.apiKey ?? "";
   const debounceMs = nonNegative(options.debounceMs, DEFAULT_DEBOUNCE_MS);
   const maxWaitMs = nonNegative(options.maxWaitMs, DEFAULT_MAX_WAIT_MS);
   const timeoutMs = nonNegative(options.timeoutMs, DEFAULT_TIMEOUT_MS);
-  const fetchImpl = options.fetch ?? fetch;
+  const fetchImpl = config.fetch;
   const randomImpl = options.random ?? Math.random;
   const onReplaced = options.onReplaced;
   const onError = options.onError;

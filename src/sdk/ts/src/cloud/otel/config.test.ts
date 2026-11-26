@@ -139,3 +139,26 @@ describe("resolveOtlpLogsConfig — auth parity", () => {
     ).toEqual({ authorization: "Bearer deliberate" });
   });
 });
+
+describe("OTLP resolvers — RATEL_BASE_URL", () => {
+  const env = { RATEL_BASE_URL: "https://env.ratel.test/api/v1/" };
+
+  it("derives the traces route from RATEL_BASE_URL", () => {
+    expect(resolveOtlpConfig({}, env).url).toBe("https://env.ratel.test/api/v1/traces");
+  });
+
+  it("derives the logs route from RATEL_BASE_URL", () => {
+    expect(resolveOtlpLogsConfig({}, env).url).toBe("https://env.ratel.test/api/v1/logs");
+  });
+
+  it("keeps an explicit baseUrl over RATEL_BASE_URL", () => {
+    expect(resolveOtlpConfig({ baseUrl: "https://opt.test/api/v1" }, env).url).toBe(
+      "https://opt.test/api/v1/traces",
+    );
+  });
+
+  it("keeps RATEL_OTLP_ENDPOINT over RATEL_BASE_URL", () => {
+    const both = { ...env, [OTLP_ENDPOINT_ENV]: "https://collector.internal/v1/traces" };
+    expect(resolveOtlpConfig({}, both).url).toBe("https://collector.internal/v1/traces");
+  });
+});

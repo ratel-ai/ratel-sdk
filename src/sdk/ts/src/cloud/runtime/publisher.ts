@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { DEFAULT_BASE_URL, DEFAULT_TIMEOUT_MS } from "../transport.js";
+import { type CloudConfig, resolveCloudConfig } from "../config.js";
 import type { RuntimeEvent } from "../types.js";
 import { classifyDelivery, type DeliveryResult, DeliveryStatus } from "./delivery-status.js";
 import {
@@ -65,11 +65,8 @@ export interface RuntimeEventsRetryOptions {
   random?: () => number;
 }
 
-export interface RuntimeEventsPublisherOptions {
-  apiKey: string;
-  baseUrl?: string;
-  fetch?: typeof fetch;
-  timeoutMs?: number;
+/** `apiKey`, `baseUrl`, `fetch` and `timeoutMs` resolve through {@link resolveCloudConfig}. */
+export interface RuntimeEventsPublisherOptions extends CloudConfig {
   /** Maximum events held before the oldest is dropped. Defaults to 1,024. */
   queueCapacity?: number;
   /** Delay before queued events drain automatically. Defaults to 1 second. */
@@ -106,10 +103,12 @@ export class RuntimeEventsPublisher {
   #deferralStreak = 0;
 
   constructor(options: RuntimeEventsPublisherOptions) {
-    this.#apiKey = options.apiKey;
-    this.#baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    this.#fetch = options.fetch ?? fetch;
-    this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const config = resolveCloudConfig(options);
+    // Fail-open: with no key, Cloud answers 401 and delivery reports the failure.
+    this.#apiKey = config.apiKey ?? "";
+    this.#baseUrl = config.baseUrl;
+    this.#fetch = config.fetch;
+    this.#timeoutMs = config.timeoutMs;
     this.#onRejected = options.onRejected;
     this.#retry = createRetryConfig(options.retry);
     this.#sleep = options.sleep ?? sleep;

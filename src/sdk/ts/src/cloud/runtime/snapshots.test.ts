@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CatalogSnapshotsPublisher } from "./snapshots.js";
 
 describe("CatalogSnapshotsPublisher", () => {
@@ -829,3 +829,27 @@ function wireTool(id: string) {
     metadata: null,
   };
 }
+
+describe("CatalogSnapshotsPublisher config resolution", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("publishes to RATEL_BASE_URL with RATEL_API_KEY when both options are omitted", async () => {
+    vi.stubEnv("RATEL_BASE_URL", "https://env.ratel.test/api/v1/");
+    vi.stubEnv("RATEL_API_KEY", "rtl_env");
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const publisher = new CatalogSnapshotsPublisher({
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: String(input), init });
+        return Response.json({}, { headers: { ETag: '"v1"' } });
+      }) as typeof fetch,
+    });
+
+    publisher.publish({ source_id: "worker-a", tools: [{ id: "t", name: "t" }] });
+    await publisher.flush();
+
+    expect(requests[0]?.url).toBe("https://env.ratel.test/api/v1/catalog/snapshot");
+    expect(requests[0]?.init?.headers).toMatchObject({ authorization: "Bearer rtl_env" });
+  });
+});

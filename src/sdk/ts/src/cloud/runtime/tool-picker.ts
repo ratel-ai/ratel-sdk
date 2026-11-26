@@ -1,5 +1,11 @@
 import type { RankCandidate, RankedId, RankFn, RetrieverError } from "../../index.js";
-import { DEFAULT_BASE_URL } from "../transport.js";
+import { RatelCloudSdk } from "../client.js";
+import { type CloudConfig, resolveCloudConfig } from "../config.js";
+import type { IntentsClient } from "../intents.js";
+import type { JobsClient } from "../jobs.js";
+import type { RuntimeCatalogClient } from "../runtime-catalog.js";
+import type { SkillsClient } from "../skills.js";
+import type { SuggestionsClient } from "../suggestions.js";
 
 /**
  * How the Tool Picker ranks: `instant` is BM25 only (free), `precise` puts a
@@ -8,15 +14,12 @@ import { DEFAULT_BASE_URL } from "../transport.js";
  */
 export type ToolPickerMode = "instant" | "precise" | "exhaustive";
 
-export interface RatelCloudOptions {
-  /** Project API key. Defaults to `RATEL_API_KEY`, read on every pick. */
-  readonly apiKey?: string;
-  /** Cloud API base, including the `/api/v1` prefix. Same value `attach()` takes. */
-  readonly baseUrl?: string;
-  /** Override the per-mode request budget (15 s, or 60 s for `exhaustive`). */
-  readonly timeoutMs?: number;
-  readonly fetch?: typeof fetch;
-}
+/**
+ * `apiKey` and `baseUrl` resolve through {@link resolveCloudConfig} on every pick,
+ * so a change of `RATEL_API_KEY` or `RATEL_BASE_URL` applies to the next pick.
+ * `timeoutMs` overrides the per-mode request budget (15 s, or 60 s for `exhaustive`).
+ */
+export interface RatelCloudOptions extends Readonly<CloudConfig> {}
 
 /**
  * A {@link RankFn} that ranks with the Ratel Cloud Tool Picker. Pass it as
@@ -28,9 +31,24 @@ export interface ToolPicker extends RankFn {
   withMode(mode: ToolPickerMode): ToolPicker;
 }
 
+/**
+ * The Ratel Cloud API from one configuration: the management clients and the
+ * Tool Picker. `ratelCloud()` returns it. `ratel({ cloud }).cloud` returns it with
+ * the runtime methods added (`RatelCloudRuntime`).
+ */
 export interface RatelCloud {
-  /** Ranks tools with the Tool Picker in `precise` mode. */
+  /** Ranks tools with the Tool Picker. `precise` mode unless `ratel({ cloud: { toolPicker } })` sets another. */
   readonly toolPicker: ToolPicker;
+  /** Skill catalog management: create, update, publish and import skills. */
+  readonly skills: SkillsClient;
+  /** Review of the improvement suggestions that Cloud drafts. */
+  readonly suggestions: SuggestionsClient;
+  /** Intent analysis of conversations and the recurring-ask ledger. */
+  readonly intents: IntentsClient;
+  /** Status of the asynchronous jobs that Cloud runs. */
+  readonly jobs: JobsClient;
+  /** The Cloud-owned Retrieval descriptions of the runtime catalog. */
+  readonly runtimeCatalog: RuntimeCatalogClient;
 }
 
 /** Cloud's `top_k` ceiling for `/tools/pick`. */
@@ -43,7 +61,23 @@ const EXHAUSTIVE_TIMEOUT_MS = 60_000;
 
 /** Ratel Cloud features for a `ratel()` runtime from `@ratel-ai/sdk`. */
 export function ratelCloud(options: RatelCloudOptions = {}): RatelCloud {
-  return { toolPicker: createToolPicker(options, "precise") };
+  return createRatelCloud(options, "precise");
+}
+
+/**
+ * The {@link RatelCloud} of `options`, with its Tool Picker in `mode`. Builds no
+ * connection: a client sends its first request when the caller calls it.
+ */
+export function createRatelCloud(options: RatelCloudOptions, mode: ToolPickerMode): RatelCloud {
+  const sdk = new RatelCloudSdk(options);
+  return {
+    toolPicker: createToolPicker(options, mode),
+    skills: sdk.skills,
+    suggestions: sdk.suggestions,
+    intents: sdk.intents,
+    jobs: sdk.jobs,
+    runtimeCatalog: sdk.runtimeCatalog,
+  };
 }
 
 function createToolPicker(options: RatelCloudOptions, mode: ToolPickerMode): ToolPicker {
@@ -66,7 +100,8 @@ async function pickTools(
   // calls a RankFn once per catalog, so every candidate shares the first one's kind.
   if (candidates.length === 0 || topK <= 0 || candidates[0]?.kind === "skill") return [];
   const fail = await retrieverErrorFactory();
-  const apiKey = options.apiKey ?? process.env.RATEL_API_KEY ?? "";
+  const config = resolveCloudConfig(options);
+  const apiKey = config.apiKey ?? "";
   if (apiKey === "") {
     throw fail(
       "Ratel Cloud Tool Picker needs an API key: pass apiKey or set RATEL_API_KEY",
@@ -74,12 +109,12 @@ async function pickTools(
     );
   }
 
-  const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const { baseUrl } = config;
   const timeoutMs =
     options.timeoutMs ?? (mode === "exhaustive" ? EXHAUSTIVE_TIMEOUT_MS : PICK_TIMEOUT_MS);
   let response: Response;
   try {
-    response = await (options.fetch ?? fetch)(`${baseUrl}/tools/pick`, {
+    response = await config.fetch(`${baseUrl}/tools/pick`, {
       method: "POST",
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({ query: truncate(query), mode, top_k: Math.min(topK, MAX_TOP_K) }),

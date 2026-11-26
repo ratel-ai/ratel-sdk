@@ -1,6 +1,9 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["src/index.ts", "src/testkit/index.ts"],
+  "entryPoints": [
+    "src/index.ts",
+    "src/testkit/index.ts"
+  ],
   "readme": "none",
   "emit": "none",
   "excludeInternal": true,
@@ -8,7 +11,20 @@
     "notDocumented": true
   },
   "treatValidationWarningsAsErrors": true,
-  "intentionallyNotExported": ["src/catalog.ts:ExclusiveEmbeddingFields"],
+  "intentionallyNotExported": [
+    "src/catalog.ts:ExclusiveEmbeddingFields",
+    "src/cloud/runtime/attach.ts:AttachOptions",
+    "src/cloud/runtime/intent-graph-sync.ts:IntentGraphSyncOptions",
+    "src/cloud/runtime/tool-picker.ts:ToolPickerMode",
+    "src/cloud/runtime/tool-picker.ts:ToolPicker",
+    "src/cloud/intents.ts:IntentsClient",
+    "src/cloud/jobs.ts:JobsClient",
+    "src/cloud/runtime-catalog.ts:RuntimeCatalogClient",
+    "src/cloud/skills.ts:SkillsClient",
+    "src/cloud/suggestions.ts:SuggestionsClient",
+    "src/cloud/runtime/delivery-status.ts:RuntimeDeliveryStatus",
+    "src/cloud/runtime/delivery-status.ts:DeliveryResult"
+  ],
   "externalSymbolLinkMappings": {
     "@ratel-ai/telemetry": {
       "contentCaptureMode": "https://github.com/ratel-ai/ratel-sdk/blob/main/src/telemetry/ts/src/content-capture.ts"

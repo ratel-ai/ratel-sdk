@@ -11,6 +11,8 @@ import type {
   NewSkillInput,
   NewSkillPatch,
   RuntimeCatalogOverride,
+  RuntimeCatalogSnapshot,
+  RuntimeEvent,
   SkillStatus,
   SuggestionStatus,
   SuggestionType,
@@ -44,6 +46,20 @@ export interface MockCloudOptions {
 }
 
 const PROJECT_ID = "proj_mock";
+
+/** An intent graph that MockCloud stores for one source. */
+export interface MockIntentGraph {
+  rev: number;
+  graph: Record<string, unknown>;
+  etag: string;
+}
+
+/** One request that MockCloud received on `POST /tools/pick`. */
+export interface MockToolPick {
+  query: string;
+  mode: string;
+  topK: number;
+}
 
 /** A row in the mock's recurring-ask ledger. */
 interface QueryIntentRow {
@@ -81,6 +97,14 @@ export class MockCloud {
   /** Async jobs, keyed by id. */
   private readonly jobs = new Map<string, JobRow>();
   private readonly runtimeCatalogOverrides = new Map<string, RuntimeCatalogOverride>();
+  /** Runtime events received on `POST /events`, in arrival order. */
+  readonly runtimeEvents: RuntimeEvent[] = [];
+  /** Catalog snapshots received on `PUT /catalog/snapshot`, in arrival order. */
+  readonly catalogSnapshots: RuntimeCatalogSnapshot[] = [];
+  /** Stored intent graphs by source id, from `PUT /intent-graph` or {@link seedIntentGraph}. */
+  readonly intentGraphs = new Map<string, MockIntentGraph>();
+  /** Requests received on `POST /tools/pick`, in arrival order. */
+  readonly toolPicks: MockToolPick[] = [];
 
   constructor(options: MockCloudOptions = {}) {
     this.apiKey = options.apiKey ?? "rtl_test_key";
@@ -89,6 +113,11 @@ export class MockCloud {
     for (const partial of options.suggestions ?? []) this.seedSuggestion(partial);
     this.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
       Promise.resolve(this.handle(input, init))) as typeof fetch;
+  }
+
+  /** Store an intent graph for `sourceId`, as if a runtime had pushed it. */
+  seedIntentGraph(sourceId: string, graph: { rev: number } & Record<string, unknown>): void {
+    this.intentGraphs.set(sourceId, { rev: graph.rev, graph, etag: `"ig-${this.seq++}"` });
   }
 
   /** Seed or replace one runtime-catalog override. */
@@ -224,8 +253,89 @@ export class MockCloud {
       return this.suggestIntent(seg[1] as string);
     if (seg[0] === "jobs" && seg.length === 2 && method === "GET")
       return this.getJob(seg[1] as string);
+    if (path === "/events" && method === "POST") return this.receiveEvents(body);
+    if (path === "/catalog/snapshot" && method === "PUT") return this.receiveSnapshot(body);
+    if (path === "/intent-graph" && method === "GET") return this.getIntentGraph(url, headers);
+    if (path === "/intent-graph" && method === "PUT") return this.putIntentGraph(body);
+    if (path === "/tools/pick" && method === "POST") return this.pickTools(body);
 
     return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
+  private receiveEvents(body: Record<string, unknown>): Response {
+    const events = Array.isArray(body.events) ? (body.events as RuntimeEvent[]) : [];
+    this.runtimeEvents.push(...events);
+    return Response.json({ accepted: events.length, duplicates: 0, rejected: [] }, { status: 202 });
+  }
+
+  private receiveSnapshot(body: Record<string, unknown>): Response {
+    const snapshot = body as unknown as RuntimeCatalogSnapshot;
+    this.catalogSnapshots.push(snapshot);
+    const catalogVersion = `cv-${this.seq++}`;
+    return Response.json(
+      {
+        sourceId: snapshot.source_id,
+        catalogVersion,
+        tools: snapshot.tools?.length ?? 0,
+        unchanged: false,
+      },
+      { headers: { ETag: `"${catalogVersion}"` } },
+    );
+  }
+
+  private getIntentGraph(url: URL, headers: Headers): Response {
+    const stored = this.intentGraphs.get(url.searchParams.get("source") ?? "");
+    if (stored === undefined) return Response.json({ error: "not_found" }, { status: 404 });
+    if (headers.get("if-none-match") === stored.etag) {
+      return new Response(null, { status: 304, headers: { ETag: stored.etag } });
+    }
+    return Response.json(
+      { sourceId: url.searchParams.get("source"), rev: stored.rev, graph: stored.graph },
+      { headers: { ETag: stored.etag } },
+    );
+  }
+
+  private putIntentGraph(body: Record<string, unknown>): Response {
+    const sourceId = String(body.source_id ?? "");
+    const graph = (isRecord(body.graph) ? body.graph : {}) as Record<string, unknown>;
+    const rev = typeof graph.rev === "number" ? graph.rev : 0;
+    const etag = `"ig-${this.seq++}"`;
+    this.intentGraphs.set(sourceId, { rev, graph, etag });
+    return Response.json({ sourceId, rev }, { headers: { ETag: etag } });
+  }
+
+  /**
+   * Rank the tools of the latest catalog snapshot by how many query words their
+   * name and description contain. A stand-in for the Cloud Tool Picker.
+   */
+  private pickTools(body: Record<string, unknown>): Response {
+    const pick: MockToolPick = {
+      query: String(body.query ?? ""),
+      mode: String(body.mode ?? "precise"),
+      topK: typeof body.top_k === "number" ? body.top_k : 5,
+    };
+    this.toolPicks.push(pick);
+    const words = pick.query.toLowerCase().split(/\W+/).filter(Boolean);
+    const tools = (this.catalogSnapshots.at(-1)?.tools ?? [])
+      .map((tool) => {
+        const text = `${tool.name} ${tool.description ?? ""}`.toLowerCase();
+        const hits = words.filter((word) => text.includes(word)).length;
+        return {
+          id: tool.id,
+          name: tool.name,
+          description: tool.description ?? "",
+          score: words.length === 0 ? 0 : hits / words.length,
+        };
+      })
+      .filter((tool) => tool.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, pick.topK);
+    return Response.json({
+      mode: pick.mode,
+      tools,
+      confident: tools.length > 0,
+      usage: { candidates: tools.length, questions: 0, input_tokens: 0 },
+    });
   }
 
   private getRuntimeCatalogOverrides(headers: Headers): Response {
@@ -706,6 +816,10 @@ function slugify(text: string): string {
 
 function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function catalogVersionFromPath(pathname: string): 1 | 2 | null {

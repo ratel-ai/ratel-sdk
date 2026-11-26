@@ -616,12 +616,83 @@ Message and tool content is off by default; opt in with the `OTEL_INSTRUMENTATIO
 
 ## Ratel Cloud
 
-The Ratel Cloud client is part of this package, behind three subpaths. None of them loads the
-native addon:
+One option turns on Ratel Cloud for a runtime: `ratel({ cloud })`. With `RATEL_API_KEY` set,
+`cloud: true` is enough. The runtime then publishes its runtime events and its catalog
+snapshots, and `r.cloud` reaches the Cloud API with the same key:
+
+```ts
+import { ratel } from "@ratel-ai/sdk";
+
+const r = ratel({ cloud: true }); // reads RATEL_API_KEY (and RATEL_BASE_URL)
+
+await r.tools.register(deployTool, rollbackTool);
+await r.turn(async () => {
+  const [best] = r.tools.search("roll back the production deploy", 2);
+  if (best) await r.tools.invoke(best.toolId, { service: "billing" });
+});
+
+// The Cloud API, from the same object and the same key.
+const { skills } = await r.cloud.skills.list();
+
+await r.cloud.flush(); // deliver what is queued (also called by close())
+console.log(r.cloud.status()); // delivery health of events and snapshots
+await r.cloud.close(); // at shutdown
+```
+
+Without `cloud`, `ratel()` runs no Cloud code and sends no request, and `r.cloud` is `undefined`.
+With `cloud` and no API key, `ratel()` throws a `CloudSdkError` (code `config`) that names
+`RATEL_API_KEY`. Delivery is fail-open: a Cloud failure never fails a search or an invoke. A
+runnable version is [`examples/cloud/src/quickstart.ts`](../../../examples/cloud/src/quickstart.ts).
+
+Pass an object to set the key and the URL in code, or to turn on more features:
+
+```ts
+const r = ratel({
+  cloud: {
+    apiKey: "rtl_…",
+    baseUrl: "https://cloud.ratel.sh/api/v1",
+    events: { warnOnFailure: false }, // on by default; false turns it off
+    definitions: true, // Cloud owns the Retrieval descriptions
+    intentGraph: true, // sync the intent graph and rank with it
+    toolPicker: "precise", // rank tools with the Cloud Tool Picker (method: "custom")
+  },
+});
+await r.cloud.ready(); // the first definitions pull and intent graph load ended
+```
+
+`r.cloud` has `skills`, `suggestions`, `intents`, `jobs` and `runtimeCatalog` (the management
+clients), `toolPicker`, and the lifecycle methods `status()`, `verify()`, `ready()`, `flush()`,
+`close()` and `refreshDefinitions()`. Every adapted view has the same handle:
+`r.adaptTo(adapter).cloud === r.cloud`. Do not set `method` or `retrieveFn` with `toolPicker`:
+`ratel()` throws.
+
+### Cloud settings
+
+Each Cloud feature resolves its key and URL in one place (`resolveCloudConfig` of
+`@ratel-ai/sdk/cloud`): the option, then the env variable, then the default.
+
+| Option | Env variable | Default |
+| --- | --- | --- |
+| `cloud.apiKey` | `RATEL_API_KEY` | none: required |
+| `cloud.baseUrl` | `RATEL_BASE_URL` | `https://cloud.ratel.sh/api/v1` |
+| `cloud.events` | `RATEL_CLOUD_EVENTS=off` turns runtime events off | on |
+| `cloud.definitions` | — | off |
+| `cloud.intentGraph` | `RATEL_CLOUD_INTENT_GRAPH=off` turns it off | off |
+| `cloud.toolPicker` | — | off (`true` means `"precise"`) |
+| `cloud.sourceId` | — | the runtime's event source id |
+| `cloud.timeoutMs` | — | the default of each feature (30 s for most requests) |
+| `endpoint` of `RatelSpanProcessor` | `RATEL_OTLP_ENDPOINT` | `${baseUrl}/traces` |
+| `endpoint` of `RatelLogRecordProcessor` | `RATEL_OTLP_LOGS_ENDPOINT` | `${baseUrl}/logs` |
+
+### Advanced: the separate functions
+
+`ratel({ cloud })` wires the functions below. Use them directly to wire one feature yourself,
+or for a runtime that `ratel()` does not create. They read the same settings. The Cloud client
+is behind three subpaths. None of them loads the native addon:
 
 | Import | What it holds |
 | --- | --- |
-| `@ratel-ai/sdk/cloud` | `RatelCloudSdk` (catalog writes, intent analysis, suggestion review over the v1 HTTP API), plus runtime attachment (`attach`, `attachIntentGraphSync`, `ratelCloud`) |
+| `@ratel-ai/sdk/cloud` | `RatelCloudSdk` (catalog writes, intent analysis, suggestion review over the v1 HTTP API), plus runtime attachment (`attach`, `attachIntentGraphSync`, `ratelCloud`) and `resolveCloudConfig` |
 | `@ratel-ai/sdk/otel` | The Ratel Cloud OpenTelemetry destination (`RatelSpanProcessor`, `RatelLogRecordProcessor`) |
 | `@ratel-ai/sdk/cloud/testing` | `MockCloud`, an in-process fake of the Cloud API |
 
@@ -634,16 +705,12 @@ Management & supervised self-improvement client for [Ratel Cloud](https://cloud.
 **cloud skills catalog**, run **intent analysis** on conversations, and review the resulting
 **skill suggestions** — over the v1 HTTP API, authenticated by a project API key.
 
-```sh
-npm install @ratel-ai/sdk
-```
-
-### Quickstart
+### Management client quickstart
 
 ```ts
 import { RatelCloudSdk, type SuggestJobResult } from "@ratel-ai/sdk/cloud";
 
-const cloud = new RatelCloudSdk({ apiKey: process.env.RATEL_API_KEY! });
+const cloud = new RatelCloudSdk(); // reads RATEL_API_KEY and RATEL_BASE_URL
 
 // — Catalog management —
 const skill = await cloud.skills.create({
@@ -672,8 +739,8 @@ for (const intent of run.intents.filter((i) => !i.covered)) {
 
 ```ts
 const cloud = new RatelCloudSdk({
-  apiKey: "rtl_…",                              // required — sent as `Authorization: Bearer`
-  baseUrl: "https://cloud.ratel.sh/api/v1",     // default; include the /api/v1 prefix
+  apiKey: "rtl_…",                              // default RATEL_API_KEY — sent as `Authorization: Bearer`
+  baseUrl: "https://cloud.ratel.sh/api/v1",     // default RATEL_BASE_URL, then this; include /api/v1
   timeoutMs: 30_000,                            // default per-request timeout
   fetch: customFetch,                           // injectable (testing, proxies, instrumentation)
   debug: true,                                  // log each request + response to the console

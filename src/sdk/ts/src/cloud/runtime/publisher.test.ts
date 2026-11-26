@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeEvent } from "../types.js";
 import { DeliveryStatus } from "./delivery-status.js";
 import { RuntimeEventsPublisher } from "./publisher.js";
@@ -725,5 +725,29 @@ describe("RuntimeEventsPublisher", () => {
     expect(() => publisher.publish(circular)).not.toThrow();
     expect(() => publisher.publish(EVENT)).not.toThrow();
     await expect(publisher.flush()).resolves.toBeUndefined();
+  });
+});
+
+describe("RuntimeEventsPublisher config resolution", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("publishes to RATEL_BASE_URL with RATEL_API_KEY when both options are omitted", async () => {
+    vi.stubEnv("RATEL_BASE_URL", "https://env.ratel.test/api/v1/");
+    vi.stubEnv("RATEL_API_KEY", "rtl_env");
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const publisher = new RuntimeEventsPublisher({
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: String(input), init });
+        return Response.json({ accepted: 1, duplicates: 0, rejected: [] }, { status: 202 });
+      }) as typeof fetch,
+    });
+
+    publisher.publish(EVENT);
+    await publisher.flush();
+
+    expect(requests[0]?.url).toBe("https://env.ratel.test/api/v1/events");
+    expect(requests[0]?.init?.headers).toMatchObject({ authorization: "Bearer rtl_env" });
   });
 });

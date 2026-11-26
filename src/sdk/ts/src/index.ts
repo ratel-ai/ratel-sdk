@@ -69,6 +69,12 @@ export type {
   TraceSinkConfig,
 } from "./catalog.js";
 export { definePlugin, ToolCatalog } from "./catalog.js";
+export type {
+  RatelCloudConfig,
+  RatelCloudEventsOptions,
+  RatelCloudIntentGraphOptions,
+  RatelCloudRuntime,
+} from "./cloud/ratel-cloud.js";
 // Deprecated pre-0.2.0 surface (see compat.ts) — kept so `@ratel-ai/sdk@0.1.x`
 // callers keep compiling and running after upgrading to 0.2.0. Slated for removal (RAT-250).
 export type {
@@ -136,6 +142,7 @@ export type {
   ExperimentalPassthroughToolExposure,
   Ratel,
   RatelAdapter,
+  RatelCloudSlot,
   RatelConfig,
   RecallRef,
   ToolCollection,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudSdkError } from "./errors.js";
 import { type CloudSdkLogEvent, Transport } from "./transport.js";
 
@@ -124,5 +124,38 @@ describe("Transport", () => {
       phase: "error",
       error: expect.stringContaining("socket hangup"),
     });
+  });
+});
+
+describe("Transport config resolution", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sends requests to RATEL_BASE_URL when baseUrl is omitted", async () => {
+    vi.stubEnv("RATEL_BASE_URL", "https://env.test/api/v1/");
+    const stub = fetchStub(() => Response.json({}));
+    const t = new Transport({ apiKey: "k", fetch: stub.fetch });
+    await t.request("GET", "/catalog");
+    expect(stub.calls[0]?.url).toBe("https://env.test/api/v1/catalog");
+  });
+
+  it("falls back to RATEL_API_KEY when apiKey is omitted", async () => {
+    vi.stubEnv("RATEL_API_KEY", "rtl_env");
+    const stub = fetchStub(() => Response.json({}));
+    const t = new Transport({ baseUrl: "https://x.test/api/v1", fetch: stub.fetch });
+    await t.request("GET", "/catalog");
+    const headers = stub.calls[0]?.init?.headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer rtl_env");
+  });
+
+  it("throws a CloudSdkError that names RATEL_API_KEY when no key is set", async () => {
+    vi.stubEnv("RATEL_API_KEY", "");
+    const stub = fetchStub(() => Response.json({}));
+    const t = new Transport({ baseUrl: "https://x.test/api/v1", fetch: stub.fetch });
+    const err = await t.request("GET", "/catalog").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CloudSdkError);
+    expect((err as CloudSdkError).message).toContain("RATEL_API_KEY");
+    expect(stub.calls).toHaveLength(0);
   });
 });

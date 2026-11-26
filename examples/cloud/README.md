@@ -10,6 +10,19 @@ pnpm --filter @ratel-ai/telemetry build && pnpm --filter "@ratel-ai/sdk..." buil
 To run `e2e.mjs` and `runtime-attach-e2e.mjs` through the deprecated `@ratel-ai/cloud-sdk`
 shim instead, build it too and run `pnpm --filter @ratel-ai/cloud-sdk example:shim-e2e`.
 
+## `src/quickstart.ts` — `ratel({ cloud })` quickstart
+
+Starts `MockCloud` behind a local HTTP server, calls `ratel({ cloud: { baseUrl, apiKey } })`,
+registers two tools and runs one turn with a search and an invoke. Then it lists the skills
+through `r.cloud`, calls `await r.cloud.flush()` and prints `r.cloud.status()` and what
+`MockCloud` received. No real key and no network beyond `127.0.0.1`:
+
+```bash
+pnpm --filter @ratel-ai/example-cloud exec tsx src/quickstart.ts
+```
+
+It exits non-zero unless Cloud accepted more than 0 events and one catalog snapshot.
+
 ## `e2e.mjs` — end-to-end SDK walk
 
 Exercises the client surface — skills lifecycle (create → get → list → update →
@@ -39,8 +52,8 @@ so it doubles as a smoke test in CI against a live staging project.
 
 ## `runtime-attach-e2e.mjs` — runtime attach acceptance
 
-Without `RATEL_CLOUD_ROOT`, it runs in process against `MockCloud`, plus a small fake of the
-runtime ingest routes (`POST /events`, `PUT /catalog/snapshot`) that `MockCloud` does not serve.
+Without `RATEL_CLOUD_ROOT`, it runs in process against `MockCloud`, plus its own small fake of the
+runtime ingest routes (`POST /events`, `PUT /catalog/snapshot`).
 It attaches a real `ratel()` runtime, registers, searches and invokes one tool, and checks that
 the facts, the catalog snapshot and the rejection of an oversized event arrive:
 

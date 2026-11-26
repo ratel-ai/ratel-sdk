@@ -1,9 +1,7 @@
+import { type CloudConfig, resolveCloudConfig } from "./config.js";
 import { CloudSdkError, errorFromResponse } from "./errors.js";
 
-/** Default production API root. All paths are relative to it. */
-export const DEFAULT_BASE_URL = "https://cloud.ratel.sh/api/v1";
-
-export const DEFAULT_TIMEOUT_MS = 30_000;
+export { DEFAULT_BASE_URL, DEFAULT_TIMEOUT_MS } from "./config.js";
 
 /** A structured request/response/error event emitted for logging. The auth
  * header is never included. `path` includes the query string; `body` is the
@@ -44,15 +42,12 @@ export function consoleLogEvent(event: CloudSdkLogEvent): void {
   }
 }
 
-export interface CloudSdkOptions {
-  /** Project API key (`rtl_…`), sent as `Authorization: Bearer <key>`. */
-  apiKey: string;
-  /** API root, default {@link DEFAULT_BASE_URL}. Include the `/api/v1` prefix. */
-  baseUrl?: string;
-  /** Injectable for testing; defaults to the global `fetch`. */
-  fetch?: typeof fetch;
-  /** Per-request timeout. Long-running calls (analyze, generate) override this. */
-  timeoutMs?: number;
+/**
+ * Options of the management client. `apiKey`, `baseUrl`, `fetch` and `timeoutMs`
+ * resolve through {@link resolveCloudConfig}. Long-running calls (analyze,
+ * generate) override `timeoutMs`.
+ */
+export interface CloudSdkOptions extends CloudConfig {
   /** Log each request and its response/error to the console (never the auth
    * header). Convenience for {@link consoleLogEvent}; ignored if `logger` is set. */
   debug?: boolean;
@@ -84,16 +79,17 @@ export interface TransportResponse {
  */
 export class Transport {
   private readonly baseUrl: string;
-  private readonly apiKey: string;
+  private readonly apiKey: string | undefined;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
   private readonly log: ((event: CloudSdkLogEvent) => void) | undefined;
 
   constructor(options: CloudSdkOptions) {
-    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    this.apiKey = options.apiKey;
-    this.fetchImpl = options.fetch ?? fetch;
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const config = resolveCloudConfig(options);
+    this.baseUrl = config.baseUrl;
+    this.apiKey = config.apiKey;
+    this.fetchImpl = config.fetch;
+    this.timeoutMs = config.timeoutMs;
     const sink = options.logger ?? (options.debug ? consoleLogEvent : undefined);
     // Observability is best-effort: a throwing sink must not fail the request
     // or leak an untyped error past the CloudSdkError contract.
@@ -113,6 +109,12 @@ export class Transport {
     path: string,
     opts: RequestOptions = {},
   ): Promise<TransportResponse> {
+    if (this.apiKey === undefined || this.apiKey === "") {
+      throw new CloudSdkError("Ratel Cloud needs an API key: pass apiKey or set RATEL_API_KEY", {
+        status: null,
+        code: "config",
+      });
+    }
     let suffix = "";
     if (opts.query) {
       const params = new URLSearchParams();
