@@ -1,6 +1,8 @@
 """Python SDK for Ratel — context engineering for AI agents.
 
 Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
+- `ratel(...)` / `Ratel` — the one construction point: shared tool, skill and
+  fact catalogs, the three capability tools, recall and one event stream.
 - `ToolRegistry` / `SearchHit`, `SkillRegistry` / `SkillHit` — metadata
   registries with synchronous BM25 and explicit async dense retrieval, one per
   corpus.
@@ -88,6 +90,7 @@ from .intent_graph_storage import (
     StaleIntentGraphError,
 )
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
+from .ratel import Ratel, RatelEventsOptions, ToolCollection, ratel
 from .runtime_events import (
     OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
@@ -144,6 +147,8 @@ __all__ = [
     "RankCandidateKind",
     "RankedId",
     "RankFn",
+    "Ratel",
+    "RatelEventsOptions",
     "RerankerConfig",
     "RetrieverError",
     "RetrieverPlugin",
@@ -173,6 +178,7 @@ __all__ = [
     "Tool",
     "BaselineTurn",
     "ToolCatalog",
+    "ToolCollection",
     "ToolRegistry",
     "TraceSinkConfig",
     "Turn",
@@ -185,6 +191,7 @@ __all__ = [
     "format_upstream_line",
     "get_skill_content_tool",
     "invoke_tool_tool",
+    "ratel",
     "register_mcp_server",
     "search_capabilities_tool",
     "search_tools_tool",

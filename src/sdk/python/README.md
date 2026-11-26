@@ -93,11 +93,11 @@ Save as `quickstart.py`, then run `python quickstart.py`:
 
 ```python
 import asyncio
-from ratel_ai import ExecutableTool, ToolCatalog
+from ratel_ai import ExecutableTool, ratel
 
 async def main():
-    catalog = ToolCatalog()
-    await catalog.register(
+    r = ratel()
+    await r.tools.register(
         ExecutableTool(
             id="get_weather",
             name="get_weather",
@@ -108,16 +108,26 @@ async def main():
         )
     )
 
-    hit = catalog.search("What is the weather in Rome?", 1)[0]
-    print(await catalog.invoke(hit.tool_id, {"city": "Rome"}))
+    recall = await r.recall("What is the weather in Rome?")
+    tool_id = recall["tools"]["groups"][0]["hits"][0]["toolId"]
+    print(await r.tools.invoke(tool_id, {"city": "Rome"}))
 
 
 asyncio.run(main())
 ```
 
+`ratel()` is the one construction point. It builds a `ToolCatalog` (`r.tools.catalog`), a
+`SkillCatalog` (`r.skills`), one runtime-event stream (`r.events`) and a snapshot view
+(`r.catalog`). Give the model `r.model_tools()`: `search_capabilities`, `invoke_tool` and
+`get_skill_content`, the same three tools however many tools and skills you register, and in
+any order. `r.recall(query)` ranks tools and skills for one turn, or returns `None` when nothing
+matched. A tool id equal to a capability tool id raises `ValueError`. The keyword arguments
+(`method`, `embedding`, `reranker`, `recall_top_k`, `trace`, `events`, ...) go to every catalog.
+The experimental fact catalog is `r.facts`, with `r.ground(...)` and `r.ground_snapshot(...)`.
+
 ### Mark each request as one turn
 
-Wrap the work for one user request in `catalog.turn(...)`. Every search, skill load, and tool
+Wrap the work for one user request in `catalog.turn(...)` (or `r.turn(...)` on a `ratel()` core). Every search, skill load, and tool
 call inside it, across `await` and the tasks it starts, carries the same `turn_id`, and one
 `turn_start` event opens the turn. Concurrent requests keep their own turns.
 
@@ -250,6 +260,53 @@ publisher must set `experimental_catalog_definitions=True` to consent to public
 the authoritative full replacement for removals and recovery. They contain sorted public
 definitions only—never tool executors or skill bodies. Python exposes no Cloud transport;
 applications may publish these events and snapshots through their own adapter.
+
+## Definition overrides from an external source (experimental)
+
+Registration owns the complete local definition. An external source can override only the
+retrieval description, and only after the runtime opts in at attach time. A source is any object
+with an async `fetch(if_none_match)` method:
+
+```python
+from ratel_ai import ratel
+
+r = ratel()
+await r.tools.register(local_tools)
+
+
+class OverlaySource:
+    async def fetch(self, if_none_match=None):
+        # Return {"status": 304} when the overlay is unchanged, else:
+        return {
+            "status": 200,
+            "etag": '"overlay-1"',
+            "body": {
+                "overrides": [
+                    {"kind": "tool", "entry_id": "deploy", "searchable_description": "ship a release"}
+                ]
+            },
+        }
+
+
+attachment = await r.catalog.experimental_attach_definition_overrides(OverlaySource())
+await attachment.refresh()  # later pulls; True when a new overlay was applied
+```
+
+The attach call does the initial pull and applies the complete overlay to live tools, skills and
+facts, and to the ones registered later. `refresh()` sends the last accepted ETag; a `304` changes
+nothing. Concurrent `refresh()` calls share one request. The SDK validates each response before it
+changes a catalog: the status is `200` or `304`, a `200` has a non-empty ETag and a complete
+`overrides` list, entry ids are at most 512 UTF-8 bytes and descriptions at most 16 KiB. An invalid
+response raises `ratel_ai.experimental.DefinitionOverlayError` (`code`: `invalid_status`,
+`invalid_payload`, `invalid_etag`) and keeps the last accepted ETag and definitions. If a catalog
+update fails, all three catalogs are restored and the error has `code="apply_failed"`.
+
+Removing an override restores the latest local value. When both sides set a retrieval
+description, the override wins and the SDK warns once for that period. `r.catalog.snapshot()`
+always shows the local definitions. The model-facing description, schemas, bodies, tags and
+executors stay local. Definition events after an attach carry
+`ratel.catalog.use_definition_overrides=true`. Opting in is one-way for the life of the process.
+These APIs may change without a major-version bump.
 
 ## Facts (experimental)
 

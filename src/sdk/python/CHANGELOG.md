@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **`ratel()` and `Ratel`: one construction point, like `ratel()` in `@ratel-ai/sdk`.** `ratel(method=, embedding=, recall_top_k=, facts_top_k=, events=, ...)` builds a tool catalog, a skill catalog and one `RuntimeEvents` stream with one `source_id`. The core has `tools`, `skills`, `facts` (experimental, built on first access), `events`, `catalog`, `model_tools()`, `recall()`, `ground()`, `ground_snapshot()`, `turn()`, `record_tool_call()` and `current_turn_id()`. `model_tools()` always returns the three capability tools. A tool id equal to a capability tool id raises `ValueError`. Host searches clamp `top_k` to 50. The TypeScript `adaptTo` is not ported yet.
+- **Experimental definition overrides.** `RuntimeCatalog.experimental_attach_definition_overrides(source)` lets an external source own the retrieval descriptions of live tools, skills and facts, like `experimentalAttachDefinitionOverrides` in `@ratel-ai/sdk`. A complete overlay replaces the previous one, snapshots keep the local definitions, removing an override restores the local value, and a failed update restores every catalog. Invalid source responses raise `DefinitionOverlayError` with the TypeScript codes. The types live in `ratel_ai.experimental`.
+- `search_capabilities_tool(advertise_skills=)` pins the skills clause of the description, so the description does not change when skills register later.
+
 ## [0.13.0-rc.13] - 2026-11-22
 
 ### Changed

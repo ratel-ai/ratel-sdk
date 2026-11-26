@@ -15,7 +15,7 @@ from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass
 from typing import Any, Callable, Union
 
-from .catalog import ExecutableTool, ToolCatalog
+from .catalog import ExecutableTool, SearchOrigin, ToolCatalog
 from .skill_catalog import SkillCatalog
 from .telemetry import _event_projection, record_auth_needed
 
@@ -137,6 +137,7 @@ def search_capabilities_tool(
     skill_catalog: SkillCatalog | None = None,
     *,
     upstream_servers: Sequence[UpstreamServerInfo] | None = None,
+    advertise_skills: bool | None = None,
 ) -> ExecutableTool:
     """Build the `search_capabilities` tool: unified discovery over tools AND skills.
 
@@ -155,93 +156,33 @@ def search_capabilities_tool(
             in its own bucket.
         upstream_servers: upstream MCP servers to advertise in the tool
             description and to enrich result server groups with.
+        advertise_skills: pin the skills clause of the description on (`True`)
+            or off (`False`). The default (`None`) advertises skills only when
+            `skill_catalog` is non-empty at build time. A host that always
+            exposes `get_skill_content` pins it so the description stays
+            byte-identical whether skills register before or after.
 
     Returns:
         An `ExecutableTool` to put in the agent's direct tool list.
     """
     upstreams = list(upstream_servers or [])
-    upstream_by_name = {u.name: u for u in upstreams}
-    has_skills = skill_catalog is not None and skill_catalog.size() > 0
+    has_skills = (
+        advertise_skills
+        if advertise_skills is not None
+        else skill_catalog is not None and skill_catalog.size() > 0
+    )
 
     async def execute(input: dict[str, Any], turn_id: str | None = None) -> dict[str, Any]:
-        query = input["query"]
-        k_tools = _clamp_top_k(input.get("topKTools"), _DEFAULT_TOP_K_TOOLS)
-        k_skills = _clamp_top_k(input.get("topKSkills"), _DEFAULT_TOP_K_SKILLS)
-        started_at = time.monotonic()
-        tool_hits = await catalog.search_async(query, k_tools, "agent", turn_id=turn_id)
-        catalog.record_event(
-            {
-                "type": "gateway_search",
-                "query": query,
-                "origin": "agent",
-                "top_k": k_tools,
-                "hits": len(tool_hits),
-                "took_ms": int((time.monotonic() - started_at) * 1000),
-            },
-            _event_projection(turn_id=turn_id),
+        return await run_capabilities_search(
+            catalog,
+            input["query"],
+            top_k_tools=input.get("topKTools"),
+            top_k_skills=input.get("topKSkills"),
+            skill_catalog=skill_catalog,
+            upstream_servers=upstreams,
+            origin="agent",
+            turn_id=turn_id,
         )
-        order: list[str] = []
-        groups: dict[str, dict[str, Any]] = {}
-        seen_tools: set[str] = set()
-
-        # Add a tool to its server group, deduped. `score` is the BM25 query score
-        # for a real match, or 0 for a skill-declared dependency (it rode in on the
-        # skill, it was never matched by the query).
-        def add_tool(tool_id: str, score: float) -> None:
-            if tool_id in seen_tools:
-                return
-            tool = catalog.get(tool_id)
-            if tool is None:  # a declared id the catalog doesn't have: skip
-                return
-            seen_tools.add(tool_id)
-            sep = tool_id.find("__")
-            server_name = tool_id[:sep] if sep > 0 else tool_id
-            group = groups.get(server_name)
-            if group is None:
-                meta = upstream_by_name.get(server_name)
-                server: dict[str, Any] = {"name": server_name}
-                if meta is not None and meta.description:
-                    server["description"] = meta.description
-                if meta is not None and meta.instructions:
-                    server["instructions"] = meta.instructions
-                group = {"server": server, "hits": []}
-                groups[server_name] = group
-                order.append(server_name)
-            group["hits"].append(
-                {
-                    "toolId": tool_id,
-                    "score": score,
-                    "description": tool.description,
-                    "inputSchema": tool.input_schema,
-                }
-            )
-
-        for h in tool_hits:
-            add_tool(h.tool_id, h.score)
-
-        # Skills are ranked in their own bucket against the same query (reserved
-        # budget → never starved by tools).
-        skills: list[dict[str, Any]] = []
-        if skill_catalog is not None:
-            for sh in await skill_catalog.search_async(query, k_skills, "agent", turn_id=turn_id):
-                sk = skill_catalog.get(sh.skill_id)
-                skills.append(
-                    {
-                        "skillId": sh.skill_id,
-                        "score": sh.score,
-                        "description": _compact_description(sk.description) if sk else "",
-                    }
-                )
-
-            # A matched skill's instructions name the tools they call. Pull those
-            # into the tools bucket so the agent gets the playbook and its toolkit
-            # in one turn — additively (score 0), beyond topKTools, deduped.
-            for s in skills:
-                sk = skill_catalog.get(s["skillId"])
-                for tool_id in sk.tools if sk else []:
-                    add_tool(tool_id, 0)
-
-        return {"tools": {"groups": [groups[n] for n in order]}, "skills": skills}
 
     return ExecutableTool(
         id=SEARCH_CAPABILITIES_ID,
@@ -320,6 +261,116 @@ def search_capabilities_tool(
         },
         execute=execute,
     )
+
+
+async def run_capabilities_search(
+    catalog: ToolCatalog,
+    query: str,
+    *,
+    top_k_tools: Any = None,
+    top_k_skills: Any = None,
+    skill_catalog: SkillCatalog | None = None,
+    upstream_servers: Sequence[UpstreamServerInfo] | None = None,
+    origin: SearchOrigin = "agent",
+    turn_id: str | None = None,
+) -> dict[str, Any]:
+    """Rank `query` into the canonical `search_capabilities` result.
+
+    The one ranking path behind the `search_capabilities` tool and
+    `Ratel.recall`. Both top-K budgets are clamped to [1, 50]; invalid values
+    fall back to 5 tools and 3 skills. Records one `gateway_search` event.
+
+    Args:
+        catalog: the tool catalog the `tools` bucket is ranked from.
+        query: what the caller wants to do.
+        top_k_tools: max tools to return before skill-declared tools are added.
+        top_k_skills: max skills to return.
+        skill_catalog: optional catalog the `skills` bucket is ranked from.
+        upstream_servers: upstream metadata to enrich the result server groups.
+        origin: who initiated the search (`"agent"` or `"direct"`).
+        turn_id: correlates the search with the invoke(s) it arms (ADR-0014).
+
+    Returns:
+        `{"tools": {"groups": [...]}, "skills": [...]}`.
+    """
+    upstream_by_name = {u.name: u for u in upstream_servers or []}
+    k_tools = _clamp_top_k(top_k_tools, _DEFAULT_TOP_K_TOOLS)
+    k_skills = _clamp_top_k(top_k_skills, _DEFAULT_TOP_K_SKILLS)
+    started_at = time.monotonic()
+    tool_hits = await catalog.search_async(query, k_tools, origin, turn_id=turn_id)
+    catalog.record_event(
+        {
+            "type": "gateway_search",
+            "query": query,
+            "origin": origin,
+            "top_k": k_tools,
+            "hits": len(tool_hits),
+            "took_ms": int((time.monotonic() - started_at) * 1000),
+        },
+        _event_projection(turn_id=turn_id),
+    )
+    order: list[str] = []
+    groups: dict[str, dict[str, Any]] = {}
+    seen_tools: set[str] = set()
+
+    # Add a tool to its server group, deduped. `score` is the BM25 query score
+    # for a real match, or 0 for a skill-declared dependency (it rode in on the
+    # skill, it was never matched by the query).
+    def add_tool(tool_id: str, score: float) -> None:
+        if tool_id in seen_tools:
+            return
+        tool = catalog.get(tool_id)
+        if tool is None:  # a declared id the catalog doesn't have: skip
+            return
+        seen_tools.add(tool_id)
+        sep = tool_id.find("__")
+        server_name = tool_id[:sep] if sep > 0 else tool_id
+        group = groups.get(server_name)
+        if group is None:
+            meta = upstream_by_name.get(server_name)
+            server: dict[str, Any] = {"name": server_name}
+            if meta is not None and meta.description:
+                server["description"] = meta.description
+            if meta is not None and meta.instructions:
+                server["instructions"] = meta.instructions
+            group = {"server": server, "hits": []}
+            groups[server_name] = group
+            order.append(server_name)
+        group["hits"].append(
+            {
+                "toolId": tool_id,
+                "score": score,
+                "description": tool.description,
+                "inputSchema": tool.input_schema,
+            }
+        )
+
+    for h in tool_hits:
+        add_tool(h.tool_id, h.score)
+
+    # Skills are ranked in their own bucket against the same query (reserved
+    # budget → never starved by tools).
+    skills: list[dict[str, Any]] = []
+    if skill_catalog is not None:
+        for sh in await skill_catalog.search_async(query, k_skills, origin, turn_id=turn_id):
+            sk = skill_catalog.get(sh.skill_id)
+            skills.append(
+                {
+                    "skillId": sh.skill_id,
+                    "score": sh.score,
+                    "description": _compact_description(sk.description) if sk else "",
+                }
+            )
+
+        # A matched skill's instructions name the tools they call. Pull those
+        # into the tools bucket so the agent gets the playbook and its toolkit
+        # in one turn — additively (score 0), beyond topKTools, deduped.
+        for s in skills:
+            sk = skill_catalog.get(s["skillId"])
+            for tool_id in sk.tools if sk else []:
+                add_tool(tool_id, 0)
+
+    return {"tools": {"groups": [groups[n] for n in order]}, "skills": skills}
 
 
 OnUnauthorized = Callable[[str], Union[Awaitable[None], None]]

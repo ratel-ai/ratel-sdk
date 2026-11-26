@@ -17,10 +17,11 @@ these actually need injecting.
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 import threading
 import warnings
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal, TypeVar, cast, overload
@@ -37,6 +38,7 @@ from .catalog import (
     TraceSinkConfig,
     _registry_embedding_kwargs,
 )
+from .definition_overrides import DefinitionOverrideState, no_dense_work
 from .grounding import (
     FACT_ID_PATTERN,
     FactCandidate,
@@ -253,6 +255,7 @@ class FactRegistry:
         self._undriven_builds = 0
         self._dense_tasks: set[asyncio.Task[Any]] = set()
         self._emitted_definition_hashes: dict[str, str] = {}
+        self._use_definition_overrides = False
 
     @overload
     def register(self, item: Fact) -> Awaitable[None]: ...
@@ -435,7 +438,7 @@ class FactRegistry:
         with self._dense_state:
             self._dense_pending -= 1
 
-    def _register_items(self, facts: Iterable[Fact]) -> None:
+    def _register_items(self, facts: Iterable[Fact], emit_definitions: bool = True) -> None:
         facts = list(facts)
         # Validate the whole batch before indexing any of it — enforced HERE, not
         # only in `FactCatalog.register`, because `experimental.FactRegistry` is
@@ -459,7 +462,15 @@ class FactRegistry:
                     for fact in facts
                 ]
             )
-            record_catalog_definitions("fact", facts, self._emitted_definition_hashes)
+            if emit_definitions:
+                record_catalog_definitions(
+                    "fact", facts, self._emitted_definition_hashes, self._use_definition_overrides
+                )
+
+    def _set_use_definition_overrides(self, facts: Iterable[Fact] = ()) -> None:
+        """Mark later definition events as override-owned; re-emit ``facts`` once (adoption)."""
+        self._use_definition_overrides = True
+        record_catalog_definitions("fact", list(facts), self._emitted_definition_hashes, True)
 
     def _raise_if_busy(self) -> None:
         if self._dense_pending:
@@ -506,6 +517,7 @@ class FactCatalog:
         # see the ADR's known limits. A per-conversation catalog avoids it.
         self._injected_bodies: dict[str, str] = {}
         self._registry = FactRegistry(embedding, method=method)
+        self._definition_overrides = DefinitionOverrideState("fact", copy.deepcopy)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -541,10 +553,56 @@ class FactCatalog:
         # Validation lives in `_register_items` (the registry is public too),
         # which checks the whole batch before indexing any of it — so the local
         # map below can only ever see facts the registry accepted.
-        self._registry._register_items(batch)
-        for fact in batch:
+        effective = self._definition_overrides.effective_of(batch)
+        return self._register_effective(batch, effective, accept_local=True)
+
+    def _register_effective(
+        self,
+        local: Sequence[Fact],
+        effective: Sequence[Fact],
+        emit_definitions: bool = True,
+        *,
+        accept_local: bool = False,
+    ) -> Awaitable[None]:
+        # `effective` is what the index ranks (an overlay may replace the
+        # retrieval description); `local` is what the catalog serves.
+        self._registry._register_items(effective, emit_definitions)
+        if accept_local:
+            self._definition_overrides.accept(local)
+        self._definition_overrides.mark_indexed(effective)
+        for fact in local:
             self._facts[fact.id] = fact
-        return self._registry._build_tracked(bool(batch))
+        return self._registry._build_tracked(bool(effective))
+
+    def _experimental_apply_definition_overrides(
+        self,
+        overrides: Mapping[str, str],
+        *,
+        adopt: bool = True,
+        emit_definitions: bool = True,
+    ) -> Awaitable[None]:
+        """Apply a complete overlay (id → retrieval description); re-index what changed.
+
+        Internal: `RuntimeCatalog.experimental_attach_definition_overrides` drives it.
+        """
+        state = self._definition_overrides
+        effective, changed = state.stage(overrides)
+        if adopt:
+            self._registry._set_use_definition_overrides(effective)
+        if not changed:
+            return no_dense_work()
+        return self._register_effective(
+            [state.local(fact.id) for fact in changed], changed, emit_definitions
+        )
+
+    def _experimental_enable_definition_overrides(self) -> None:
+        """Commit override ownership: later definition events carry the overlay flag."""
+        self._registry._set_use_definition_overrides(self._definition_overrides.effective_all())
+
+    def _experimental_set_definition_overrides(self, overrides: Mapping[str, str]) -> None:
+        """Install the active overlay on a catalog created after attach (still empty)."""
+        self._definition_overrides.set(overrides)
+        self._registry._set_use_definition_overrides()
 
     def search(
         self,
