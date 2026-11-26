@@ -1,0 +1,4 @@
+[
+  { "name": "Keeps the words of the text", "input": { "text": "where is my order" }, "expect": { "contains": "where is my order" } },
+  { "name": "Counts the words", "input": { "text": "one two three" }, "expect": { "contains": "\"words\":3" } }
+]

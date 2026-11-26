@@ -503,6 +503,8 @@ jobs:
         run: node protocol/v2/conformance/verify.mjs
       - name: Verify sandbox/v1 conformance vectors
         run: node protocol/sandbox/v1/verify.mjs
+      - name: Verify evals/v1 conformance vectors
+        run: node protocol/evals/v1/verify.mjs
 
   secret-scan:
     runs-on: ubuntu-latest

@@ -1,6 +1,7 @@
 import { type ParseArgsOptionsConfig, parseArgs } from "node:util";
 import type { Docker } from "./docker.js";
 import { type CliError, EXIT, toCliError, UsageError } from "./errors.js";
+import { evalCommand } from "./eval/command.js";
 import { push, pushExit, pushReport } from "./push.js";
 import { failureReport, localExit, remoteExit, runLocal, runRemote, runReport } from "./run.js";
 
@@ -19,6 +20,8 @@ export const USAGE = `Usage:
                     [--tool name=mode]... [--fixtures @file] [--json]
   ratel run [-f ratel.yaml] [--version id] [--input json|@file] [--param name=value]...
             [--tool name=mode]... [--json]
+  ratel eval run --help
+  ratel eval baseline pin <experiment-id> [--json]
 
 Push the Docker image of an agent to Ratel, or run one input on this machine or on Ratel.
 ratel.yaml holds the configuration of the agent (protocol/sandbox/v1).
@@ -52,6 +55,8 @@ type Values = ReturnType<
 
 /** Run the CLI. It returns the exit code. */
 export async function main(argv: string[], io: MainIo): Promise<number> {
+  // `ratel eval` keeps the flags and the exit codes of its own contract (see the README).
+  if (argv[0] === "eval") return evalCommand(argv.slice(1), io);
   let values: Values;
   let positionals: string[];
   try {

@@ -6,7 +6,7 @@ export function safe(text: string): string {
 
 /** One line of text, safe for a terminal. */
 export function oneLine(text: string): string {
-  return safe(text).replace(/[\n\t]/g, " ");
+  return safe(text).replace(/[\n\t\u2028\u2029]/g, " ");
 }
 
 /** A value for a person: text as it is, else indented JSON. */

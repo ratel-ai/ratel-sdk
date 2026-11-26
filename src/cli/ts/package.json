@@ -28,7 +28,7 @@
     "sync-protocol": "node -e \"const fs=require('node:fs');fs.rmSync('protocol/schema',{recursive:true,force:true});fs.cpSync('../../../protocol/sandbox/v1/schema','protocol/schema',{recursive:true});fs.copyFileSync('../../../protocol/sandbox/v1/verify.mjs','protocol/verify.mjs')\"",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
-    "test": "vitest run"
+    "test": "pnpm build && vitest run"
   },
   "dependencies": {
     "@ratel-ai/sdk": "workspace:^",

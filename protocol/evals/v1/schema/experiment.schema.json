@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/experiment.schema.json",
+  "title": "An experiment",
+  "description": "The answer of GET /api/v1/evals/experiments/{id} (200). It has no captured text.",
+  "type": "object",
+  "required": [
+    "v",
+    "experimentId",
+    "state",
+    "url",
+    "sandboxVersionId",
+    "git",
+    "params",
+    "trialsPerCase",
+    "counts",
+    "cases",
+    "createdAt",
+    "finishedAt"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "experimentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "state": {
+      "enum": [
+        "running",
+        "completed"
+      ]
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "sandboxVersionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "git": {
+      "type": "object",
+      "required": [
+        "commit",
+        "dirty"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "params": {
+      "type": "object"
+    },
+    "trialsPerCase": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "counts": {
+      "$ref": "#/$defs/counts"
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "caseId",
+          "caseVersionId",
+          "number",
+          "name",
+          "counts",
+          "trials"
+        ],
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/$defs/counts"
+          },
+          "trials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/trial"
+            }
+          }
+        }
+      }
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "required": [
+        "pass",
+        "fail",
+        "invalid",
+        "open"
+      ],
+      "properties": {
+        "pass": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "description": "The number of trials with each result. `open` has no result yet."
+    },
+    "trial": {
+      "type": "object",
+      "required": [
+        "trialId",
+        "index",
+        "result",
+        "reason",
+        "traceId",
+        "sandboxRunId",
+        "scorers"
+      ],
+      "properties": {
+        "trialId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "invalid",
+            null
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why the trial is invalid."
+        },
+        "traceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sandboxRunId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "scorers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "gating",
+              "status"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "gating": {
+                "type": "boolean"
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "not_scored"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
