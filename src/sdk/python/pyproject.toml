@@ -32,7 +32,7 @@ classifiers = [
 # install, mirroring the TS SDK's hard dep on @ratel-ai/telemetry. Without it, a host
 # bringing its own OpenTelemetry on a base install would get no Ratel telemetry. It stays a
 # no-op until OpenTelemetry is present (the host's own, or the [otlp] extra below).
-dependencies = ["ratel-ai-telemetry>=0.1.3", "rfc8785>=0.1.4,<0.2"]
+dependencies = ["ratel-ai-telemetry>=0.3.0", "rfc8785>=0.1.4,<0.2"]
 
 [project.optional-dependencies]
 # register_mcp_server() ingests upstream MCP servers via the official client.

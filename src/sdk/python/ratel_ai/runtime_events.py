@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 import warnings
-from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional, Protocol, cast
 
 from ._native import NativeEventSubscription
@@ -169,11 +169,13 @@ class RuntimeEventSubscription:
         subscriptions: list[NativeEventSubscription],
         pending: set[asyncio.Future[None]],
         state: _SubscriptionState,
+        on_unsubscribe: Callable[[], None] | None = None,
     ) -> None:
         """Create a subscription over native handles and pending handler work."""
         self._subscriptions = subscriptions
         self._pending = pending
         self._state = state
+        self._on_unsubscribe = on_unsubscribe
 
     async def flush(self) -> None:
         """Wait until accepted native and async-handler work completes."""
@@ -189,6 +191,8 @@ class RuntimeEventSubscription:
         """Stop accepting new events; already-queued native envelopes still drain."""
         if not self._state.unsubscribe():
             return
+        if self._on_unsubscribe is not None:
+            self._on_unsubscribe()
         for subscription in self._subscriptions:
             subscription.unsubscribe()
 
@@ -231,6 +235,7 @@ class RuntimeEvents:
                 source.experimental_enable_catalog_definitions()
         self._queue_capacity = queue_capacity
         self._batch_size = batch_size
+        self._sdk_deliveries: set[Callable[[list[RuntimeEvent]], None]] = set()
 
     def subscribe(self, handler: RuntimeEventHandler) -> RuntimeEventSubscription:
         """Subscribe to bounded asynchronous runtime-event batches."""
@@ -307,7 +312,47 @@ class RuntimeEvents:
             for subscription in reversed(subscriptions):
                 subscription.unsubscribe()
             raise
-        return RuntimeEventSubscription(subscriptions, pending, state)
+        self._sdk_deliveries.add(deliver)
+        return RuntimeEventSubscription(
+            subscriptions, pending, state, lambda: self._sdk_deliveries.discard(deliver)
+        )
+
+    def emit(self, event: Mapping[str, Any]) -> RuntimeEvent:
+        """Merge an SDK-owned fact (experiments) into every subscriber (internal).
+
+        The envelope takes this stream's identity and the active turn. An
+        ``event_id`` already on ``event`` is kept, so a fact and its OpenTelemetry
+        projection share it. Inside a running event loop, delivery happens on the
+        next loop iteration and never blocks the caller.
+        """
+        from .turns import active_turn
+
+        event_id = event.get("event_id")
+        envelope: RuntimeEvent = {}
+        turn = active_turn()
+        if turn is not None:
+            envelope["turn_id"] = turn.id
+            if turn.end_user_id is not None:
+                envelope["end_user_id"] = turn.end_user_id
+        envelope.update(event)
+        envelope.update(
+            v=2,
+            event_id=event_id if isinstance(event_id, str) else new_runtime_event_id(),
+            ts=int(time.time() * 1_000),
+            session_id=self.session_id,
+            source_id=self.source_id,
+            type=str(event.get("type", "unknown")),
+        )
+        try:
+            loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        for deliver in tuple(self._sdk_deliveries):
+            if loop is None:
+                deliver([envelope])
+            else:
+                loop.call_soon(deliver, [envelope])
+        return _normalize_runtime_event(envelope)
 
 
 def _schedule_on_loop(

@@ -1,0 +1,222 @@
+{
+  "description": "Deterministic experiment arm assignment. bucket = SHA-256(UTF-8 JSON.stringify([experiment_id, unit_id])) as a big-endian integer, mod the split total; the arm is the first allocation whose cumulative weight exceeds bucket. The TypeScript and Python SDK tests read this file.",
+  "splits": {
+    "even": [
+      {
+        "arm": "control",
+        "weight": 50
+      },
+      {
+        "arm": "treatment",
+        "weight": 50
+      }
+    ],
+    "skewed": [
+      {
+        "arm": "control",
+        "weight": 9
+      },
+      {
+        "arm": "treatment",
+        "weight": 1
+      }
+    ],
+    "three": [
+      {
+        "arm": "a",
+        "weight": 1
+      },
+      {
+        "arm": "b",
+        "weight": 2
+      },
+      {
+        "arm": "c",
+        "weight": 3
+      }
+    ],
+    "zero": [
+      {
+        "arm": "off",
+        "weight": 0
+      },
+      {
+        "arm": "on",
+        "weight": 7
+      }
+    ],
+    "large": [
+      {
+        "arm": "control",
+        "weight": 9007199254740990
+      },
+      {
+        "arm": "treatment",
+        "weight": 1
+      }
+    ]
+  },
+  "vectors": [
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-1",
+      "split": "even",
+      "arm": "control",
+      "bucket": 17
+    },
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-2",
+      "split": "even",
+      "arm": "treatment",
+      "bucket": 83
+    },
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-3",
+      "split": "even",
+      "arm": "control",
+      "bucket": 10
+    },
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-4",
+      "split": "even",
+      "arm": "treatment",
+      "bucket": 71
+    },
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-5",
+      "split": "even",
+      "arm": "treatment",
+      "bucket": 70
+    },
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-6",
+      "split": "even",
+      "arm": "control",
+      "bucket": 42
+    },
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-7",
+      "split": "even",
+      "arm": "control",
+      "bucket": 24
+    },
+    {
+      "experiment_id": "search-v2",
+      "unit_id": "user-8",
+      "split": "even",
+      "arm": "control",
+      "bucket": 8
+    },
+    {
+      "experiment_id": "rerank",
+      "unit_id": "session-42",
+      "split": "skewed",
+      "arm": "treatment",
+      "bucket": 9
+    },
+    {
+      "experiment_id": "rerank",
+      "unit_id": "session-43",
+      "split": "skewed",
+      "arm": "control",
+      "bucket": 0
+    },
+    {
+      "experiment_id": "rerank",
+      "unit_id": "session-44",
+      "split": "skewed",
+      "arm": "control",
+      "bucket": 1
+    },
+    {
+      "experiment_id": "three-way",
+      "unit_id": "u",
+      "split": "three",
+      "arm": "b",
+      "bucket": 1
+    },
+    {
+      "experiment_id": "three-way",
+      "unit_id": "v",
+      "split": "three",
+      "arm": "a",
+      "bucket": 0
+    },
+    {
+      "experiment_id": "three-way",
+      "unit_id": "w",
+      "split": "three",
+      "arm": "c",
+      "bucket": 5
+    },
+    {
+      "experiment_id": "three-way",
+      "unit_id": "x",
+      "split": "three",
+      "arm": "c",
+      "bucket": 5
+    },
+    {
+      "experiment_id": "zero-weight",
+      "unit_id": "anyone",
+      "split": "zero",
+      "arm": "on",
+      "bucket": 2
+    },
+    {
+      "experiment_id": "big",
+      "unit_id": "user-1",
+      "split": "large",
+      "arm": "control",
+      "bucket": 3366649664599660
+    },
+    {
+      "experiment_id": "",
+      "unit_id": "",
+      "split": "even",
+      "arm": "treatment",
+      "bucket": 69
+    },
+    {
+      "experiment_id": "quote\"exp",
+      "unit_id": "back\\slash",
+      "split": "even",
+      "arm": "control",
+      "bucket": 33
+    },
+    {
+      "experiment_id": "ctrl\n\t",
+      "unit_id": "\u0001\u001f",
+      "split": "three",
+      "arm": "b",
+      "bucket": 2
+    },
+    {
+      "experiment_id": "unicodé",
+      "unit_id": "ユーザー",
+      "split": "three",
+      "arm": "b",
+      "bucket": 2
+    },
+    {
+      "experiment_id": "emoji",
+      "unit_id": "🦡",
+      "split": "three",
+      "arm": "c",
+      "bucket": 3
+    },
+    {
+      "experiment_id": "sep",
+      "unit_id": "  ",
+      "split": "even",
+      "arm": "control",
+      "bucket": 19
+    }
+  ]
+}

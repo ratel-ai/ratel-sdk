@@ -19,6 +19,9 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
   events, catalog snapshots, Cloud definitions, intent graph sync and the Tool
   Picker, plus the Cloud API on `Ratel.cloud`. The `ratel_ai.cloud` package
   loads only when `cloud` is set.
+- `experimental_define_experiment` / `Experiment` — experimental retrieval
+  experiments: a deterministic arm per unit, observed through OpenTelemetry and
+  `Ratel.events`.
 
 The facts/grounding surface (`FactCatalog` / `Fact`, the push-path grounding
 analogue: constant content injected into the context, gated by the pure
@@ -85,6 +88,17 @@ from .exceptions import (
     IncompatibleMergeError,
     RetrieverError,
 )
+from .experiment import (
+    Experiment,
+    ExperimentArmOutcome,
+    ExperimentArmRole,
+    ExperimentConfig,
+    ExperimentEvaluationReference,
+    ExperimentRankedItem,
+    ExperimentSelection,
+    ExperimentSplit,
+    experimental_define_experiment,
+)
 from .intent_graph_storage import (
     IntentGraphStorage,
     LocalFileIntentGraphStorage,
@@ -137,6 +151,14 @@ __all__ = [
     "AdaptiveRankingStatus",
     "ArtifactError",
     "ArtifactWarmError",
+    "Experiment",
+    "ExperimentArmOutcome",
+    "ExperimentArmRole",
+    "ExperimentConfig",
+    "ExperimentEvaluationReference",
+    "ExperimentRankedItem",
+    "ExperimentSelection",
+    "ExperimentSplit",
     "ExperimentalEmbeddingArtifact",
     "IntentGraph",
     "IncompatibleMergeError",
@@ -211,6 +233,7 @@ __all__ = [
     "configure_telemetry",
     "current_turn_id",
     "experimental_build_embedding_artifact",
+    "experimental_define_experiment",
     "define_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
