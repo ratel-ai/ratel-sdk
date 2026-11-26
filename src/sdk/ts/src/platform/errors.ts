@@ -30,7 +30,12 @@ export class PlatformError extends Error {
 
   constructor(
     message: string,
-    opts: { status: number | null; code: PlatformErrorCode; reason?: string | null; body?: unknown },
+    opts: {
+      status: number | null;
+      code: PlatformErrorCode;
+      reason?: string | null;
+      body?: unknown;
+    },
   ) {
     super(message);
     this.name = "PlatformError";
