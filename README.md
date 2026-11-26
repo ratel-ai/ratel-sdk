@@ -16,13 +16,13 @@ The platform (console and API) lives in [ratel-ai/ratel](https://github.com/rate
 | `@ratel-ai/mastra` | npm | `src/adapters/ts-mastra` |
 | `@ratel-ai/telemetry` | npm | `src/telemetry/ts` |
 | `@ratel-ai/rankers-plugin` | npm | `src/rankers/ts` |
-| `@ratel-ai/cloud-sdk` | npm | `src/cloud-sdk/ts` |
+| `@ratel-ai/cloud-sdk` (deprecated shim over `@ratel-ai/sdk/cloud`) | npm | `src/cloud-sdk/ts` |
 | `ratel-ai` | PyPI | `src/sdk/python` |
 | `ratel-ai-telemetry` | PyPI | `src/telemetry/python` |
 | `ratel-ai-rankers-plugin` | PyPI | `src/rankers/python` |
 
 `protocol/` holds the wire contracts and their conformance vectors. `examples/` holds runnable
-examples for each SDK. `packages/sdk/` holds the SDK docs (`llms.txt`).
+examples for each SDK (`examples/cloud/` for Ratel Cloud). `packages/sdk/` holds the SDK docs (`llms.txt`).
 
 ## History
 

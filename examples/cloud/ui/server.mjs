@@ -11,18 +11,18 @@
 //     skill ("refund"), so analysis, gap detection, and suggestion approval all
 //     work offline with no credentials.
 //
-//   pnpm run build            # the server imports the built package
-//   pnpm run example:ui       # then open http://localhost:8787
-//   RATEL_API_KEY=rtl_… pnpm run example:ui
-//   PORT=9000 RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://host/api/v1 pnpm run example:ui
+//   (build @ratel-ai/sdk first: the server imports the built package)
+//   pnpm --filter @ratel-ai/example-cloud ui       # then open http://localhost:8787
+//   RATEL_API_KEY=rtl_… pnpm --filter @ratel-ai/example-cloud ui
+//   PORT=9000 RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://host/api/v1 pnpm --filter @ratel-ai/example-cloud ui
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CloudSdkError, RatelCloudSdk } from "../../dist/index.js";
-import { MockCloud } from "../../dist/testing/index.js";
+import { CloudSdkError, RatelCloudSdk } from "@ratel-ai/sdk/cloud";
+import { MockCloud } from "@ratel-ai/sdk/cloud/testing";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8787;

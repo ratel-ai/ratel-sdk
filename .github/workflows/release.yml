@@ -17,7 +17,7 @@ name: Release
 #   vercel-ai-sdk-v* -> @ratel-ai/vercel-ai-sdk on npm (framework adapter, peers the SDK)
 #   rankers-ts-v* -> @ratel-ai/rankers-plugin loader + 5 platform packages (peers the SDK; ADR-0028)
 #   rankers-py-v* -> ratel-ai-rankers-plugin on PyPI (depends on ratel-ai by range; ADR-0028)
-#   cloud-sdk-v* -> @ratel-ai/cloud-sdk on npm (pure HTTP; moved from ratel-ai/ratel-cloud-sdk)
+#   cloud-sdk-v* -> @ratel-ai/cloud-sdk on npm (deprecated shim over @ratel-ai/sdk/cloud; moved from ratel-ai/ratel-cloud-sdk)
 
 on:
   push:
@@ -1065,12 +1065,29 @@ jobs:
           node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Lint, typecheck, test, build
+      # The package is a deprecated shim over @ratel-ai/sdk/cloud. The `...` build
+      # closure pulls @ratel-ai/sdk, whose build compiles the native crate.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/sdk/ts/native
+      - name: Build, lint, typecheck, test
         run: |
+          pnpm --filter "@ratel-ai/cloud-sdk..." run build
           pnpm --filter @ratel-ai/cloud-sdk run lint
           pnpm --filter @ratel-ai/cloud-sdk run typecheck
           pnpm --filter @ratel-ai/cloud-sdk run test
-          pnpm --filter @ratel-ai/cloud-sdk run build
+      # npm publishes a directory's literal `workspace:^`, so pin the @ratel-ai/sdk
+      # runtime dependency to the workspace SDK version (ephemeral CI edit; not committed).
+      - name: Pin the @ratel-ai/sdk runtime dependency for publish
+        shell: bash
+        run: |
+          set -e
+          sdk_ver=$(node -p "require('./src/sdk/ts/package.json').version")
+          SDK_VER="$sdk_ver" node -e "const fs=require('fs'); const f='./src/cloud-sdk/ts/package.json'; const p=require(f); p.dependencies['@ratel-ai/sdk']='^'+process.env.SDK_VER; fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')"
+          echo "pinned @ratel-ai/sdk -> $(node -p "require('./src/cloud-sdk/ts/package.json').dependencies['@ratel-ai/sdk']") (runtime)"
+          npm view "@ratel-ai/sdk@^${sdk_ver}" version >/dev/null 2>&1 \
+            || { echo "::error::@ratel-ai/sdk@^${sdk_ver} is not on npm — publish sdk-ts before cloud-sdk"; exit 1; }
       - name: Preflight — dry-run npm publish
         shell: bash
         env:

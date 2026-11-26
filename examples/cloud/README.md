@@ -1,4 +1,14 @@
-# Examples
+# Ratel Cloud examples
+
+These examples import `@ratel-ai/sdk/cloud` and `@ratel-ai/sdk/cloud/testing`. Build the SDK
+first, from the repository root:
+
+```bash
+pnpm --filter @ratel-ai/telemetry build && pnpm --filter "@ratel-ai/sdk..." build
+```
+
+To run `e2e.mjs` and `runtime-attach-e2e.mjs` through the deprecated `@ratel-ai/cloud-sdk`
+shim instead, build it too and run `pnpm --filter @ratel-ai/cloud-sdk example:shim-e2e`.
 
 ## `e2e.mjs` — end-to-end SDK walk
 
@@ -14,24 +24,31 @@ catalog step.)
 
 | `RATEL_API_KEY` | Target | Network |
 | --- | --- | --- |
-| unset | in-process `MockCloud` (from `@ratel-ai/cloud-sdk/testing`) | none |
+| unset | in-process `MockCloud` (from `@ratel-ai/sdk/cloud/testing`) | none |
 | set | the real cloud (`RATEL_BASE_URL`, or `https://cloud.ratel.sh/api/v1`) | yes |
 
 ```bash
-pnpm run build          # the example imports the built package
+pnpm --filter @ratel-ai/example-cloud e2e    # mock — no credentials, no network
 
-pnpm run example:e2e    # mock — no credentials, no network
-
-RATEL_API_KEY=rtl_… pnpm run example:e2e
-RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://my-host/api/v1 pnpm run example:e2e
+RATEL_API_KEY=rtl_… pnpm --filter @ratel-ai/example-cloud e2e
+RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://my-host/api/v1 pnpm --filter @ratel-ai/example-cloud e2e
 ```
 
 Each step prints a `✓`/`✗` line; the process exits non-zero if any step fails,
 so it doubles as a smoke test in CI against a live staging project.
 
-## `runtime-attach-e2e.mjs` — live runtime attach acceptance
+## `runtime-attach-e2e.mjs` — runtime attach acceptance
 
-Runs only against a locally running `ratel-cloud`; there is no mock fallback. It creates an
+Without `RATEL_CLOUD_ROOT`, it runs in process against `MockCloud`, plus a small fake of the
+runtime ingest routes (`POST /events`, `PUT /catalog/snapshot`) that `MockCloud` does not serve.
+It attaches a real `ratel()` runtime, registers, searches and invokes one tool, and checks that
+the facts, the catalog snapshot and the rejection of an oversized event arrive:
+
+```bash
+pnpm --filter @ratel-ai/example-cloud runtime-e2e
+```
+
+With `RATEL_CLOUD_ROOT`, it runs only against a locally running `ratel-cloud`. It creates an
 isolated organization, project, and API key in the local Postgres database, drives a real
 `@ratel-ai/sdk` ToolCatalog through `attach()`, verifies Cloud's persisted read models, then
 deletes the organization and all cascaded test data.
@@ -43,22 +60,20 @@ OTLP search span arriving alongside the direct fact without double-counting its
 
 Prerequisites:
 
-- build this package and the runtime-events branch of `@ratel-ai/sdk`;
+- build `@ratel-ai/sdk`;
 - migrate and run the runtime-events branch of `ratel-cloud` against local Postgres;
 - point the test at that same server and database.
 
 ```bash
-pnpm build
-
 RATEL_E2E=1 \
 RATEL_CLOUD_ROOT=/path/to/ratel-cloud \
 RATEL_SDK_DIR=/path/to/ratel/src/sdk/ts \
 RATEL_E2E_DATABASE_URL=postgres://ratel:ratel@127.0.0.1:5432/ratel \
 RATEL_BASE_URL=http://127.0.0.1:3000/api/v1 \
-pnpm test
+pnpm --filter @ratel-ai/sdk exec vitest run src/cloud/runtime/attach.integration.test.ts
 ```
 
-Use `pnpm run example:runtime-e2e` with the same environment to run only the harness. Without
+Use `pnpm --filter @ratel-ai/example-cloud runtime-e2e` with the same environment to run only the harness. Without
 `RATEL_E2E=1`, the integration test is skipped so the normal `pnpm test` suite needs no sibling
 checkouts, database, or credentials.
 
@@ -67,8 +82,8 @@ Set `RATEL_DEBUG=1` (either example) to also log every SDK request + response �
 exactly which endpoints are hit:
 
 ```bash
-RATEL_DEBUG=1 RATEL_API_KEY=rtl_… pnpm run example:ui   # logs in the server console
-RATEL_DEBUG=1 pnpm run example:e2e
+RATEL_DEBUG=1 RATEL_API_KEY=rtl_… pnpm --filter @ratel-ai/example-cloud ui   # logs in the server console
+RATEL_DEBUG=1 pnpm --filter @ratel-ai/example-cloud e2e
 ```
 
 ## `ui/` — analyze & review console
@@ -104,11 +119,9 @@ it.** Same hybrid target as `e2e.mjs`: no `RATEL_API_KEY` runs against a seeded
 `MockCloud` (analysis, gap detection, and approval all work offline).
 
 ```bash
-pnpm run build          # the server imports the built package
-
-pnpm run example:ui     # mock — open http://localhost:8787
-RATEL_API_KEY=rtl_… pnpm run example:ui
-PORT=9000 RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://host/api/v1 pnpm run example:ui
+pnpm --filter @ratel-ai/example-cloud ui     # mock — open http://localhost:8787
+RATEL_API_KEY=rtl_… pnpm --filter @ratel-ai/example-cloud ui
+PORT=9000 RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://host/api/v1 pnpm --filter @ratel-ai/example-cloud ui
 ```
 
 The **endUserId** picker above the analyze button scopes the run. Skills scoped
