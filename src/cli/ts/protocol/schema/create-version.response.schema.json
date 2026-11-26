@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/create-version.response.schema.json",
+  "title": "CreateVersionResponse",
+  "description": "201. The client sends the tarball to upload.url with upload.headers, then calls POST {RATEL_BASE_URL}/sandboxes/versions/{versionId}/finalize.",
+  "type": "object",
+  "required": ["versionId", "upload"],
+  "properties": {
+    "versionId": { "type": "string", "minLength": 1 },
+    "upload": {
+      "type": "object",
+      "required": ["method", "url"],
+      "properties": {
+        "method": { "const": "PUT" },
+        "url": { "type": "string", "pattern": "^https?://" },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "authorize": { "type": "boolean", "description": "Whether the upload goes to Ratel and needs the project key. Never send the key to another origin." }
+      }
+    }
+  }
+}

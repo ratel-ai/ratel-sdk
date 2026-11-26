@@ -5,4 +5,5 @@ packages:
   - 'src/telemetry/ts'
   - 'src/rankers/ts'
   - 'src/cloud-sdk/ts'
+  - 'src/cli/ts'
   - 'examples/*'

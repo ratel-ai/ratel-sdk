@@ -1,0 +1,43 @@
+{
+  "name": "@ratel-ai/cli",
+  "version": "0.1.0",
+  "description": "The ratel CLI: push the Docker image of an agent to Ratel, run it on this machine or on Ratel, and run evals.",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "ratel": "./dist/cli.js"
+  },
+  "license": "MIT",
+  "author": "Agentified",
+  "homepage": "https://github.com/ratel-ai/ratel-sdk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ratel-ai/ratel-sdk.git",
+    "directory": "src/cli/ts"
+  },
+  "bugs": {
+    "url": "https://github.com/ratel-ai/ratel-sdk/issues"
+  },
+  "keywords": ["ratel", "cli", "ai-agents", "docker", "evals", "sandbox"],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": ["dist", "protocol", "LICENSE.md", "README.md", "CHANGELOG.md"],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "sync-protocol": "node -e \"const fs=require('node:fs');fs.rmSync('protocol/schema',{recursive:true,force:true});fs.cpSync('../../../protocol/sandbox/v1/schema','protocol/schema',{recursive:true});fs.copyFileSync('../../../protocol/sandbox/v1/verify.mjs','protocol/verify.mjs')\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ratel-ai/sdk": "workspace:^",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}

@@ -183,6 +183,17 @@ export const UNITS = {
     srcPaths: ["src/cloud-sdk/ts"],
     changelog: { name: "@ratel-ai/cloud-sdk", includePaths: ["src/cloud-sdk/ts/**"] },
   },
+  // The `ratel` CLI: push an agent image, run it, run evals. Pure TypeScript over
+  // @ratel-ai/sdk/platform; an independent npm unit.
+  cli: {
+    tagPrefix: "cli-v",
+    label: "@ratel-ai/cli → npm",
+    versionManifest: { path: "src/cli/ts/package.json", kind: "json" },
+    manifests: [{ path: "src/cli/ts/package.json", kind: "json" }],
+    changelogs: ["src/cli/ts/CHANGELOG.md"],
+    srcPaths: ["src/cli/ts"],
+    changelog: { name: "@ratel-ai/cli", includePaths: ["src/cli/ts/**"] },
+  },
 };
 
 export const UNIT_IDS = Object.keys(UNITS);

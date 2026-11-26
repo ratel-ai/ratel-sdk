@@ -25,16 +25,19 @@ export class PlatformError extends Error {
   readonly code: PlatformErrorCode;
   /** Finer-grained server code, e.g. "version_conflict" | "not_pending". */
   readonly reason: string | null;
+  /** The parsed JSON body of the refusal, or null when there is none. */
+  readonly body: unknown;
 
   constructor(
     message: string,
-    opts: { status: number | null; code: PlatformErrorCode; reason?: string | null },
+    opts: { status: number | null; code: PlatformErrorCode; reason?: string | null; body?: unknown },
   ) {
     super(message);
     this.name = "PlatformError";
     this.status = opts.status;
     this.code = opts.code;
     this.reason = opts.reason ?? null;
+    this.body = opts.body ?? null;
   }
 }
 
@@ -83,5 +86,5 @@ export function errorFromResponse(status: number, body: unknown): PlatformError 
     bodyError !== null && !KNOWN_BODY_CODES.has(bodyError)
       ? bodyError
       : `Ratel Platform request failed: ${status} ${code}${detail}`;
-  return new PlatformError(message, { status, code, reason });
+  return new PlatformError(message, { status, code, reason, body });
 }

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/run-response.schema.json",
+  "title": "RunResponse",
+  "description": "The answer to a run. HTTP mode: the body of a 200 answer to POST /ratel/run. Command mode: a JSON object with output on stdout. A receiver ignores fields that it does not know.",
+  "type": "object",
+  "required": ["output"],
+  "properties": {
+    "output": { "description": "Any JSON." },
+    "toolCalls": {
+      "type": "array",
+      "description": "Each tool call of the run, in order, with the mode that answered it.",
+      "items": {
+        "type": "object",
+        "required": ["name", "args", "mode"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,128}$" },
+          "args": { "type": "object" },
+          "mode": { "enum": ["simulated", "recorded", "live"] },
+          "result": { "description": "Any JSON. Absent when the call failed." },
+          "error": { "$ref": "error.schema.json#/$defs/errorBody" }
+        },
+        "anyOf": [{ "required": ["result"] }, { "required": ["error"] }]
+      }
+    },
+    "usage": {
+      "type": "object",
+      "description": "The model usage of the run.",
+      "properties": {
+        "inputTokens": { "type": "integer", "minimum": 0 },
+        "outputTokens": { "type": "integer", "minimum": 0 },
+        "costUsd": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}
