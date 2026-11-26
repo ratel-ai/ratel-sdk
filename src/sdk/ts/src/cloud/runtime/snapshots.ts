@@ -1,4 +1,4 @@
-import { DEFAULT_BASE_URL, DEFAULT_TIMEOUT_MS } from "../transport.js";
+import { type CloudConfig, resolveCloudConfig } from "../config.js";
 import type { RuntimeCatalogSnapshot, RuntimeCatalogToolDefinition } from "../types.js";
 import { classifyDelivery, DeliveryStatus } from "./delivery-status.js";
 import { hashCatalogSnapshot } from "./hash.js";
@@ -51,11 +51,8 @@ interface PreparedCatalogSnapshot {
 
 type SnapshotPublishOutcome = "durable" | "deferred" | "failed";
 
-export interface CatalogSnapshotsPublisherOptions {
-  readonly apiKey: string;
-  readonly baseUrl?: string;
-  readonly fetch?: typeof fetch;
-  readonly timeoutMs?: number;
+/** `apiKey`, `baseUrl`, `fetch` and `timeoutMs` resolve through {@link resolveCloudConfig}. */
+export interface CatalogSnapshotsPublisherOptions extends Readonly<CloudConfig> {
   /** Quiet period after catalog churn before publishing. Defaults to 500 ms. */
   readonly debounceMs?: number;
   /** Maximum age of a durable confirmation before republishing. Defaults to 5 minutes. */
@@ -93,10 +90,12 @@ export class CatalogSnapshotsPublisher {
   #failureStreak = 0;
 
   constructor(options: CatalogSnapshotsPublisherOptions) {
-    this.#apiKey = options.apiKey;
-    this.#baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    this.#fetch = options.fetch ?? fetch;
-    this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const config = resolveCloudConfig(options);
+    // Fail-open: with no key, Cloud answers 401 and delivery reports the failure.
+    this.#apiKey = config.apiKey ?? "";
+    this.#baseUrl = config.baseUrl;
+    this.#fetch = config.fetch;
+    this.#timeoutMs = config.timeoutMs;
     this.#debounceMs = nonNegative(options.debounceMs, DEFAULT_DEBOUNCE_MS);
     this.#reconcileIntervalMs = positiveInteger(
       options.reconcileIntervalMs,

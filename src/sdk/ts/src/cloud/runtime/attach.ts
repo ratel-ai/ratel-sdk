@@ -2,6 +2,7 @@ import type {
   RuntimeEvents,
   RuntimeEventSubscription as SdkRuntimeEventSubscription,
 } from "../../index.js";
+import { resolveCloudConfig } from "../config.js";
 import type { RuntimeCatalogToolDefinition } from "../types.js";
 import { isRemotelyPublishable } from "./allowlist.js";
 import {
@@ -54,7 +55,7 @@ export interface RatelRuntime {
 
 export interface AttachOptions
   extends Omit<RuntimeEventsPublisherOptions, "apiKey" | "deliveryStatus"> {
-  /** Project API key. Defaults to `RATEL_API_KEY`. */
+  /** Project API key. Defaults to `RATEL_API_KEY`. `baseUrl` defaults to `RATEL_BASE_URL`. */
   readonly apiKey?: string;
   /** Stable deployment source. Defaults to the Ratel runtime's OTel-derived source id. */
   readonly sourceId?: string;
@@ -139,7 +140,6 @@ function attachRuntime(runtime: RatelRuntime, options: AttachOptions): RuntimeAt
   }
 
   const {
-    apiKey = process.env.RATEL_API_KEY ?? "",
     sourceId: rawSourceId = runtime.events.sourceId,
     snapshotDebounceMs,
     snapshotReconcileIntervalMs,
@@ -156,12 +156,11 @@ function attachRuntime(runtime: RatelRuntime, options: AttachOptions): RuntimeAt
     ...(onStatusChange === undefined ? {} : { onStatusChange }),
     ...(warnOnFailure === undefined ? {} : { warnOnFailure }),
   });
-  const publisher = new RuntimeEventsPublisher({ ...delivery, apiKey, deliveryStatus });
+  // Resolve once, so both lanes always share one key and one deployment.
+  const cloud = resolvedCloudOptions(options);
+  const publisher = new RuntimeEventsPublisher({ ...delivery, ...cloud, deliveryStatus });
   const snapshots = new CatalogSnapshotsPublisher({
-    apiKey,
-    ...(delivery.baseUrl === undefined ? {} : { baseUrl: delivery.baseUrl }),
-    ...(delivery.fetch === undefined ? {} : { fetch: delivery.fetch }),
-    ...(delivery.timeoutMs === undefined ? {} : { timeoutMs: delivery.timeoutMs }),
+    ...cloud,
     debounceMs: 0,
     ...(snapshotReconcileIntervalMs === undefined
       ? {}
@@ -381,17 +380,22 @@ function enableCloudDefinitions(
 ): void {
   const controller = CLOUD_DEFINITION_CONTROLLERS.get(runtime);
   if (controller === undefined) return;
-  controller.enable(
-    createCloudDefinitionsSource({
-      apiKey: options.apiKey ?? process.env.RATEL_API_KEY ?? "",
-      ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-    }),
-  );
+  controller.enable(createCloudDefinitionsSource(resolvedCloudOptions(options)));
   Object.assign(attachment, {
     refreshCloudDefinitions: () => controller.refresh(),
   });
+}
+
+/** The shared Cloud settings of `options`, resolved through {@link resolveCloudConfig}. */
+function resolvedCloudOptions(options: AttachOptions): {
+  apiKey: string;
+  baseUrl: string;
+  fetch: typeof fetch;
+  timeoutMs: number;
+} {
+  const config = resolveCloudConfig(options);
+  // No key stays fail-open: Cloud answers 401 and the delivery status reports it.
+  return { ...config, apiKey: config.apiKey ?? "" };
 }
 
 /** A pre-runtime-events @ratel-ai/sdk (<0.10.0) exposes no `.events` on the runtime. */

@@ -1844,3 +1844,57 @@ describe("attachIntentGraphSync", () => {
     });
   });
 });
+
+describe("attachIntentGraphSync config resolution", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  async function firstRequestUrl(
+    options: { baseUrl?: string; endpoint?: string } = {},
+  ): Promise<{ url: string | undefined; authorization: string | null }> {
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(url), init });
+      return jsonResponse({ error: "not_found" }, { status: 404 });
+    }) as typeof fetch;
+    const sync = await attachIntentGraphSync(new FakeCatalog(), { ...options, fetch: fetchImpl });
+    await sync.close();
+    return {
+      url: requests[0]?.url,
+      authorization: new Headers(requests[0]?.init?.headers).get("authorization"),
+    };
+  }
+
+  it("loads from RATEL_BASE_URL with RATEL_API_KEY when both options are omitted", async () => {
+    vi.stubEnv("RATEL_CLOUD_INTENT_GRAPH", "");
+    vi.stubEnv("RATEL_BASE_URL", "https://env.ratel.test/api/v1/");
+    vi.stubEnv("RATEL_API_KEY", "rtl_env");
+
+    const request = await firstRequestUrl();
+
+    expect(request.url).toBe("https://env.ratel.test/api/v1/intent-graph?source=billing-agent");
+    expect(request.authorization).toBe("Bearer rtl_env");
+  });
+
+  it("derives the route from an explicit baseUrl over RATEL_BASE_URL", async () => {
+    vi.stubEnv("RATEL_CLOUD_INTENT_GRAPH", "");
+    vi.stubEnv("RATEL_BASE_URL", "https://env.ratel.test/api/v1");
+
+    const request = await firstRequestUrl({ baseUrl: "https://opt.ratel.test/api/v1/" });
+
+    expect(request.url).toBe("https://opt.ratel.test/api/v1/intent-graph?source=billing-agent");
+  });
+
+  it("keeps an explicit endpoint over baseUrl and RATEL_BASE_URL", async () => {
+    vi.stubEnv("RATEL_CLOUD_INTENT_GRAPH", "");
+    vi.stubEnv("RATEL_BASE_URL", "https://env.ratel.test/api/v1");
+
+    const request = await firstRequestUrl({
+      baseUrl: "https://opt.ratel.test/api/v1",
+      endpoint: "https://graph.test/custom",
+    });
+
+    expect(request.url).toBe("https://graph.test/custom?source=billing-agent");
+  });
+});

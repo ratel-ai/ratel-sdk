@@ -31,6 +31,13 @@ export class RatelCloudSdk {
   }
 }
 
+export {
+  API_KEY_ENV,
+  BASE_URL_ENV,
+  type CloudConfig,
+  type ResolvedCloudConfig,
+  resolveCloudConfig,
+} from "./config.js";
 export { CloudSdkError, type CloudSdkErrorCode } from "./errors.js";
 export { IntentsClient, type ListIntentsOptions } from "./intents.js";
 export { JobsClient, type WaitForJobOptions } from "./jobs.js";

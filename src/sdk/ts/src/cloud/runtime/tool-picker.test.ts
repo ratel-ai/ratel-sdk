@@ -168,6 +168,18 @@ describe("ratelCloud().toolPicker", () => {
     });
   });
 
+  describe("the base URL", () => {
+    it("posts to RATEL_BASE_URL when baseUrl is omitted, read on each pick", async () => {
+      const http = stub();
+      const rc = ratelCloud({ apiKey: "rk_test", fetch: http.fetch });
+      vi.stubEnv("RATEL_BASE_URL", "https://env.ratel.test/api/v1/");
+
+      await rc.toolPicker("q", TOOLS, 5);
+
+      expect(http.calls[0]?.url).toBe("https://env.ratel.test/api/v1/tools/pick");
+    });
+  });
+
   describe("the API key", () => {
     it("falls back to RATEL_API_KEY", async () => {
       vi.stubEnv("RATEL_API_KEY", "rk_env");

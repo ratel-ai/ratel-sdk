@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ratel } from "../../index.js";
 import { MockCloud } from "../testing/mock-cloud.js";
 import type { RuntimeEvent } from "../types.js";
@@ -1080,6 +1080,42 @@ describe("attach", () => {
       description: "add_task_comment description",
       searchable_description: "comment note retro ping",
     });
+  });
+});
+
+describe("attach config resolution", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sends events and snapshots to RATEL_BASE_URL with RATEL_API_KEY", async () => {
+    vi.stubEnv("RATEL_BASE_URL", "https://env.ratel.test/api/v1/");
+    vi.stubEnv("RATEL_API_KEY", "rtl_env");
+    const requests: Array<{ url: string; authorization: string | null }> = [];
+    const runtime = new FakeRuntime();
+    runtime.setTools([tool("deploy")]);
+    const handle = attach(runtime, {
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({
+          url: String(input),
+          authorization: new Headers(init?.headers).get("authorization"),
+        });
+        return Response.json({ accepted: 1, duplicates: 0, rejected: [] }, { status: 202 });
+      }) as typeof fetch,
+      warnOnFailure: false,
+    });
+
+    try {
+      runtime.emit(EVENT);
+      await handle.flush();
+
+      const urls = requests.map((request) => request.url);
+      expect(urls).toContain("https://env.ratel.test/api/v1/events");
+      expect(urls).toContain("https://env.ratel.test/api/v1/catalog/snapshot");
+      expect(requests.every((request) => request.authorization === "Bearer rtl_env")).toBe(true);
+    } finally {
+      await handle.close();
+    }
   });
 });
 

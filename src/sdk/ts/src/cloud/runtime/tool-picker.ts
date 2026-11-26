@@ -1,5 +1,5 @@
 import type { RankCandidate, RankedId, RankFn, RetrieverError } from "../../index.js";
-import { DEFAULT_BASE_URL } from "../transport.js";
+import { type CloudConfig, resolveCloudConfig } from "../config.js";
 
 /**
  * How the Tool Picker ranks: `instant` is BM25 only (free), `precise` puts a
@@ -8,15 +8,12 @@ import { DEFAULT_BASE_URL } from "../transport.js";
  */
 export type ToolPickerMode = "instant" | "precise" | "exhaustive";
 
-export interface RatelCloudOptions {
-  /** Project API key. Defaults to `RATEL_API_KEY`, read on every pick. */
-  readonly apiKey?: string;
-  /** Cloud API base, including the `/api/v1` prefix. Same value `attach()` takes. */
-  readonly baseUrl?: string;
-  /** Override the per-mode request budget (15 s, or 60 s for `exhaustive`). */
-  readonly timeoutMs?: number;
-  readonly fetch?: typeof fetch;
-}
+/**
+ * `apiKey` and `baseUrl` resolve through {@link resolveCloudConfig} on every pick,
+ * so a change of `RATEL_API_KEY` or `RATEL_BASE_URL` applies to the next pick.
+ * `timeoutMs` overrides the per-mode request budget (15 s, or 60 s for `exhaustive`).
+ */
+export interface RatelCloudOptions extends Readonly<CloudConfig> {}
 
 /**
  * A {@link RankFn} that ranks with the Ratel Cloud Tool Picker. Pass it as
@@ -66,7 +63,8 @@ async function pickTools(
   // calls a RankFn once per catalog, so every candidate shares the first one's kind.
   if (candidates.length === 0 || topK <= 0 || candidates[0]?.kind === "skill") return [];
   const fail = await retrieverErrorFactory();
-  const apiKey = options.apiKey ?? process.env.RATEL_API_KEY ?? "";
+  const config = resolveCloudConfig(options);
+  const apiKey = config.apiKey ?? "";
   if (apiKey === "") {
     throw fail(
       "Ratel Cloud Tool Picker needs an API key: pass apiKey or set RATEL_API_KEY",
@@ -74,12 +72,12 @@ async function pickTools(
     );
   }
 
-  const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const { baseUrl } = config;
   const timeoutMs =
     options.timeoutMs ?? (mode === "exhaustive" ? EXHAUSTIVE_TIMEOUT_MS : PICK_TIMEOUT_MS);
   let response: Response;
   try {
-    response = await (options.fetch ?? fetch)(`${baseUrl}/tools/pick`, {
+    response = await config.fetch(`${baseUrl}/tools/pick`, {
       method: "POST",
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({ query: truncate(query), mode, top_k: Math.min(topK, MAX_TOP_K) }),
