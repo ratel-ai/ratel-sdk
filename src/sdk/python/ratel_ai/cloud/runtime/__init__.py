@@ -37,6 +37,16 @@ from .delivery_status import (
     classify_delivery,
 )
 from .hash import hash_catalog_snapshot
+from .intent_graph_sync import (
+    INTENT_GRAPH_ENV,
+    IntentGraphSync,
+    IntentGraphSyncCatalog,
+    IntentGraphSyncError,
+    IntentGraphSyncErrorKind,
+    IntentGraphSyncMode,
+    IntentGraphSyncStatus,
+    attach_intent_graph_sync,
+)
 from .publisher import (
     EVENTS_ENV,
     RUNTIME_EVENT_BATCH_MAX_BYTES,
@@ -55,6 +65,7 @@ from .snapshots import (
     CatalogSnapshotsPublisher,
     normalize_source_id,
 )
+from .tool_picker import RatelCloud, ToolPicker, ToolPickerMode, ratel_cloud
 from .types import RuntimeCatalogSnapshot, RuntimeCatalogToolDefinition, RuntimeEvent
 
 __all__ = [
@@ -63,6 +74,7 @@ __all__ = [
     "CATALOG_SNAPSHOT_MAX_ID_OR_NAME_LENGTH",
     "CATALOG_SNAPSHOT_MAX_TOOLS",
     "EVENTS_ENV",
+    "INTENT_GRAPH_ENV",
     "RUNTIME_EVENT_BATCH_MAX_BYTES",
     "RUNTIME_EVENT_BATCH_MAX_EVENTS",
     "RUNTIME_EVENT_MAX_BYTES",
@@ -76,6 +88,13 @@ __all__ = [
     "DeliveryResult",
     "DeliveryStatus",
     "EventsDeliveryStatus",
+    "IntentGraphSync",
+    "IntentGraphSyncCatalog",
+    "IntentGraphSyncError",
+    "IntentGraphSyncErrorKind",
+    "IntentGraphSyncMode",
+    "IntentGraphSyncStatus",
+    "RatelCloud",
     "RatelRuntime",
     "RatelRuntimeCatalog",
     "RatelRuntimeEvents",
@@ -92,10 +111,14 @@ __all__ = [
     "SnapshotDeliveryStatus",
     "Sleep",
     "StatusChangeHandler",
+    "ToolPicker",
+    "ToolPickerMode",
     "attach",
+    "attach_intent_graph_sync",
     "classify_delivery",
     "cloud_definitions_ready",
     "hash_catalog_snapshot",
     "is_remotely_publishable",
     "normalize_source_id",
+    "ratel_cloud",
 ]

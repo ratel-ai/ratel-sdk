@@ -49,7 +49,9 @@ __all__ = [
     "ManualClock",
     "MockCloud",
     "MockHandler",
+    "MockIntentGraph",
     "MockRequest",
+    "MockToolPick",
     "ScriptedResponse",
     "json_response",
 ]
@@ -82,6 +84,36 @@ class MockRequest:
     raw: TransportRequest
 
 
+@dataclass(frozen=True)
+class MockIntentGraph:
+    """An intent graph that `MockCloud` stores for one source.
+
+    Attributes:
+        rev: The ``rev`` of the stored graph.
+        graph: The graph as a JSON object. `MockCloud` never reads more than ``rev``.
+        etag: The quoted ETag that ``GET`` returns and ``If-Match`` must name.
+    """
+
+    rev: int
+    graph: dict[str, Any]
+    etag: str
+
+
+@dataclass(frozen=True)
+class MockToolPick:
+    """One request that `MockCloud` received on ``POST /tools/pick``.
+
+    Attributes:
+        query: The query.
+        mode: The Tool Picker mode, e.g. ``"precise"``.
+        top_k: The requested number of tools.
+    """
+
+    query: str
+    mode: str
+    top_k: int
+
+
 #: A route handler: it receives the parsed request and returns the response.
 MockHandler = Callable[[MockRequest], TransportResponse]
 
@@ -112,6 +144,9 @@ class MockCloud:
         received_snapshots: The body of every authorized ``PUT /catalog/snapshot``,
             in arrival order, also of scripted failures.
         catalog_snapshots: The snapshots that ``PUT /catalog/snapshot`` accepted.
+        intent_graphs: The stored intent graphs by source id, from ``PUT /intent-graph``
+            or `seed_intent_graph`.
+        tool_picks: The requests that ``POST /tools/pick`` received, in arrival order.
     """
 
     def __init__(
@@ -138,6 +173,9 @@ class MockCloud:
         self.runtime_events: list[dict[str, Any]] = []
         self.received_snapshots: list[dict[str, Any]] = []
         self.catalog_snapshots: list[dict[str, Any]] = []
+        self.intent_graphs: dict[str, MockIntentGraph] = {}
+        self.tool_picks: list[MockToolPick] = []
+        self._tool_ranking: list[tuple[str, float]] | None = None
         self._scripts: dict[tuple[str, str], deque[ScriptedResponse]] = {}
         self._now = now if now is not None else _utc_now
         self._seq = 0
@@ -310,6 +348,29 @@ class MockCloud:
         """Remove every runtime-catalog override."""
         self._runtime_catalog_overrides.clear()
 
+    def seed_intent_graph(self, source_id: str, graph: Mapping[str, Any]) -> MockIntentGraph:
+        """Store an intent graph for ``source_id``, as if a runtime had pushed it.
+
+        Args:
+            source_id: The source id (the ``source`` query parameter of ``GET``).
+            graph: The graph JSON object, e.g. ``json.loads(IntentGraph().to_json())``.
+
+        Returns:
+            The stored graph with its new ETag.
+        """
+        return self._store_intent_graph(source_id, dict(graph))
+
+    def seed_tool_ranking(self, ranked: Iterable[tuple[str, float]]) -> None:
+        """Make ``POST /tools/pick`` return this ranking, cut to the requested ``top_k``.
+
+        Without a seeded ranking, the pick ranks the tools of the latest catalog
+        snapshot by how many query words their name and description contain.
+
+        Args:
+            ranked: ``(tool id, score)`` pairs, best first.
+        """
+        self._tool_ranking = list(ranked)
+
     # — routing ———————————————————————————————————————————————————————————
 
     def _add_default_routes(self) -> None:
@@ -331,6 +392,9 @@ class MockCloud:
             ("GET", r"/runtime-catalog/overrides", self._get_runtime_catalog_overrides),
             ("POST", r"/events", self._receive_events),
             ("PUT", r"/catalog/snapshot", self._receive_snapshot),
+            ("GET", r"/intent-graph", self._get_intent_graph),
+            ("PUT", r"/intent-graph", self._put_intent_graph),
+            ("POST", r"/tools/pick", self._pick_tools),
         ]
         for method, pattern, handler in routes:
             self.add_route(method, pattern, handler)
@@ -790,6 +854,81 @@ class MockCloud:
             },
             headers={"etag": f'"{catalog_version}"'},
         )
+
+    # — intent graph ————————————————————————————————————————————————————————
+
+    def _get_intent_graph(self, request: MockRequest) -> TransportResponse:
+        source_id = request.query.get("source", "")
+        stored = self.intent_graphs.get(source_id)
+        if stored is None:
+            return _not_found()
+        headers = {"etag": stored.etag}
+        if request.headers.get("if-none-match") == stored.etag:
+            return TransportResponse(status=304, headers=headers, body=b"")
+        return json_response(
+            {"sourceId": source_id, "rev": stored.rev, "graph": stored.graph}, headers=headers
+        )
+
+    def _put_intent_graph(self, request: MockRequest) -> TransportResponse:
+        source_id = str(request.body.get("source_id", ""))
+        graph = request.body.get("graph")
+        stored = self.intent_graphs.get(source_id)
+        # Optimistic concurrency: a write must name the ETag of the stored graph.
+        if stored is not None and request.headers.get("if-match") != stored.etag:
+            return json_response({"error": "stale_graph", "rev": stored.rev}, status=409)
+        if not isinstance(graph, dict):
+            return _error(400, "invalid_graph", "graph must be a JSON object")
+        saved = self._store_intent_graph(source_id, graph)
+        return json_response(
+            {"sourceId": source_id, "rev": saved.rev}, headers={"etag": saved.etag}
+        )
+
+    def _store_intent_graph(self, source_id: str, graph: dict[str, Any]) -> MockIntentGraph:
+        rev = graph.get("rev")
+        stored = MockIntentGraph(
+            rev=rev if isinstance(rev, int) and not isinstance(rev, bool) else 0,
+            graph=graph,
+            etag=f'"{self.next_id("ig")}"',
+        )
+        self.intent_graphs[source_id] = stored
+        return stored
+
+    # — Tool Picker ———————————————————————————————————————————————————————————
+
+    def _pick_tools(self, request: MockRequest) -> TransportResponse:
+        top_k = request.body.get("top_k")
+        pick = MockToolPick(
+            query=str(request.body.get("query", "")),
+            mode=str(request.body.get("mode", "precise")),
+            top_k=top_k if isinstance(top_k, int) and not isinstance(top_k, bool) else 5,
+        )
+        self.tool_picks.append(pick)
+        ranked = (
+            self._tool_ranking
+            if self._tool_ranking is not None
+            else self._rank_snapshot_tools(pick.query)
+        )
+        tools = [{"id": tool_id, "score": score} for tool_id, score in ranked[: pick.top_k]]
+        return json_response(
+            {
+                "mode": pick.mode,
+                "tools": tools,
+                "confident": bool(tools),
+                "usage": {"candidates": len(tools), "questions": 0, "input_tokens": 0},
+            }
+        )
+
+    def _rank_snapshot_tools(self, query: str) -> list[tuple[str, float]]:
+        words = [word for word in re.split(r"\W+", query.lower()) if word]
+        tools = self.catalog_snapshots[-1].get("tools", []) if self.catalog_snapshots else []
+        scored: list[tuple[str, float]] = []
+        for tool in tools if isinstance(tools, list) else []:
+            text = f"{tool.get('name', '')} {tool.get('description') or ''}".lower()
+            hits = sum(1 for word in words if word in text)
+            score = hits / len(words) if words else 0.0
+            if score > 0:
+                scored.append((str(tool.get("id")), score))
+        return sorted(scored, key=lambda pair: -pair[1])
 
 
 class ManualClock:
