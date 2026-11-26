@@ -1,4 +1,4 @@
-"""Python SDK for Ratel — context engineering for AI agents.
+"""The Ratel Platform SDK for Python — context engineering for AI agents at runtime.
 
 Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `ratel(...)` / `Ratel` — the one construction point: shared tool, skill and
@@ -15,10 +15,10 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
   so everything inside carries its `turn_id` (ADR-0026).
 - `RuntimeEvents` / `RuntimeCatalog` — subscribe to runtime facts and snapshot
   executor-free tool/skill state (ADR-0020).
-- `ratel(cloud=...)` / `CloudOptions` — turn on Ratel Cloud for one core: runtime
-  events, catalog snapshots, Cloud definitions, intent graph sync and the Tool
-  Picker, plus the Cloud API on `Ratel.cloud`. The `ratel_ai.cloud` package
-  loads only when `cloud` is set.
+- `ratel(platform=...)` / `PlatformOptions` — turn on the Ratel Platform for one core: runtime
+  events, catalog snapshots, Platform definitions, intent graph sync and the Tool
+  Picker, plus the Platform API on `Ratel.platform`. The `ratel_ai.platform` package
+  loads only when `platform` is set.
 - `experimental_define_experiment` / `Experiment` — experimental retrieval
   experiments: a deterministic arm per unit, observed through OpenTelemetry and
   `Ratel.events`.
@@ -134,17 +134,22 @@ from .telemetry import configure_telemetry
 from .turns import TURN_USER_MESSAGE_MAX_BYTES, Turn, current_turn_id
 
 if TYPE_CHECKING:
-    from .cloud.ratel_cloud import (
-        CloudEventsOptions,
-        CloudIntentGraphOptions,
-        CloudOptions,
-        RatelCloudRuntime,
+    from .platform.ratel_platform import (
+        PlatformEventsOptions,
+        PlatformIntentGraphOptions,
+        PlatformOptions,
+        RatelPlatformRuntime,
     )
 
-# The `ratel(cloud=...)` types live in `ratel_ai.cloud`. They load on first access,
-# so `import ratel_ai` never loads the Cloud package.
-_CLOUD_EXPORTS = frozenset(
-    {"CloudEventsOptions", "CloudIntentGraphOptions", "CloudOptions", "RatelCloudRuntime"}
+# The `ratel(platform=...)` types live in `ratel_ai.platform`. They load on first access,
+# so `import ratel_ai` never loads the Platform package.
+_PLATFORM_EXPORTS = frozenset(
+    {
+        "PlatformEventsOptions",
+        "PlatformIntentGraphOptions",
+        "PlatformOptions",
+        "RatelPlatformRuntime",
+    }
 )
 
 __all__ = [
@@ -219,10 +224,10 @@ __all__ = [
     "StaleIntentGraphError",
     "Tool",
     "BaselineTurn",
-    "CloudEventsOptions",
-    "CloudIntentGraphOptions",
-    "CloudOptions",
-    "RatelCloudRuntime",
+    "PlatformEventsOptions",
+    "PlatformIntentGraphOptions",
+    "PlatformOptions",
+    "RatelPlatformRuntime",
     "ToolCatalog",
     "ToolCollection",
     "ToolRegistry",
@@ -246,9 +251,9 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    """Load the `ratel(cloud=...)` types from `ratel_ai.cloud` on first access."""
-    if name in _CLOUD_EXPORTS:
-        from .cloud import ratel_cloud
+    """Load the `ratel(platform=...)` types from `ratel_ai.platform` on first access."""
+    if name in _PLATFORM_EXPORTS:
+        from .platform import ratel_platform
 
-        return getattr(ratel_cloud, name)
+        return getattr(ratel_platform, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

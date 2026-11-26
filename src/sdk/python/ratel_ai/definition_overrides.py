@@ -1,6 +1,6 @@
 """⚠️ Experimental definition overrides — the Python mirror of `definition-overrides.ts`.
 
-An external source (Ratel Cloud is the first one) can own the *retrieval*
+An external source (Ratel Platform is the first one) can own the *retrieval*
 description of live tools, skills and facts. Attach it with
 `RuntimeCatalog.experimental_attach_definition_overrides(source)`. The model-facing
 description, schemas, bodies, tags and executors stay local, and a snapshot always

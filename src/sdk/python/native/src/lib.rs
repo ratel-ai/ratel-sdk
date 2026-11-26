@@ -931,7 +931,7 @@ impl IntentGraph {
     }
 
     /// Adopt a graph in the `protocol/v1` wire form — from a previous
-    /// `to_json()` or Ratel Cloud. Raises `ValueError` if it is malformed or
+    /// `to_json()` or Ratel Platform. Raises `ValueError` if it is malformed or
     /// declares a schema version this build does not read.
     #[staticmethod]
     fn from_json(json: &str) -> PyResult<Self> {
@@ -1569,7 +1569,7 @@ impl ToolRegistry {
     /// set of clusters.
     ///
     /// Pass `learn=False` to rank from `graph` without learning into it — the
-    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// consumer form for a graph produced elsewhere (Ratel Platform, for example).
     /// The flag is stored on the registry, not just applied at this call: every
     /// later sink install (`set_trace_sink`, `subscribe_trace_events`)
     /// re-derives its sink through the same flag, so re-installing a sink for
@@ -2236,7 +2236,7 @@ impl SkillRegistry {
     /// set of clusters.
     ///
     /// Pass `learn=False` to rank from `graph` without learning into it — the
-    /// consumer form for a graph produced elsewhere (Ratel Cloud, for example).
+    /// consumer form for a graph produced elsewhere (Ratel Platform, for example).
     /// The flag is stored on the registry, not just applied at this call: every
     /// later sink install (`set_trace_sink`, `subscribe_trace_events`)
     /// re-derives its sink through the same flag, so re-installing a sink for

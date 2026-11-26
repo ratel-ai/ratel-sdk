@@ -17,7 +17,7 @@ name: Release
 #   vercel-ai-sdk-v* -> @ratel-ai/vercel-ai-sdk on npm (framework adapter, peers the SDK)
 #   rankers-ts-v* -> @ratel-ai/rankers-plugin loader + 5 platform packages (peers the SDK; ADR-0028)
 #   rankers-py-v* -> ratel-ai-rankers-plugin on PyPI (depends on ratel-ai by range; ADR-0028)
-#   cloud-sdk-v* -> @ratel-ai/cloud-sdk on npm (deprecated shim over @ratel-ai/sdk/cloud; moved from ratel-ai/ratel-cloud-sdk)
+#   cloud-sdk-v* -> @ratel-ai/cloud-sdk on npm (deprecated shim over @ratel-ai/sdk/platform; moved from ratel-ai/ratel-cloud-sdk)
 
 on:
   push:
@@ -1065,7 +1065,7 @@ jobs:
           node -e "const v = require('child_process').execSync('npm --version').toString().trim(); const [maj, min, patch] = v.split('.').map(Number); if (maj < 11 || (maj === 11 && (min < 5 || (min === 5 && patch < 1)))) { console.error('npm CLI ' + v + ' < 11.5.1 (required for Trusted Publishers)'); process.exit(1); } console.log('npm ' + v + ' OK');"
       - name: Install
         run: pnpm install --frozen-lockfile
-      # The package is a deprecated shim over @ratel-ai/sdk/cloud. The `...` build
+      # The package is a deprecated shim over @ratel-ai/sdk/platform. The `...` build
       # closure pulls @ratel-ai/sdk, whose build compiles the native crate.
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2

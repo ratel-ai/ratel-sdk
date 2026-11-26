@@ -68,8 +68,8 @@ API_KEY_ENV = "RATEL_API_KEY"
 #: Env var whose value is the API root when base_url= is omitted.
 BASE_URL_ENV = "RATEL_BASE_URL"
 
-#: Ratel Cloud API root the default OTLP routes hang off.
-DEFAULT_BASE_URL = "https://cloud.ratel.sh/api/v1"
+#: Ratel Platform API root the default OTLP routes hang off.
+DEFAULT_BASE_URL = "https://app.ratel.sh/api/v1"
 
 #: service.name used when the caller does not pass one.
 DEFAULT_SERVICE_NAME = "ratel"
@@ -145,7 +145,7 @@ def resolve_otlp_config(
     Args:
         api_key: Project API key; defaults to ``RATEL_API_KEY``.
         base_url: API root of the default routes, with the ``/api/v1`` prefix; defaults to
-            ``RATEL_BASE_URL``, then ``https://cloud.ratel.sh/api/v1``. Trailing slashes are
+            ``RATEL_BASE_URL``, then ``https://app.ratel.sh/api/v1``. Trailing slashes are
             removed.
         endpoint: Full OTLP traces URL; overrides base_url.
         logs_endpoint: Full OTLP logs URL; defaults to ``RATEL_OTLP_LOGS_ENDPOINT``.
@@ -206,14 +206,14 @@ def _resolve_endpoint_from_env(env: Mapping[str, str]) -> str | None:
 
 def _resolve_base_url(base_url: str | None, api_key: str | None, env: Mapping[str, str]) -> str:
     """The API root the default routes hang off: argument, then RATEL_BASE_URL, then the
-    Ratel Cloud default. The default needs an API key, so a caller with no destination at
-    all fails loud instead of exporting unauthenticated to Ratel Cloud."""
+    Ratel Platform default. The default needs an API key, so a caller with no destination at
+    all fails loud instead of exporting unauthenticated to Ratel Platform."""
     chosen = base_url or env.get(BASE_URL_ENV)
     if not chosen and not (api_key or env.get(API_KEY_ENV)):
         raise ValueError(
             f"ratel telemetry init: no endpoint. Pass endpoint= or set {OTLP_ENDPOINT_ENV}, "
             f"or pass api_key= / set {API_KEY_ENV} (or base_url= / {BASE_URL_ENV}) to "
-            "export to Ratel Cloud."
+            "export to Ratel Platform."
         )
     return (chosen or DEFAULT_BASE_URL).rstrip("/")
 
@@ -486,7 +486,7 @@ def init(
 
     Endpoints and auth resolve as in resolve_otlp_config: with no endpoint, an API key or a
     base_url (then ``RATEL_BASE_URL``) selects ``${base_url}/traces`` and ``${base_url}/logs``
-    (default ``https://cloud.ratel.sh/api/v1``); with none of these it raises ValueError.
+    (default ``https://app.ratel.sh/api/v1``); with none of these it raises ValueError.
 
     Shutdown is terminal: after handle.shutdown(), a later init() raises rather than hand back
     the dead provider (OTel's global provider is set once per process). Note that the handle is

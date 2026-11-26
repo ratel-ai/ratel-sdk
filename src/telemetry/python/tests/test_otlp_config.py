@@ -1,6 +1,6 @@
-"""Endpoint defaults of resolve_otlp_config: the Ratel Cloud base URL routes.
+"""Endpoint defaults of resolve_otlp_config: the Ratel Platform base URL routes.
 
-The Python resolver matches the TypeScript one (``src/sdk/ts/src/cloud/otel/config.ts``):
+The Python resolver matches the TypeScript one (``src/sdk/ts/src/platform/otel/config.ts``):
 traces go to ``${base_url}/traces`` and logs to ``${base_url}/logs`` unless an endpoint is
 set. All cases inject ``env``, so no test reads the process environment or the network.
 """
@@ -18,18 +18,18 @@ from ratel_ai_telemetry.otlp import (
     resolve_otlp_config,
 )
 
-DEFAULT_TRACES_URL = "https://cloud.ratel.sh/api/v1/traces"
-DEFAULT_LOGS_URL = "https://cloud.ratel.sh/api/v1/logs"
+DEFAULT_TRACES_URL = "https://app.ratel.sh/api/v1/traces"
+DEFAULT_LOGS_URL = "https://app.ratel.sh/api/v1/logs"
 
 
 class TestBaseUrlDefault:
-    def test_api_key_alone_routes_both_signals_to_ratel_cloud(self) -> None:
+    def test_api_key_alone_routes_both_signals_to_ratel_platform(self) -> None:
         cfg = resolve_otlp_config(env={"RATEL_API_KEY": "rtl_env"})
 
         assert cfg.url == DEFAULT_TRACES_URL
         assert cfg.logs_url == DEFAULT_LOGS_URL
 
-    def test_api_key_argument_alone_routes_both_signals_to_ratel_cloud(self) -> None:
+    def test_api_key_argument_alone_routes_both_signals_to_ratel_platform(self) -> None:
         cfg = resolve_otlp_config(api_key="rtl_arg", env={})
 
         assert cfg.url == DEFAULT_TRACES_URL
@@ -175,4 +175,4 @@ def test_env_names_and_default_root_match_the_typescript_sdk() -> None:
 
     assert OTLP_LOGS_ENDPOINT_ENV == "RATEL_OTLP_LOGS_ENDPOINT"
     assert BASE_URL_ENV == "RATEL_BASE_URL"
-    assert DEFAULT_BASE_URL == "https://cloud.ratel.sh/api/v1"
+    assert DEFAULT_BASE_URL == "https://app.ratel.sh/api/v1"

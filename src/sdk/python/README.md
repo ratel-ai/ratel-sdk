@@ -1,6 +1,6 @@
 <div align="center">
   <h1>ratel-ai</h1>
-  <p>Context engineering for Python agents.</p>
+  <p>The Ratel Platform SDK for Python agents: context engineering at runtime, plus sync and self-improvement through the platform.</p>
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
@@ -162,7 +162,7 @@ takes `turn_id` as a keyword argument, so a framework adapter passes one per mod
 
 It scopes, it does not attribute: within a turn, an invoke is paired with the search that actually
 returned that capability, so several searches before any invoke each keep their own evidence
-(ADR-0014), whether the graph is learned in-process or by Ratel Cloud replaying your runtime
+(ADR-0014), whether the graph is learned in-process or by Ratel Platform replaying your runtime
 events. What the id buys is separation — two conversations sharing one catalog must not pair
 each other's searches and invokes. Omit it and every caller shares a single scope, which is fine
 for one conversation at a time and wrong for concurrent ones.
@@ -258,8 +258,8 @@ accepted by the bounded native queues and for async handlers to settle. Subscrib
 publisher must set `experimental_catalog_definitions=True` to consent to public
 `catalog_definition` fields regardless of the OTel message-content capture setting. Definition events are lossy and change-sensitive; snapshots are
 the authoritative full replacement for removals and recovery. They contain sorted public
-definitions only—never tool executors or skill bodies. To publish them to Ratel Cloud, use
-`ratel(cloud=...)` (see [Ratel Cloud](#ratel-cloud)), or publish them through your own adapter.
+definitions only—never tool executors or skill bodies. To publish them to Ratel Platform, use
+`ratel(platform=...)` (see [Ratel Platform](#ratel-platform)), or publish them through your own adapter.
 
 ## Definition overrides from an external source (experimental)
 
@@ -308,18 +308,24 @@ executors stay local. Definition events after an attach carry
 `ratel.catalog.use_definition_overrides=true`. Opting in is one-way for the life of the process.
 These APIs may change without a major-version bump.
 
-## Ratel Cloud
+## Ratel Platform
 
-One option turns on Ratel Cloud for a core: `ratel(cloud=...)`. With `RATEL_API_KEY` set,
-`cloud=True` is enough. The core then publishes its runtime events and its catalog snapshots,
-and `r.cloud` reaches the Cloud API with the same key:
+`ratel-ai` is the SDK of the Ratel Platform. It manages the context of an agent at runtime, in
+process. It also connects the agent to the platform: the platform receives the runtime events and
+the catalog snapshots, syncs the definitions and the intent graph back, and drafts improvements
+for review. The platform is `https://app.ratel.sh` by default, or your own self-hosted platform
+(see [Self-hosted platform](#self-hosted-platform)).
+
+One option turns on the Ratel Platform for a core: `ratel(platform=...)`. With `RATEL_API_KEY` set,
+`platform=True` is enough. The core then publishes its runtime events and its catalog snapshots,
+and `r.platform` reaches the Platform API with the same key:
 
 ```python
 from ratel_ai import ratel
 
 
 async def main() -> None:
-    r = ratel(cloud=True)  # reads RATEL_API_KEY (and RATEL_BASE_URL)
+    r = ratel(platform=True)  # reads RATEL_API_KEY (and RATEL_BASE_URL)
 
     await r.tools.register([deploy_tool, rollback_tool])
     async with r.turn():
@@ -327,88 +333,106 @@ async def main() -> None:
         if hits:
             await r.tools.invoke(hits[0].tool_id, {"service": "billing"})
 
-    # The Cloud API, from the same object and the same key.
-    skills = (await r.cloud.skills.list())["skills"]
+    # The Platform API, from the same object and the same key.
+    skills = (await r.platform.skills.list())["skills"]
 
-    await r.cloud.flush()  # deliver what is queued (also called by close())
-    print(r.cloud.status())  # delivery health of events and snapshots
-    await r.cloud.close()  # at shutdown
+    await r.platform.flush()  # deliver what is queued (also called by close())
+    print(r.platform.status())  # delivery health of events and snapshots
+    await r.platform.close()  # at shutdown
 ```
 
-Without `cloud`, `ratel()` runs no Cloud code, does not import `ratel_ai.cloud` and sends no
-request, and `r.cloud` is `None`. With `cloud` and no API key, `ratel()` raises a
-`ratel_ai.cloud.CloudError` (code `config`) that names `RATEL_API_KEY`. Delivery is fail-open: a
-Cloud failure never fails a search or an invoke. A runnable version is
-[`examples/cloud-python/main.py`](../../../examples/cloud-python/main.py).
+Without `platform`, `ratel()` runs no Platform code, does not import `ratel_ai.platform` and sends no
+request, and `r.platform` is `None`. With `platform` and no API key, `ratel()` raises a
+`ratel_ai.platform.PlatformError` (code `config`) that names `RATEL_API_KEY`. Delivery is fail-open: a
+Platform failure never fails a search or an invoke. A runnable version is
+[`examples/platform-python/main.py`](../../../examples/platform-python/main.py).
 
-Pass a `CloudOptions` dict to set the key and the URL in code, or to turn on more features:
+Pass a `PlatformOptions` dict to set the key and the URL in code, or to turn on more features:
 
 ```python
 r = ratel(
-    cloud={
+    platform={
         "api_key": "rtl_…",
-        "base_url": "https://cloud.ratel.sh/api/v1",
+        "base_url": "https://app.ratel.sh/api/v1",
         "events": {"warn_on_failure": False},  # on by default; False turns it off
-        "definitions": True,  # Cloud owns the retrieval descriptions
+        "definitions": True,  # Platform owns the retrieval descriptions
         "intent_graph": True,  # sync the intent graph and rank with it
-        "tool_picker": "precise",  # rank tools with the Cloud Tool Picker (method="custom")
+        "tool_picker": "precise",  # rank tools with the Platform Tool Picker (method="custom")
     }
 )
-await r.cloud.ready()  # the first definitions pull and intent graph load ended
+await r.platform.ready()  # the first definitions pull and intent graph load ended
 ```
 
-`r.cloud` has `skills`, `suggestions`, `intents`, `jobs` and `runtime_catalog` (the management
+`r.platform` has `skills`, `suggestions`, `intents`, `jobs` and `runtime_catalog` (the management
 clients), `tool_picker`, and the lifecycle methods `status()`, `verify()`, `ready()`, `flush()`,
 `close()` and `refresh_definitions()`. Do not set `method` or `retrieve_fn` with `tool_picker`:
-`ratel()` raises. `ratel(cloud=...)` returns a `Ratel[RatelCloudRuntime]`, so a type checker knows
-that `r.cloud` is set. `ratel()` returns a `Ratel[None]`.
+`ratel()` raises. `ratel(platform=...)` returns a `Ratel[RatelPlatformRuntime]`, so a type checker knows
+that `r.platform` is set. `ratel()` returns a `Ratel[None]`.
 
-**The event loop.** `ratel()` is synchronous, and the Cloud features run on an asyncio event
-loop. When you call `ratel(cloud=...)` inside a running loop (for example in `async def main()` or
+**The event loop.** `ratel()` is synchronous, and the Platform features run on an asyncio event
+loop. When you call `ratel(platform=...)` inside a running loop (for example in `async def main()` or
 in the startup hook of your web framework), the features start at once on that loop. When you call
-it before the loop starts (for example at import time), `r.cloud` holds the runtime events (at
+it before the loop starts (for example at import time), `r.platform` holds the runtime events (at
 most `queue_capacity`, default 1,024, oldest dropped first). The features then start on the first
-awaited `r.cloud` call: `ready()`, `flush()`, `verify()`, `refresh_definitions()` or `close()`. That
-call replays the held events. In that case, call `await r.cloud.ready()` one time inside the loop,
+awaited `r.platform` call: `ready()`, `flush()`, `verify()`, `refresh_definitions()` or `close()`. That
+call replays the held events. In that case, call `await r.platform.ready()` one time inside the loop,
 at startup. The features stay on the loop that they started on.
 
-### Cloud settings
+### Platform settings
 
-Each Cloud feature resolves its key and URL in one place (`resolve_cloud_config` of
-`ratel_ai.cloud`): the option, then the env variable, then the default.
+Each Platform feature resolves its key and URL in one place (`resolve_platform_config` of
+`ratel_ai.platform`): the option, then the env variable, then the default.
 
 | Option | Env variable | Default |
 | --- | --- | --- |
-| `cloud["api_key"]` | `RATEL_API_KEY` | none: required |
-| `cloud["base_url"]` | `RATEL_BASE_URL` | `https://cloud.ratel.sh/api/v1` |
-| `cloud["events"]` | `RATEL_CLOUD_EVENTS=off` turns runtime events off | on |
-| `cloud["definitions"]` | — | off |
-| `cloud["intent_graph"]` | `RATEL_CLOUD_INTENT_GRAPH=off` turns it off | off |
-| `cloud["tool_picker"]` | — | off (`True` means `"precise"`) |
-| `cloud["source_id"]` | — | the runtime's event source id |
-| `cloud["timeout"]` | — | the default of each feature (30 s for most requests) |
+| `platform["api_key"]` | `RATEL_API_KEY` | none: required |
+| `platform["base_url"]` | `RATEL_BASE_URL` | `https://app.ratel.sh/api/v1` |
+| `platform["events"]` | `RATEL_PLATFORM_EVENTS=off` turns runtime events off (deprecated: `RATEL_CLOUD_EVENTS`) | on |
+| `platform["definitions"]` | — | off |
+| `platform["intent_graph"]` | `RATEL_PLATFORM_INTENT_GRAPH=off` turns it off (deprecated: `RATEL_CLOUD_INTENT_GRAPH`) | off |
+| `platform["tool_picker"]` | — | off (`True` means `"precise"`) |
+| `platform["source_id"]` | — | the runtime's event source id |
+| `platform["timeout"]` | — | the default of each feature (30 s for most requests) |
 | `endpoint` of `configure_telemetry` | `RATEL_OTLP_ENDPOINT` | `${base_url}/traces` |
 | `logs_endpoint` of `configure_telemetry` | `RATEL_OTLP_LOGS_ENDPOINT` | `${base_url}/logs` |
 
 Python has two OTLP differences from TypeScript. With a custom traces URL and no logs setting,
 Python sends logs to the `/v1/logs` sibling of that URL, but TypeScript sends them to
 `${baseUrl}/logs`. With no API key, no base URL and no endpoint, Python raises `ValueError`, but
-TypeScript uses `https://cloud.ratel.sh/api/v1`.
+TypeScript uses `https://app.ratel.sh/api/v1`.
 
-`base_url` of `configure_telemetry` reads `RATEL_BASE_URL` too. `cloud["timeout"]` is in seconds. `cloud["transport"]` replaces the HTTP transport of every
-feature (default `ratel_ai.cloud.UrllibTransport`). Tests pass a `MockCloud`.
+The SDK still reads the deprecated `RATEL_CLOUD_EVENTS` and `RATEL_CLOUD_INTENT_GRAPH` when the
+`RATEL_PLATFORM_*` name is not set. When both are set, the `RATEL_PLATFORM_*` name wins.
+
+`base_url` of `configure_telemetry` reads `RATEL_BASE_URL` too. `platform["timeout"]` is in
+seconds. `platform["transport"]` replaces the HTTP transport of every feature (default
+`ratel_ai.platform.UrllibTransport`). Tests pass a `MockPlatform`.
+
+### Self-hosted platform
+
+To use a self-hosted Ratel Platform, set its API root, including the `/api/v1` prefix, in one
+place: the `RATEL_BASE_URL` env variable or `platform["base_url"]`. Each platform request and both
+OTLP defaults (`${base_url}/traces` and `${base_url}/logs`) then go to that platform:
+
+```sh
+RATEL_API_KEY=rtl_… RATEL_BASE_URL=https://ratel.example.internal/api/v1 python agent.py
+```
+
+```python
+r = ratel(platform={"base_url": "https://ratel.example.internal/api/v1"})
+```
 
 ### Advanced: the separate functions
 
-`ratel(cloud=...)` wires the functions below. Use them directly to wire one feature yourself, or
-for a runtime that `ratel()` does not create. They read the same settings. The Cloud code uses the
+`ratel(platform=...)` wires the functions below. Use them directly to wire one feature yourself, or
+for a runtime that `ratel()` does not create. They read the same settings. The Platform code uses the
 standard library only:
 
 | Import | What it holds |
 | --- | --- |
-| `ratel_ai.cloud` | `RatelCloudClient` (catalog writes, intent analysis, suggestion review over the v1 HTTP API), `resolve_cloud_config`, `CloudError` and the transports |
-| `ratel_ai.cloud.runtime` | Runtime attachment: `attach`, `attach_intent_graph_sync`, `ratel_cloud` |
-| `ratel_ai.cloud.testing` | `MockCloud`, an in-process fake of the Cloud API, and `ManualClock` |
+| `ratel_ai.platform` | `RatelPlatformClient` (catalog writes, intent analysis, suggestion review over the v1 HTTP API), `resolve_platform_config`, `PlatformError` and the transports |
+| `ratel_ai.platform.runtime` | Runtime attachment: `attach`, `attach_intent_graph_sync`, `ratel_platform` |
+| `ratel_ai.platform.testing` | `MockPlatform`, an in-process fake of the Platform API, and `ManualClock` |
 
 ### Runtime events and catalog snapshots
 
@@ -416,52 +440,52 @@ standard library only:
 
 ```python
 from ratel_ai import ratel
-from ratel_ai.cloud.runtime import attach
+from ratel_ai.platform.runtime import attach
 
 runtime = ratel()
-cloud_runtime = attach(runtime, source_id="checkout-worker")
+platform_runtime = attach(runtime, source_id="checkout-worker")
 ...
-await cloud_runtime.flush()  # in serverless handlers, before each invocation ends
-await cloud_runtime.close()  # at shutdown
+await platform_runtime.flush()  # in serverless handlers, before each invocation ends
+await platform_runtime.close()  # at shutdown
 ```
 
-Only the remotely publishable event types (`RUNTIME_EVENT_TYPES` of `ratel_ai.cloud.runtime`)
+Only the remotely publishable event types (`RUNTIME_EVENT_TYPES` of `ratel_ai.platform.runtime`)
 leave the process. `attach()` publishes an initial catalog snapshot and refreshes it after
 registration churn, behind a debounce (`snapshot_debounce_ms`, default 500 ms) with a maximum wait
 of four debounce windows. Durable snapshots reconcile every five minutes
 (`snapshot_reconcile_interval_ms`). Transient failures retry with an exponential backoff
 (`retry=RetryOptions(...)`). Payload rejects (HTTP 400/413/415) go one time to `on_rejected` and
-are dropped. Set `RATEL_CLOUD_EVENTS=off` before `attach()` to turn event delivery off. Catalog
+are dropped. Set `RATEL_PLATFORM_EVENTS=off` before `attach()` to turn event delivery off. Catalog
 snapshots stay on.
 
-`cloud_runtime.status()` returns JSON-serializable delivery health (`overall`, `events`,
-`snapshots`), and `await cloud_runtime.verify()` probes event ingestion without a change to the
+`platform_runtime.status()` returns JSON-serializable delivery health (`overall`, `events`,
+`snapshots`), and `await platform_runtime.verify()` probes event ingestion without a change to the
 queues. `status()["overall"]` is `pending`, `ok`, `degraded`, `blocked` or `disabled`. The first
 transition into each failing kind warns one time. Pass `warn_on_failure=False` to stop the
 warnings, or `on_status_change` to observe the transitions.
 
-#### Cloud definitions
+#### Platform definitions
 
-`attach(runtime, use_cloud_definitions=True)` gives Ratel Cloud ownership of the retrieval
-descriptions of the live tools, skills and facts (`cloud["definitions"]` of `ratel()`). It uses
-`RuntimeCatalog.experimental_attach_definition_overrides` with a Cloud source. The initial pull
+`attach(runtime, use_platform_definitions=True)` gives Ratel Platform ownership of the retrieval
+descriptions of the live tools, skills and facts (`platform["definitions"]` of `ratel()`). It uses
+`RuntimeCatalog.experimental_attach_definition_overrides` with a Platform source. The initial pull
 runs in the background, and `flush()` and `close()` wait for it. Later pulls send the last ETag:
 
 ```python
-await cloud_runtime.refresh_cloud_definitions()  # True when a changed overlay was applied
+await platform_runtime.refresh_platform_definitions()  # True when a changed overlay was applied
 ```
 
 A failed initial pull keeps the local descriptions. A later failed refresh keeps the last applied
-Cloud descriptions.
+Platform descriptions.
 
 #### Intent graph sync (adaptive usage ranking)
 
 `attach_intent_graph_sync` moves the in-memory `IntentGraph` of a runtime to and from the
-per-project, per-source-id graph storage of Ratel Cloud (`cloud["intent_graph"]` of `ratel()`). It
+per-project, per-source-id graph storage of Ratel Platform (`platform["intent_graph"]` of `ratel()`). It
 does not turn ranking on: you do that.
 
 ```python
-from ratel_ai.cloud.runtime import attach_intent_graph_sync
+from ratel_ai.platform.runtime import attach_intent_graph_sync
 
 sync = await attach_intent_graph_sync(
     runtime,
@@ -473,26 +497,26 @@ runtime.tools.catalog.experimental_enable_adaptive_ranking(sync.graph)
 
 In `"push"` mode (the default), it saves local usage behind a debounce (`debounce_ms`, default
 15 s) and a maximum wait (`max_wait_ms`, default 60 s). A 409 loads the newer graph and calls
-`on_replaced`. In `"consume"` mode, it reads a graph that Cloud owns (`graph_key`) and polls for
+`on_replaced`. In `"consume"` mode, it reads a graph that Platform owns (`graph_key`) and polls for
 newer revisions (`poll_interval_ms`, default 5 minutes, minimum 15 s). It never writes. Rank a
 consumed graph with `learn=False`. A second call for the same runtime raises.
-`RATEL_CLOUD_INTENT_GRAPH=off` turns the sync off. Every failure is fail-open.
+`RATEL_PLATFORM_INTENT_GRAPH=off` turns the sync off. Every failure is fail-open.
 
 #### Tool Picker ranking (`retrieve_fn`)
 
-`ratel_cloud()` returns the Cloud API of one configuration. Its `tool_picker` is a `RankFn` that
-ranks with the Ratel Cloud Tool Picker (`cloud["tool_picker"]` of `ratel()`):
+`ratel_platform()` returns the Platform API of one configuration. Its `tool_picker` is a `RankFn` that
+ranks with the Ratel Platform Tool Picker (`platform["tool_picker"]` of `ratel()`):
 
 ```python
 from ratel_ai import ratel
-from ratel_ai.cloud.runtime import attach, ratel_cloud
+from ratel_ai.platform.runtime import attach, ratel_platform
 
-rc = ratel_cloud()  # api_key defaults to RATEL_API_KEY
+rc = ratel_platform()  # api_key defaults to RATEL_API_KEY
 runtime = ratel(method="custom", retrieve_fn=rc.tool_picker)
-cloud_runtime = attach(runtime)
+platform_runtime = attach(runtime)
 
 await runtime.tools.register(tools)
-await cloud_runtime.flush()  # publish the catalog snapshot before the first search
+await platform_runtime.flush()  # publish the catalog snapshot before the first search
 
 hits = await runtime.tools.search_async("roll back the last deploy", 5)
 ```
@@ -501,27 +525,27 @@ hits = await runtime.tools.search_async("roll back the last deploy", 5)
 |---|---|---|
 | `instant` | BM25 only, no credits | 15 s |
 | `precise` (default) | BM25 shortlist, then Jev | 15 s |
-| `exhaustive` | Jev over the whole catalog. Cloud stops at 45 s | 60 s |
+| `exhaustive` | Jev over the whole catalog. Platform stops at 45 s | 60 s |
 
 `rc.tool_picker.with_mode("exhaustive")` returns a picker for another mode. The picker ranks the
-tool catalog that the project synced to Cloud, and sends only `{query, mode, top_k}`. Before the
+tool catalog that the project synced to Platform, and sends only `{query, mode, top_k}`. Before the
 first search, register your tools and `await flush()`. Skill candidates return `[]` without a
 request. Every failure raises `ratel_ai.RetrieverError` with the same `code` and `transient`
 value as the TypeScript SDK (`Config`, `InvalidRequest`, `Unauthorized`, `InsufficientCredits`,
 `NoSyncedTools`, `RateLimited`, `Unavailable`, `Timeout`, `Unreachable`, `Malformed`, `Http`).
 
-### Testing with `MockCloud`
+### Testing with `MockPlatform`
 
-`MockCloud` serves the Cloud wire contract in process. Pass it as the transport:
+`MockPlatform` serves the Platform wire contract in process. Pass it as the transport:
 
 ```python
 from ratel_ai import ratel
-from ratel_ai.cloud.testing import MockCloud
+from ratel_ai.platform.testing import MockPlatform
 
-mock = MockCloud()
-r = ratel(cloud={"api_key": mock.api_key, "transport": mock})
+mock = MockPlatform()
+r = ratel(platform={"api_key": mock.api_key, "transport": mock})
 await r.tools.register(tools)
-await r.cloud.flush()
+await r.platform.flush()
 
 assert mock.catalog_snapshots[-1]["tools"]
 assert mock.runtime_events
@@ -674,6 +698,6 @@ Use `ground()` for a long-lived agent whose messages you persist; `ground_snapsh
 
 Facts are **host-driven**: the model-facing `search_capabilities` tool is unchanged and never returns facts — you decide what is true and inject it, rather than letting the model discover it. Every decision is traced (`fact_inject` with its reason, `fact_inject_skip`, `fact_snapshot`), so the skip rate — the tokens you saved — is measurable. See [ADR-0017](../../../docs/adr/0017-facts-and-injection-freshness.md).
 
-Telemetry export is optional. With the `otlp` extra installed, `configure_telemetry()` reads `RATEL_OTLP_ENDPOINT` (falling back to the superseded `RATEL_URL`, which warns), then `RATEL_BASE_URL` (default `https://cloud.ratel.sh/api/v1`, with the `/traces` and `/logs` routes), `RATEL_OTLP_LOGS_ENDPOINT` and `RATEL_API_KEY`, wires trace and Logs exporters, and returns a shutdown handle. It exports only `gen_ai.*`/`ratel.*` signal spans and EventRecords by default — `export_all_spans=True` widens spans only. Message and tool content stays off by default; opt in with `capture_content`/`include_span_and_events` (see the [telemetry guide](https://docs.ratel.sh/docs/telemetry) for the capture modes and their privacy implications). Experimental catalog-definition export additionally requires `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true`. Changed definitions then emit one `ratel.catalog.definition` EventRecord per registry-local content hash. Hosts that already own OpenTelemetry providers add both `ratel_span_processor` and `ratel_log_record_processor` instead.
+Telemetry export is optional. With the `otlp` extra installed, `configure_telemetry()` reads `RATEL_OTLP_ENDPOINT` (falling back to the superseded `RATEL_URL`, which warns), then `RATEL_BASE_URL` (default `https://app.ratel.sh/api/v1`, with the `/traces` and `/logs` routes), `RATEL_OTLP_LOGS_ENDPOINT` and `RATEL_API_KEY`, wires trace and Logs exporters, and returns a shutdown handle. It exports only `gen_ai.*`/`ratel.*` signal spans and EventRecords by default — `export_all_spans=True` widens spans only. Message and tool content stays off by default; opt in with `capture_content`/`include_span_and_events` (see the [telemetry guide](https://docs.ratel.sh/docs/telemetry) for the capture modes and their privacy implications). Experimental catalog-definition export additionally requires `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true`. Changed definitions then emit one `ratel.catalog.definition` EventRecord per registry-local content hash. Hosts that already own OpenTelemetry providers add both `ratel_span_processor` and `ratel_log_record_processor` instead.
 
 Package layout: `ratel_ai/` is the Python surface (including `embedding_artifact.py` for build/warm helpers), `native/` contains the PyO3 binding, and `tests/` exercises both. For local development, create `.venv` with `uv`, install `maturin`, `pytest`, `pytest-asyncio`, `ruff`, and `mypy`, then run `.venv/bin/maturin develop` and `.venv/bin/pytest`.

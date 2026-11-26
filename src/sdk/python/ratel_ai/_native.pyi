@@ -79,7 +79,7 @@ class IntentGraph:
         """Adopt a graph in the `protocol/v1` wire form.
 
         Accepts output from `ratel-graph build`, a previous `to_json()`, or
-        Ratel Cloud. Raises `ValueError` if it is malformed or declares a
+        Ratel Platform. Raises `ValueError` if it is malformed or declares a
         schema version this build does not read.
         """
 

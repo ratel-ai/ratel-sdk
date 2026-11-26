@@ -124,7 +124,7 @@ class TestResolveOtlpConfig:
         assert cfg.service_name == "my-agent"
 
     def test_raises_when_no_endpoint_and_no_ratel_url(self) -> None:
-        # An API key alone now selects the Ratel Cloud default route, so the error needs
+        # An API key alone now selects the Ratel Platform default route, so the error needs
         # no key, no base URL and no endpoint.
         with pytest.raises(ValueError, match=ENDPOINT_ENV):
             resolve_otlp_config(env={})

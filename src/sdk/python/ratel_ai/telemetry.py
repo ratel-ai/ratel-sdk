@@ -622,7 +622,7 @@ def configure_telemetry(
 ) -> Any:
     """Register Ratel-owned OTLP trace and Logs exporters for the greenfield case.
 
-    Ships the spans and EventRecords this SDK emits to Ratel Cloud (or any OTLP endpoint) by
+    Ships the spans and EventRecords this SDK emits to Ratel Platform (or any OTLP endpoint) by
     delegating to `ratel_ai_telemetry.init`, which needs the OpenTelemetry SDK —
     install it with ``pip install 'ratel-ai[otlp]'``. A host already running its
     own OpenTelemetry providers should skip this (SDK telemetry flows to them) and add
@@ -639,9 +639,9 @@ def configure_telemetry(
     override a newer `configure_telemetry`/`set_content_capture` call installed.
 
     Args:
-        api_key: Ratel Cloud API key override; defaults to ``RATEL_API_KEY``.
+        api_key: Ratel Platform API key override; defaults to ``RATEL_API_KEY``.
         base_url: API root of the default OTLP routes, with the ``/api/v1`` prefix;
-            defaults to ``RATEL_BASE_URL``, then ``https://cloud.ratel.sh/api/v1``.
+            defaults to ``RATEL_BASE_URL``, then ``https://app.ratel.sh/api/v1``.
         endpoint: OTLP traces endpoint override; defaults to ``RATEL_OTLP_ENDPOINT``,
             then the superseded ``RATEL_URL`` (which warns), then ``${base_url}/traces``.
             The base-URL default needs an API key or a base URL.

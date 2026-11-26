@@ -1,0 +1,15 @@
+[project]
+name = "ratel-example-platform-python"
+version = "0.0.0"
+description = "Ratel Platform — ratel(platform=...) quickstart against the in-process MockPlatform (Python)"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+    # Direct so uv applies the local source to ratel-ai's unreleased telemetry floor.
+    "ratel-ai-telemetry>=0.1.3",
+]
+
+[tool.uv.sources]
+# Use the local SDK and its unreleased telemetry floor from this monorepo.
+ratel-ai = { path = "../../src/sdk/python" }
+ratel-ai-telemetry = { path = "../../src/telemetry/python" }

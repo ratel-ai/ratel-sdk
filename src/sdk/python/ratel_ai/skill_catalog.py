@@ -598,7 +598,7 @@ class SkillRegistry:
         raw ``score``.
 
         Pass ``learn=False`` to rank from ``graph`` without learning into it —
-        the consumer form for a graph produced elsewhere (Ratel Cloud, for
+        the consumer form for a graph produced elsewhere (Ratel Platform, for
         example). The flag is stored on the registry, not just applied at this
         call: every later sink install (``set_trace_sink``,
         ``subscribe_trace_events``) re-derives its sink through the same flag,
@@ -614,9 +614,9 @@ class SkillRegistry:
         ``paused`` until that first dense search.
 
         ``graph_key`` labels the graph on the ``usage_ranking_status`` event
-        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="cloud"`` — so a
+        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="platform"`` — so a
         consumer can tell this runtime's own graph apart from one served by
-        Ratel Cloud.
+        Ratel Platform.
 
         Four configuration mistakes warn once here (suppressed by the same
         ``warn_on_model_mismatch=False``, since that option already means "I
@@ -1257,7 +1257,7 @@ class SkillCatalog:
         raw ``score``.
 
         Pass ``learn=False`` to rank from ``graph`` without learning into it —
-        the consumer form for a graph produced elsewhere (Ratel Cloud, for
+        the consumer form for a graph produced elsewhere (Ratel Platform, for
         example). See :meth:`SkillRegistry.experimental_enable_adaptive_ranking`.
 
         Set ``rebuild_on_model_change`` to auto-recover a model-mismatched graph
@@ -1266,9 +1266,9 @@ class SkillCatalog:
         embedding pass (cost, possible :class:`EmbedderError`, mutates the graph).
 
         ``graph_key`` labels the graph on the ``usage_ranking_status`` event
-        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="cloud"`` — so a
+        this emits (ADR-0014/ADR-0020) — e.g. ``graph_key="platform"`` — so a
         consumer can tell this runtime's own graph apart from one served by
-        Ratel Cloud.
+        Ratel Platform.
         """
         self._registry.experimental_enable_adaptive_ranking(
             graph,

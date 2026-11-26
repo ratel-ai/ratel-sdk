@@ -1209,7 +1209,7 @@ async def test_a_rejected_enable_call_does_not_corrupt_the_attached_graphs_bookk
 
     with pytest.raises(ValueError, match="unknown origins"):
         catalog.experimental_enable_adaptive_ranking(
-            IntentGraph(), origins="nope", graph_key="cloud"  # type: ignore[arg-type]
+            IntentGraph(), origins="nope", graph_key="platform"  # type: ignore[arg-type]
         )
 
     catalog.drain_trace_events()  # discard churn from the two enable attempts
@@ -1290,8 +1290,8 @@ async def test_graph_key_with_learning_on_warns() -> None:
     catalog = await build_catalog()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        catalog.experimental_enable_adaptive_ranking(IntentGraph(), graph_key="cloud")
-        assert any('graph_key "cloud"' in str(w.message) for w in caught)
+        catalog.experimental_enable_adaptive_ranking(IntentGraph(), graph_key="platform")
+        assert any('graph_key "platform"' in str(w.message) for w in caught)
 
 
 async def test_graph_key_with_learning_on_warning_can_be_suppressed() -> None:
@@ -1299,7 +1299,7 @@ async def test_graph_key_with_learning_on_warning_can_be_suppressed() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         catalog.experimental_enable_adaptive_ranking(
-            IntentGraph(), graph_key="cloud", warn_on_model_mismatch=False
+            IntentGraph(), graph_key="platform", warn_on_model_mismatch=False
         )
         assert not caught
 
@@ -1309,7 +1309,7 @@ async def test_a_well_formed_consumer_enable_does_not_warn() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         catalog.experimental_enable_adaptive_ranking(
-            IntentGraph(), learn=False, graph_key="cloud"
+            IntentGraph(), learn=False, graph_key="platform"
         )
         assert not caught
 
@@ -1326,7 +1326,7 @@ async def test_enable_warnings_point_at_the_callers_line_through_either_catalog(
         )
         skill_catalog.experimental_enable_adaptive_ranking(IntentGraph(), origins="baseline")
         tool_catalog._registry.experimental_enable_adaptive_ranking(
-            IntentGraph(), graph_key="cloud"
+            IntentGraph(), graph_key="platform"
         )
     assert len(caught) == 3
     assert [w.filename for w in caught] == [__file__] * 3
@@ -1336,7 +1336,7 @@ async def test_learn_mismatch_warning_points_at_the_callers_line_through_either_
     tool_catalog = await build_catalog()
     skill_catalog = SkillCatalog()
     graph = IntentGraph()
-    tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    tool_catalog.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="platform")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         skill_catalog.experimental_enable_adaptive_ranking(graph)

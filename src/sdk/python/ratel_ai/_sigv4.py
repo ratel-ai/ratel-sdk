@@ -115,9 +115,8 @@ def resolve_s3_endpoint(
     `endpoint` is set — what MinIO and most self-hosted S3-compatible
     services require, since virtual-hosted style needs a wildcard DNS/TLS
     setup most self-hosted deployments don't have. Pass `False` for a
-    custom endpoint that supports virtual-hosted style (e.g. Cloudflare
-    R2). No effect without `endpoint` — AWS S3 always uses virtual-hosted
-    style.
+    custom endpoint that supports virtual-hosted style (e.g. R2). No effect
+    without `endpoint` — AWS S3 always uses virtual-hosted style.
     """
     encoded_key = "/".join(quote(part, safe="") for part in key.split("/"))
 

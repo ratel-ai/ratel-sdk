@@ -887,14 +887,14 @@ async def test_usage_ranking_status_on_enable_carries_rev_and_graph_key() -> Non
     received: list[dict[str, object]] = []
     subscription = events.subscribe(lambda batch: received.extend(batch))
 
-    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="platform")
     await subscription.flush()
 
     status = next(e for e in received if e["type"] == "usage_ranking_status")
     assert status["status"] == "active"
     assert status["reason"] == "enabled"
     assert status["rev"] == graph.rev
-    assert status["graph_key"] == "cloud"
+    assert status["graph_key"] == "platform"
     assert status["learn"] is False
     assert "model" not in status
     subscription.unsubscribe()
@@ -919,7 +919,7 @@ async def test_usage_ranking_status_omits_graph_key_and_defaults_learn_true() ->
 @pytest.mark.asyncio
 async def test_usage_ranking_status_inactive_on_disable_has_no_rev_or_graph_key() -> None:
     tools = await _gh_run_list_catalog()
-    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), graph_key="cloud")
+    tools.experimental_enable_adaptive_ranking(_known_cluster_graph(), graph_key="platform")
     events = RuntimeEvents([tools])
     received: list[dict[str, object]] = []
     subscription = events.subscribe(lambda batch: received.extend(batch))
@@ -981,7 +981,7 @@ async def test_no_event_publishes_the_embedder_url_its_secrets_or_the_raw_finger
         )
     )
     tools.experimental_enable_adaptive_ranking(
-        _known_cluster_graph(), learn=False, graph_key="cloud"
+        _known_cluster_graph(), learn=False, graph_key="platform"
     )
     # The rebuild stamps the graph with the endpoint embedder's fingerprint.
     await tools.experimental_rebuild_intent_graph()
@@ -1045,13 +1045,13 @@ async def test_usage_ranking_status_on_skill_catalog_for_enable_and_disable() ->
     received: list[dict[str, object]] = []
     subscription = events.subscribe(lambda batch: received.extend(batch))
 
-    skills.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    skills.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="platform")
     await subscription.flush()
     enabled = next(e for e in received if e["type"] == "usage_ranking_status")
     assert enabled["status"] == "active"
     assert enabled["reason"] == "enabled"
     assert enabled["rev"] == graph.rev
-    assert enabled["graph_key"] == "cloud"
+    assert enabled["graph_key"] == "platform"
     assert enabled["learn"] is False
     received.clear()
 
@@ -1069,7 +1069,7 @@ async def test_usage_ranking_status_on_skill_catalog_for_enable_and_disable() ->
 async def test_usage_ranking_status_is_replayed_to_a_subscriber_attached_after_enable() -> None:
     tools = await _gh_run_list_catalog()
     graph = _known_cluster_graph()
-    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="cloud")
+    tools.experimental_enable_adaptive_ranking(graph, learn=False, graph_key="platform")
 
     # Subscribed only now: the enable-time event is long gone.
     events = RuntimeEvents([tools])
@@ -1081,7 +1081,7 @@ async def test_usage_ranking_status_is_replayed_to_a_subscriber_attached_after_e
     assert status["status"] == "active"
     assert status["reason"] == "enabled"
     assert status["rev"] == graph.rev
-    assert status["graph_key"] == "cloud"
+    assert status["graph_key"] == "platform"
     assert status["learn"] is False
     subscription.unsubscribe()
 
@@ -1172,7 +1172,7 @@ async def test_a_disable_racing_an_enable_leaves_wrapper_and_native_in_agreement
     disable = threading.Thread(target=catalog.experimental_disable_adaptive_ranking, name="disable")
     enable = threading.Thread(
         target=lambda: catalog.experimental_enable_adaptive_ranking(
-            g2, learn=False, graph_key="cloud"
+            g2, learn=False, graph_key="platform"
         ),
         name="enable",
     )
@@ -1188,7 +1188,7 @@ async def test_a_disable_racing_an_enable_leaves_wrapper_and_native_in_agreement
     # Native ended with g2 attached; the wrapper and the last event must agree.
     assert registry._graph is g2
     assert registry._learn is False
-    assert registry._graph_key == "cloud"
+    assert registry._graph_key == "platform"
     status = [e for e in received if e["type"] == "usage_ranking_status"][-1]
-    assert (status["reason"], status["graph_key"]) == ("enabled", "cloud")
+    assert (status["reason"], status["graph_key"]) == ("enabled", "platform")
     subscription.unsubscribe()

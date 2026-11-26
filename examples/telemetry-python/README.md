@@ -17,7 +17,7 @@ uv run main.py
 To export a real trace instead of printing, set the endpoint and run again:
 
 ```bash
-export RATEL_OTLP_ENDPOINT=https://cloud.ratel.sh/v1/traces
+export RATEL_OTLP_ENDPOINT=https://app.ratel.sh/api/v1/traces
 export RATEL_API_KEY=sk-...          # optional; sent as Authorization: Bearer
 uv run main.py
 ```

@@ -8,11 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
-- **The OTLP endpoints default to Ratel Cloud, like `@ratel-ai/sdk`.** `resolve_otlp_config`, `init`, `ratel_span_exporter`, `ratel_log_exporter`, `ratel_span_processor` and `ratel_log_record_processor` take `base_url=` (then `RATEL_BASE_URL`, then `https://cloud.ratel.sh/api/v1`; trailing slashes are removed). With no endpoint, an API key or a base URL selects `${base_url}/traces` and `${base_url}/logs`. The new `RATEL_OTLP_LOGS_ENDPOINT` (`OTLP_LOGS_ENDPOINT_ENV`) sets the Logs URL after `logs_endpoint=`. A custom traces URL with no Logs setting still gives the `/v1/logs` sibling. New constants: `OTLP_LOGS_ENDPOINT_ENV`, `BASE_URL_ENV`, `DEFAULT_BASE_URL`.
+- **The default OTLP root is the Ratel Platform at `https://app.ratel.sh/api/v1`.** Set `base_url=` or `RATEL_BASE_URL` to use a self-hosted platform.
+- **The OTLP endpoints default to Ratel Platform, like `@ratel-ai/sdk`.** `resolve_otlp_config`, `init`, `ratel_span_exporter`, `ratel_log_exporter`, `ratel_span_processor` and `ratel_log_record_processor` take `base_url=` (then `RATEL_BASE_URL`, then `https://app.ratel.sh/api/v1`; trailing slashes are removed). With no endpoint, an API key or a base URL selects `${base_url}/traces` and `${base_url}/logs`. The new `RATEL_OTLP_LOGS_ENDPOINT` (`OTLP_LOGS_ENDPOINT_ENV`) sets the Logs URL after `logs_endpoint=`. A custom traces URL with no Logs setting still gives the `/v1/logs` sibling. New constants: `OTLP_LOGS_ENDPOINT_ENV`, `BASE_URL_ENV`, `DEFAULT_BASE_URL`.
 
 ### Changed
 
-- An API key alone (`api_key=` or `RATEL_API_KEY`) no longer raises `ValueError`: it exports to Ratel Cloud. The error now comes only with no key, no base URL and no endpoint, and it names `RATEL_API_KEY` and `RATEL_BASE_URL`.
+- An API key alone (`api_key=` or `RATEL_API_KEY`) no longer raises `ValueError`: it exports to Ratel Platform. The error now comes only with no key, no base URL and no endpoint, and it names `RATEL_API_KEY` and `RATEL_BASE_URL`.
 
 ## [0.5.1] - 2026-11-22
 

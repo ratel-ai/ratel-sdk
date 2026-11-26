@@ -6,8 +6,8 @@
 ids, top-K clamping and the fixed set of three capability tools. The fact
 catalog is experimental and built on first access to `Ratel.facts`.
 
-``ratel(cloud=...)`` turns on Ratel Cloud (`ratel_ai.cloud.ratel_cloud`); with no
-``cloud``, this module never imports `ratel_ai.cloud`.
+``ratel(platform=...)`` turns on Ratel Platform (`ratel_ai.platform.ratel_platform`); with no
+``platform``, this module never imports `ratel_ai.platform`.
 
 The TypeScript `adaptTo` and the adapter SPI are not ported yet.
 """
@@ -44,9 +44,9 @@ from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 from .turns import Turn, current_turn_id
 
 if TYPE_CHECKING:
-    from .cloud.ratel_cloud import CloudOptions, RatelCloudRuntime
     from .fact_catalog import FactCatalog
     from .grounding import GroundingResult, GroundingSnapshotItem
+    from .platform.ratel_platform import PlatformOptions, RatelPlatformRuntime
 
 __all__ = ["Ratel", "RatelEventsOptions", "ToolCollection", "ratel"]
 
@@ -64,8 +64,8 @@ class RatelEventsOptions(TypedDict, total=False):
     experimental_catalog_definitions: bool
 
 
-# The type of `Ratel.cloud`: the handle for a core made with `cloud`, `None` without.
-_CloudT = TypeVar("_CloudT", bound=Optional["RatelCloudRuntime"])
+# The type of `Ratel.platform`: the handle for a core made with `platform`, `None` without.
+_PlatformT = TypeVar("_PlatformT", bound=Optional["RatelPlatformRuntime"])
 
 # The capability-tool ids: an app tool may not shadow them (registration raises).
 _RESERVED_TOOL_IDS = frozenset({SEARCH_CAPABILITIES_ID, INVOKE_TOOL_ID, GET_SKILL_CONTENT_ID})
@@ -85,8 +85,8 @@ def ratel(
     facts_top_k: int | None = None,
     trace: TraceSinkConfig | None = None,
     events: RatelEventsOptions | None = None,
-    cloud: Literal[True] | CloudOptions,
-) -> Ratel[RatelCloudRuntime]: ...
+    platform: Literal[True] | PlatformOptions,
+) -> Ratel[RatelPlatformRuntime]: ...
 
 
 @overload
@@ -103,7 +103,7 @@ def ratel(
     facts_top_k: int | None = None,
     trace: TraceSinkConfig | None = None,
     events: RatelEventsOptions | None = None,
-    cloud: Literal[False] | None = None,
+    platform: Literal[False] | None = None,
 ) -> Ratel[None]: ...
 
 
@@ -121,8 +121,8 @@ def ratel(
     facts_top_k: int | None = None,
     trace: TraceSinkConfig | None = None,
     events: RatelEventsOptions | None = None,
-    cloud: bool | CloudOptions | None = None,
-) -> Ratel[RatelCloudRuntime | None]: ...
+    platform: bool | PlatformOptions | None = None,
+) -> Ratel[RatelPlatformRuntime | None]: ...
 
 
 def ratel(
@@ -138,7 +138,7 @@ def ratel(
     facts_top_k: int | None = None,
     trace: TraceSinkConfig | None = None,
     events: RatelEventsOptions | None = None,
-    cloud: bool | CloudOptions | None = None,
+    platform: bool | PlatformOptions | None = None,
 ) -> Ratel[Any]:
     """Create a framework-neutral Ratel core.
 
@@ -167,28 +167,28 @@ def ratel(
             Capped at 50; invalid values fall back to 3. **Experimental.**
         trace: local trace-stream destination of every catalog (default: discard).
         events: identity and delivery options of `Ratel.events`.
-        cloud: turn on Ratel Cloud: `True` reads ``RATEL_API_KEY`` (and
-            ``RATEL_BASE_URL``), a `ratel_ai.cloud.ratel_cloud.CloudOptions` dict
-            sets the key and the features in code. Gives `Ratel.cloud`. With no
-            ``cloud`` (or `False`), the core runs no Cloud code and sends no request.
+        platform: turn on Ratel Platform: `True` reads ``RATEL_API_KEY`` (and
+            ``RATEL_BASE_URL``), a `ratel_ai.platform.ratel_platform.PlatformOptions` dict
+            sets the key and the features in code. Gives `Ratel.platform`. With no
+            ``platform`` (or `False`), the core runs no Platform code and sends no request.
 
     Returns:
         The core.
 
     Raises:
         ValueError: if the ranking options are invalid.
-        ratel_ai.cloud.CloudError: code ``config``, if ``cloud`` is set with no API
-            key, or ``cloud`` sets ``tool_picker`` with ``method`` or ``retrieve_fn``.
+        ratel_ai.platform.PlatformError: code ``config``, if ``platform`` is set with no API
+            key, or ``platform`` sets ``tool_picker`` with ``method`` or ``retrieve_fn``.
     """
-    # The one Cloud wiring point: validated before the catalogs exist, because the
-    # Tool Picker replaces the ranking. The Cloud package loads only here.
-    cloud_setup = None
-    if cloud is not None and cloud is not False:
-        from .cloud.ratel_cloud import setup_ratel_cloud
+    # The one Platform wiring point: validated before the catalogs exist, because the
+    # Tool Picker replaces the ranking. The Platform package loads only here.
+    platform_setup = None
+    if platform is not None and platform is not False:
+        from .platform.ratel_platform import setup_ratel_platform
 
-        cloud_setup = setup_ratel_cloud(cloud, method=method, retrieve_fn=retrieve_fn)
-        if cloud_setup.retrieve_fn is not None:
-            method, retrieve_fn = "custom", cloud_setup.retrieve_fn
+        platform_setup = setup_ratel_platform(platform, method=method, retrieve_fn=retrieve_fn)
+        if platform_setup.retrieve_fn is not None:
+            method, retrieve_fn = "custom", platform_setup.retrieve_fn
     resolved_method: SearchMethod = method if method is not None else "bm25"
     ranking: dict[str, Any] = {
         "method": resolved_method,
@@ -210,8 +210,8 @@ def ratel(
         trace=trace,
         events=events,
     )
-    if cloud_setup is not None:
-        core.cloud = cloud_setup.connect(core)
+    if platform_setup is not None:
+        core.platform = platform_setup.connect(core)
     return core
 
 
@@ -285,15 +285,15 @@ class ToolCollection:
         return await self.catalog.invoke(tool_id, args, turn_id)
 
 
-class Ratel(Generic[_CloudT]):
+class Ratel(Generic[_PlatformT]):
     """One `ratel(...)` core: shared tool, skill and fact catalogs, one event stream.
 
     Build it with `ratel`.
 
     Attributes:
-        cloud: The Ratel Cloud handle when the core was made with ``cloud``: the
-            management clients, the Tool Picker and the lifecycle of the Cloud
-            features. `None` for a core made without ``cloud``.
+        platform: The Ratel Platform handle when the core was made with ``platform``: the
+            management clients, the Tool Picker and the lifecycle of the Platform
+            features. `None` for a core made without ``platform``.
     """
 
     def __init__(
@@ -324,7 +324,7 @@ class Ratel(Generic[_CloudT]):
         self._facts_top_k = facts_top_k
         self._trace = trace
         self._facts: FactCatalog | None = None
-        self.cloud: _CloudT = None  # type: ignore[assignment] # `ratel` sets it with `cloud`
+        self.platform: _PlatformT = None  # type: ignore[assignment] # `ratel` sets it with `platform`
 
     @property
     def facts(self) -> FactCatalog:
