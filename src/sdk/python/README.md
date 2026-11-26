@@ -261,6 +261,53 @@ the authoritative full replacement for removals and recovery. They contain sorte
 definitions only—never tool executors or skill bodies. Python exposes no Cloud transport;
 applications may publish these events and snapshots through their own adapter.
 
+## Definition overrides from an external source (experimental)
+
+Registration owns the complete local definition. An external source can override only the
+retrieval description, and only after the runtime opts in at attach time. A source is any object
+with an async `fetch(if_none_match)` method:
+
+```python
+from ratel_ai import ratel
+
+r = ratel()
+await r.tools.register(local_tools)
+
+
+class OverlaySource:
+    async def fetch(self, if_none_match=None):
+        # Return {"status": 304} when the overlay is unchanged, else:
+        return {
+            "status": 200,
+            "etag": '"overlay-1"',
+            "body": {
+                "overrides": [
+                    {"kind": "tool", "entry_id": "deploy", "searchable_description": "ship a release"}
+                ]
+            },
+        }
+
+
+attachment = await r.catalog.experimental_attach_definition_overrides(OverlaySource())
+await attachment.refresh()  # later pulls; True when a new overlay was applied
+```
+
+The attach call does the initial pull and applies the complete overlay to live tools, skills and
+facts, and to the ones registered later. `refresh()` sends the last accepted ETag; a `304` changes
+nothing. Concurrent `refresh()` calls share one request. The SDK validates each response before it
+changes a catalog: the status is `200` or `304`, a `200` has a non-empty ETag and a complete
+`overrides` list, entry ids are at most 512 UTF-8 bytes and descriptions at most 16 KiB. An invalid
+response raises `ratel_ai.experimental.DefinitionOverlayError` (`code`: `invalid_status`,
+`invalid_payload`, `invalid_etag`) and keeps the last accepted ETag and definitions. If a catalog
+update fails, all three catalogs are restored and the error has `code="apply_failed"`.
+
+Removing an override restores the latest local value. When both sides set a retrieval
+description, the override wins and the SDK warns once for that period. `r.catalog.snapshot()`
+always shows the local definitions. The model-facing description, schemas, bodies, tags and
+executors stay local. Definition events after an attach carry
+`ratel.catalog.use_definition_overrides=true`. Opting in is one-way for the life of the process.
+These APIs may change without a major-version bump.
+
 ## Facts (experimental)
 
 Tools and skills are **pulled** — a query ranks them and only the winners reach the model. Facts are the opposite: constant content the agent should always work from (a shop's address, hours, a brand's voice), **pushed** into the context and deduplicated so it is injected once rather than every turn.

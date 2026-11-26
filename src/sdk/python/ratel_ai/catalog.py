@@ -15,8 +15,8 @@ import threading
 import time
 import warnings
 import weakref
-from collections.abc import Awaitable, Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from types import TracebackType
 from typing import Any, Literal, Optional, TypedDict, TypeVar, Union, overload
 
@@ -24,6 +24,7 @@ from ._custom_ranking import RankFn, custom_rerank, custom_search
 from ._native import IntentGraph as IntentGraph  # re-exported for `ratel_ai.IntentGraph`
 from ._native import NativeEventSubscription, SearchHit, public_model_identity
 from ._native import ToolRegistry as _NativeToolRegistry
+from .definition_overrides import DefinitionOverrideState, no_dense_work
 from .embedding_artifact import (
     ExperimentalEmbeddingArtifact,
     OnArtifactMiss,
@@ -686,6 +687,7 @@ class ToolRegistry:
         self._undriven_builds = 0
         self._dense_tasks: set[asyncio.Task[Any]] = set()
         self._emitted_definition_hashes: dict[str, str] = {}
+        self._use_definition_overrides = False
 
     @overload
     def register(self, item: Tool) -> Awaitable[None]: ...
@@ -1271,7 +1273,7 @@ class ToolRegistry:
         with self._dense_state:
             self._dense_pending -= 1
 
-    def _register_items(self, tools: Iterable[Tool]) -> None:
+    def _register_items(self, tools: Iterable[Tool], emit_definitions: bool = True) -> None:
         tools = list(tools)
         with self._dense_state:
             self._raise_if_busy()
@@ -1288,7 +1290,15 @@ class ToolRegistry:
                     for tool in tools
                 ]
             )
-            record_catalog_definitions("tool", tools, self._emitted_definition_hashes)
+            if emit_definitions:
+                record_catalog_definitions(
+                    "tool", tools, self._emitted_definition_hashes, self._use_definition_overrides
+                )
+
+    def _set_use_definition_overrides(self, tools: Iterable[Tool] = ()) -> None:
+        """Mark later definition events as override-owned; re-emit ``tools`` once (adoption)."""
+        self._use_definition_overrides = True
+        record_catalog_definitions("tool", list(tools), self._emitted_definition_hashes, True)
 
     def _raise_if_busy(self) -> None:
         if self._dense_pending:
@@ -1465,6 +1475,7 @@ class ToolCatalog:
             experimental_embedding_artifact=experimental_embedding_artifact,
             reranker=reranker,
         )
+        self._definition_overrides = DefinitionOverrideState("tool", _snapshot_executable_tool)
         if trace is not None:
             self._registry.set_trace_sink(trace.kind, trace.session_id, trace.path)
 
@@ -1503,8 +1514,24 @@ class ToolCatalog:
         for tool in batch:
             if tool.execute is None:
                 raise ValueError(f"tool {tool.id!r} has no execute handler")
-        self._registry._register_items(batch)
-        for tool in batch:
+        effective = self._definition_overrides.effective_of(batch)
+        return self._register_effective(batch, effective, accept_local=True)
+
+    def _register_effective(
+        self,
+        local: Sequence[ExecutableTool],
+        effective: Sequence[ExecutableTool],
+        emit_definitions: bool = True,
+        *,
+        accept_local: bool = False,
+    ) -> Awaitable[None]:
+        # `effective` is what the index ranks (an overlay may replace the
+        # retrieval description); `local` is what the catalog serves.
+        self._registry._register_items(effective, emit_definitions)
+        if accept_local:
+            self._definition_overrides.accept(local)
+        self._definition_overrides.mark_indexed(effective)
+        for tool in local:
             self._executors[tool.id] = tool.execute
             self._tools[tool.id] = Tool(
                 id=tool.id,
@@ -1513,7 +1540,32 @@ class ToolCatalog:
                 input_schema=tool.input_schema,
                 output_schema=tool.output_schema,
             )
-        return self._registry._build_tracked(bool(batch))
+        return self._registry._build_tracked(bool(effective))
+
+    def _experimental_apply_definition_overrides(
+        self,
+        overrides: Mapping[str, str],
+        *,
+        adopt: bool = True,
+        emit_definitions: bool = True,
+    ) -> Awaitable[None]:
+        """Apply a complete overlay (id → retrieval description); re-index what changed.
+
+        Internal: `RuntimeCatalog.experimental_attach_definition_overrides` drives it.
+        """
+        state = self._definition_overrides
+        effective, changed = state.stage(overrides)
+        if adopt:
+            self._registry._set_use_definition_overrides(effective)
+        if not changed:
+            return no_dense_work()
+        return self._register_effective(
+            [state.local(tool.id) for tool in changed], changed, emit_definitions
+        )
+
+    def _experimental_enable_definition_overrides(self) -> None:
+        """Commit override ownership: later definition events carry the overlay flag."""
+        self._registry._set_use_definition_overrides(self._definition_overrides.effective_all())
 
     def search(
         self,
@@ -2019,3 +2071,12 @@ def _elapsed_ms(started: float) -> int:
 
 def _error_message(err: BaseException) -> str:
     return str(err) or err.__class__.__name__
+
+
+def _snapshot_executable_tool(tool: ExecutableTool) -> ExecutableTool:
+    """Copy a registered tool so later caller mutations cannot change the restore point."""
+    return replace(
+        tool,
+        input_schema=copy.deepcopy(tool.input_schema),
+        output_schema=copy.deepcopy(tool.output_schema),
+    )

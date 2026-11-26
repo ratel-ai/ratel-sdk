@@ -104,6 +104,11 @@ try:
     RATEL_CATALOG_TAGS: str = getattr(
         _telemetry_vocabulary, "RATEL_CATALOG_TAGS", "ratel.catalog.tags"
     )
+    RATEL_CATALOG_USE_DEFINITION_OVERRIDES: str = getattr(
+        _telemetry_vocabulary,
+        "RATEL_CATALOG_USE_DEFINITION_OVERRIDES",
+        "ratel.catalog.use_definition_overrides",
+    )
     EXPERIMENTAL_CATALOG_DEFINITIONS_ENV: str = getattr(
         _telemetry_vocabulary,
         "EXPERIMENTAL_CATALOG_DEFINITIONS_ENV",
@@ -157,8 +162,14 @@ def record_catalog_definitions(
     kind: str,
     definitions: Sequence[Any],
     emitted_hashes: dict[str, str],
+    use_definition_overrides: bool = False,
 ) -> None:
-    """Project changed catalog definitions into the opt-in Logs channel."""
+    """Project changed catalog definitions into the opt-in Logs channel.
+
+    With ``use_definition_overrides`` (after an experimental overlay attach),
+    each definition carries ``ratel.catalog.use_definition_overrides=true`` and
+    is re-emitted once even when its content is unchanged.
+    """
     if (
         not _ENABLED
         or os.getenv(EXPERIMENTAL_CATALOG_DEFINITIONS_ENV, "").lower() != "true"
@@ -199,7 +210,8 @@ def record_catalog_definitions(
             # Catalog mutation already succeeded. Content telemetry is lossy and
             # must never turn a supported schema into a failed registration.
             continue
-        if emitted_hashes.get(definition.id) == content_hash:
+        dedupe_hash = f"{content_hash}:overrides" if use_definition_overrides else content_hash
+        if emitted_hashes.get(definition.id) == dedupe_hash:
             continue
         attributes: dict[str, Any] = {
             RATEL_CATALOG_KIND: kind,
@@ -218,8 +230,10 @@ def record_catalog_definitions(
                 attributes[RATEL_CATALOG_OUTPUT_SCHEMA] = canonical_output_schema
             if input_schema_omitted or output_schema_omitted:
                 attributes[RATEL_CATALOG_SCHEMA_OMITTED] = True
+        if use_definition_overrides:
+            attributes[RATEL_CATALOG_USE_DEFINITION_OVERRIDES] = True
         _logger().emit(event_name=RATEL_CATALOG_DEFINITION, attributes=attributes)
-        emitted_hashes[definition.id] = content_hash
+        emitted_hashes[definition.id] = dedupe_hash
 
 
 def _canonical_json(value: Any) -> str:

@@ -4,6 +4,10 @@ This module re-exports the entire facts and grounding surface: `FactCatalog` /
 `Fact` (the push-path grounding analogue — constant content injected into the
 context), the pure `plan_injection` freshness gate, and their supporting types.
 
+It also holds the experimental definition-overrides surface: the overlay types
+taken and returned by `RuntimeCatalog.experimental_attach_definition_overrides`,
+and `DefinitionOverlayError`.
+
 It is an **experimental** API. It may change or be removed without a major
 version bump, so it lives outside the stable root package instead of `ratel_ai`.
 Import from here so the dependency is explicit:
@@ -16,6 +20,13 @@ Constructing a `FactCatalog` emits a one-time `ExperimentalWarning`; set
 
 from __future__ import annotations
 
+from .definition_overrides import (
+    DefinitionOverrideKind,
+    ExperimentalDefinitionOverlaySource,
+    ExperimentalDefinitionOverride,
+    ExperimentalDefinitionOverridesAttachment,
+)
+from .exceptions import DefinitionOverlayError, DefinitionOverlayErrorCode
 from .fact_catalog import (
     ExperimentalWarning,
     Fact,
@@ -39,6 +50,12 @@ from .grounding import (
 
 __all__ = [
     "FACT_ID_PATTERN",
+    "DefinitionOverlayError",
+    "DefinitionOverlayErrorCode",
+    "DefinitionOverrideKind",
+    "ExperimentalDefinitionOverlaySource",
+    "ExperimentalDefinitionOverride",
+    "ExperimentalDefinitionOverridesAttachment",
     "ExperimentalWarning",
     "Fact",
     "FactCandidate",

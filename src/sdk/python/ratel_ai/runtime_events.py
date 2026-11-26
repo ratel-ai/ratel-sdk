@@ -18,6 +18,12 @@ from ._native import NativeEventSubscription
 
 if TYPE_CHECKING:
     from .catalog import ToolCatalog
+    from .definition_overrides import (
+        ExperimentalDefinitionOverlaySource,
+        ExperimentalDefinitionOverride,
+        ExperimentalDefinitionOverridesAttachment,
+    )
+    from .fact_catalog import FactCatalog
     from .skill_catalog import SkillCatalog
 
 RuntimeEvent = dict[str, Any]
@@ -532,7 +538,11 @@ def _is_product_fact_field(key: str) -> bool:
 
 
 class RuntimeCatalog:
-    """Complete serializable tool and skill state for snapshot publication."""
+    """Complete serializable tool and skill state for snapshot publication.
+
+    Also the seam where an external source attaches experimental definition
+    overrides (`experimental_attach_definition_overrides`).
+    """
 
     def __init__(
         self,
@@ -540,11 +550,52 @@ class RuntimeCatalog:
         skills: SkillCatalog,
         *,
         source_id: str,
+        facts: Callable[[], FactCatalog | None] | None = None,
     ) -> None:
-        """Create a snapshot view sharing the stream's stable source identity."""
+        """Create a snapshot view sharing the stream's stable source identity.
+
+        Args:
+            tools: the tool catalog.
+            skills: the skill catalog.
+            source_id: the stream's source id, shared with every envelope.
+            facts: returns the (experimental, possibly not yet built) fact
+                catalog that definition overrides also reach, or `None`.
+        """
+        from .definition_overrides import _Overrides
+
         self._tools = tools
         self._skills = skills
         self._source_id = source_id
+        self._overrides = _Overrides(tools, skills, facts or (lambda: None))
+
+    async def experimental_attach_definition_overrides(
+        self, source: ExperimentalDefinitionOverlaySource
+    ) -> ExperimentalDefinitionOverridesAttachment:
+        """⚠️ Experimental. Let ``source`` own the retrieval descriptions; do the initial pull.
+
+        Attaching is a one-way opt-in for the life of the process. The overlay
+        reaches live tools, skills and facts, and the ones registered later.
+        Snapshots keep showing the local definitions.
+
+        Raises:
+            DefinitionOverlayError: for an invalid response or a failed apply
+                (every catalog is then restored).
+        """
+        from .definition_overrides import ExperimentalDefinitionOverridesAttachment
+
+        attachment = ExperimentalDefinitionOverridesAttachment(source, self._overrides)
+        await attachment.refresh()
+        return attachment
+
+    async def _apply_definition_overrides(
+        self, overrides: Sequence[ExperimentalDefinitionOverride]
+    ) -> None:
+        """Apply a complete override set, bypassing the source's ETag protocol (internal)."""
+        await self._overrides.apply(overrides)
+
+    def _prepare_fact_catalog(self, facts: FactCatalog) -> None:
+        """Give a fact catalog built after attach the active overlay (internal)."""
+        self._overrides.prepare_fact_catalog(facts)
 
     def snapshot(self) -> dict[str, Any]:
         """Return the current full replacement snapshot."""

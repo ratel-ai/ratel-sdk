@@ -226,7 +226,12 @@ class Ratel:
         self.tools = ToolCollection(tool_catalog)
         self.skills = skill_catalog
         self.events = RuntimeEvents([tool_catalog, skill_catalog], **(events or {}))
-        self.catalog = RuntimeCatalog(tool_catalog, skill_catalog, source_id=self.events.source_id)
+        self.catalog = RuntimeCatalog(
+            tool_catalog,
+            skill_catalog,
+            source_id=self.events.source_id,
+            facts=lambda: self._facts,
+        )
         self._method: SearchMethod = method
         self._embedding = embedding
         self._recall_top_k = recall_top_k
@@ -251,6 +256,7 @@ class Ratel:
                 embedding=self._embedding,
                 facts_top_k=self._facts_top_k,
             )
+            self.catalog._prepare_fact_catalog(self._facts)
         return self._facts
 
     def model_tools(self) -> dict[str, ExecutableTool]:

@@ -14,9 +14,15 @@ API. ``ArtifactWarmError`` covers warm failures and carries ``code`` /
 ``RetrieverError`` is raised by, or for, a caller-supplied ranking function
 (``retrieve_fn`` / ``reranker_fn``, ADR-0027); the plugins in
 ``ratel-ai-rankers-plugin`` raise it for every failure.
+
+``DefinitionOverlayError`` is raised when a definition-overlay source returns
+invalid data or an overlay cannot be applied (experimental; re-exported from
+``ratel_ai.experimental``).
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 from ._native import (
     ArtifactError,
@@ -67,7 +73,31 @@ class RetrieverError(RuntimeError):
         self.retry_after_secs = retry_after_secs
 
 
+DefinitionOverlayErrorCode = Literal[
+    "invalid_status", "invalid_payload", "invalid_etag", "apply_failed"
+]
+
+
+class DefinitionOverlayError(Exception):
+    """A definition-overlay source returned invalid data or the overlay could not be applied.
+
+    ⚠️ Experimental. The Python twin of the TypeScript ``DefinitionOverlayError``.
+    An ``apply_failed`` error chains the underlying failure as ``__cause__``.
+
+    Attributes:
+        code: stable machine-readable failure category: ``"invalid_status"``,
+            ``"invalid_payload"``, ``"invalid_etag"`` or ``"apply_failed"``.
+    """
+
+    def __init__(self, message: str, code: DefinitionOverlayErrorCode) -> None:
+        """Create the error with its failure category."""
+        super().__init__(message)
+        self.code: DefinitionOverlayErrorCode = code
+
+
 __all__ = [
+    "DefinitionOverlayError",
+    "DefinitionOverlayErrorCode",
     "ArtifactError",
     "ArtifactWarmError",
     "DimensionMismatchError",

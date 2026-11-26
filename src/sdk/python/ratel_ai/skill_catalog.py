@@ -12,7 +12,7 @@ import copy
 import threading
 import time
 import warnings
-from collections.abc import Awaitable, Callable, Generator, Iterable
+from collections.abc import Awaitable, Callable, Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar, overload
 
@@ -49,6 +49,7 @@ from .catalog import (
     _validate_reranker,
     _warn_on_adaptive_misconfiguration,
 )
+from .definition_overrides import DefinitionOverrideState, no_dense_work
 from .embedding_artifact import (
     ExperimentalEmbeddingArtifact,
     OnArtifactMiss,
@@ -280,6 +281,7 @@ class SkillRegistry:
         self._undriven_builds = 0
         self._dense_tasks: set[asyncio.Task[Any]] = set()
         self._emitted_definition_hashes: dict[str, str] = {}
+        self._use_definition_overrides = False
 
     @overload
     def register(self, item: Skill) -> Awaitable[None]: ...
@@ -815,7 +817,7 @@ class SkillRegistry:
         with self._dense_state:
             self._dense_pending -= 1
 
-    def _register_items(self, skills: Iterable[Skill]) -> None:
+    def _register_items(self, skills: Iterable[Skill], emit_definitions: bool = True) -> None:
         skills = list(skills)
         with self._dense_state:
             self._raise_if_busy()
@@ -834,7 +836,15 @@ class SkillRegistry:
                     for skill in skills
                 ]
             )
-            record_catalog_definitions("skill", skills, self._emitted_definition_hashes)
+            if emit_definitions:
+                record_catalog_definitions(
+                    "skill", skills, self._emitted_definition_hashes, self._use_definition_overrides
+                )
+
+    def _set_use_definition_overrides(self, skills: Iterable[Skill] = ()) -> None:
+        """Mark later definition events as override-owned; re-emit ``skills`` once (adoption)."""
+        self._use_definition_overrides = True
+        record_catalog_definitions("skill", list(skills), self._emitted_definition_hashes, True)
 
     def _replace_all_items(self, skills: Iterable[Skill]) -> ReplaceOutcome:
         """Swap the corpus without embedding — the metadata half of `replace_all`."""
@@ -856,7 +866,9 @@ class SkillRegistry:
                     for skill in skills
                 ]
             )
-            record_catalog_definitions("skill", skills, self._emitted_definition_hashes)
+            record_catalog_definitions(
+                "skill", skills, self._emitted_definition_hashes, self._use_definition_overrides
+            )
         return ReplaceOutcome(added, removed, updated, unchanged)
 
     def _outcome_tracked(self, outcome: ReplaceOutcome, has_items: bool) -> PendingReplace:
@@ -945,6 +957,7 @@ class SkillCatalog:
         self._retrieve_fn = retrieve_fn
         self._reranker_fn = reranker_fn
         self._reranker_depth = reranker_depth or _DEFAULT_RERANKER_DEPTH
+        self._definition_overrides = DefinitionOverrideState("skill", copy.deepcopy)
         self._registry = SkillRegistry(
             embedding,
             method=method,
@@ -984,10 +997,51 @@ class SkillCatalog:
                 the read lock. `registry busy` is retryable, not fatal.
         """
         batch = [skills] if isinstance(skills, Skill) else list(skills)
-        self._registry._register_items(batch)
-        for skill in batch:
+        effective = self._definition_overrides.effective_of(batch)
+        return self._register_effective(batch, effective, accept_local=True)
+
+    def _register_effective(
+        self,
+        local: Sequence[Skill],
+        effective: Sequence[Skill],
+        emit_definitions: bool = True,
+        *,
+        accept_local: bool = False,
+    ) -> Awaitable[None]:
+        # `effective` is what the index ranks (an overlay may replace the
+        # retrieval description); `local` is what the catalog serves.
+        self._registry._register_items(effective, emit_definitions)
+        if accept_local:
+            self._definition_overrides.accept(local)
+        self._definition_overrides.mark_indexed(effective)
+        for skill in local:
             self._skills[skill.id] = skill
-        return self._registry._build_tracked(bool(batch))
+        return self._registry._build_tracked(bool(effective))
+
+    def _experimental_apply_definition_overrides(
+        self,
+        overrides: Mapping[str, str],
+        *,
+        adopt: bool = True,
+        emit_definitions: bool = True,
+    ) -> Awaitable[None]:
+        """Apply a complete overlay (id → retrieval description); re-index what changed.
+
+        Internal: `RuntimeCatalog.experimental_attach_definition_overrides` drives it.
+        """
+        state = self._definition_overrides
+        effective, changed = state.stage(overrides)
+        if adopt:
+            self._registry._set_use_definition_overrides(effective)
+        if not changed:
+            return no_dense_work()
+        return self._register_effective(
+            [state.local(skill.id) for skill in changed], changed, emit_definitions
+        )
+
+    def _experimental_enable_definition_overrides(self) -> None:
+        """Commit override ownership: later definition events carry the overlay flag."""
+        self._registry._set_use_definition_overrides(self._definition_overrides.effective_all())
 
     def replace_all(self, skills: Iterable[Skill]) -> PendingReplace:
         """Make `skills` the entire content of the catalog.
@@ -1027,7 +1081,12 @@ class SkillCatalog:
                 the read lock. `registry busy` is retryable, not fatal.
         """
         batch = list(skills)
-        awaitable = self._registry.replace_all(batch)
+        if not all(isinstance(skill, Skill) for skill in batch):
+            raise TypeError("replace_all requires Skill items")
+        effective = self._definition_overrides.effective_of(batch)
+        awaitable = self._registry.replace_all(effective)
+        self._definition_overrides.accept(batch, replace=True)
+        self._definition_overrides.mark_indexed(effective)
         self._skills = {skill.id: skill for skill in batch}
         return awaitable
 
