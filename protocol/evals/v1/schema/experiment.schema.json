@@ -181,6 +181,157 @@
       },
       "description": "Each eval of the run with its score and its delta against the baseline, with or without `evals` in the request. Only with the suite."
     },
+    "evalId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The eval of the run. Null: a run of the suite (POST /evals/experiments)."
+    },
+    "datasetId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The dataset whose cases the run used in place of the cases of the eval. Null: the cases of the eval."
+    },
+    "variants": {
+      "type": "array",
+      "description": "Each combination of the values of the matrix of the request, with its params. Empty: no matrix.",
+      "items": {
+        "type": "object",
+        "required": [
+          "index",
+          "params"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "params": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "run": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "score",
+            "rule",
+            "variants"
+          ],
+          "properties": {
+            "score": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1,
+              "description": "The score of the run, from 0 to 1. Null: no valid trial."
+            },
+            "rule": {
+              "type": "string",
+              "minLength": 1,
+              "description": "How the score of the run comes from the scores of its variants."
+            },
+            "variants": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "index",
+                  "params",
+                  "score",
+                  "counts"
+                ],
+                "properties": {
+                  "index": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "description": "The index of the variant. Null: the run has no matrix."
+                  },
+                  "params": {
+                    "type": "object"
+                  },
+                  "score": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "counts": {
+                    "$ref": "#/$defs/counts"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The score of a run of one eval, and of each variant. Null: a run of the suite."
+    },
+    "runDelta": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "score"
+          ],
+          "properties": {
+            "score": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": -1,
+              "maximum": 1
+            }
+          }
+        }
+      ],
+      "description": "The score of the run minus the score of the pinned baseline of its eval. Null: no baseline, or see runDeltaRefusal."
+    },
+    "runDeltaRefusal": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "reason",
+            "message"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "description": "Why the run has no delta against the baseline of its eval."
+    },
     "createdAt": {
       "type": "string",
       "format": "date-time"

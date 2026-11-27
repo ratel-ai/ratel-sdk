@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ratel.sh/protocol/evals/v1/baseline.schema.json",
   "title": "The pinned baseline",
-  "description": "The answer of GET, PUT and DELETE /api/v1/evals/baseline (200). Null: no experiment is pinned.",
+  "description": "The answer of GET, PUT and DELETE /api/v1/evals/baseline (200). With ?eval=<evalId>: the baseline of that eval. Without it: the pin of the project (runs of the suite). Null: no experiment is pinned.",
   "type": "object",
   "required": [
     "baseline"
@@ -29,6 +29,14 @@
         "pinnedAt"
       ],
       "properties": {
+        "evalId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid",
+          "description": "The eval of the baseline. Null or absent: the pin of the project."
+        },
         "experimentId": {
           "type": "string",
           "format": "uuid"

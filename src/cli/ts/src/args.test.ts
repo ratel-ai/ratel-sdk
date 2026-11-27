@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseInput, parseParams, parseTools, UsageError } from "./args.js";
+import { parseInput, parseParamFlags, parseParams, parseTools, UsageError } from "./args.js";
 import type { RatelConfig } from "./config.js";
 
 const config: RatelConfig = {
@@ -49,6 +49,38 @@ describe("parseParams", () => {
 
   it("refuses a flag without =", () => {
     expect(() => parseParams(config, ["model"])).toThrow("--param model: write name=value");
+  });
+});
+
+describe("parseParamFlags", () => {
+  it("a value with commas is a list of typed values in matrix, and leaves params", () => {
+    expect(
+      parseParamFlags(config, [
+        "model=sonnet,haiku",
+        "maxTurns=1,2",
+        "verbose=true,false",
+        "tone=dry",
+      ]),
+    ).toEqual({
+      params: { tone: "dry" },
+      matrix: { model: ["sonnet", "haiku"], maxTurns: [1, 2], verbose: [true, false] },
+    });
+  });
+
+  it("without commas, it is parseParams", () => {
+    expect(parseParamFlags(config, ["model=haiku"])).toEqual({
+      params: parseParams(config, ["model=haiku"]),
+      matrix: {},
+    });
+  });
+
+  it("refuses an item of the wrong type, and a parameter that is not declared", () => {
+    expect(() => parseParamFlags(config, ["maxTurns=1,many"])).toThrow(
+      "--param maxTurns: must be a number",
+    );
+    expect(() => parseParamFlags(config, ["temperature=1,2"])).toThrow(
+      "--param temperature: ratel.yaml declares no such parameter",
+    );
   });
 });
 

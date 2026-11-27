@@ -20,16 +20,32 @@ export function parseParams(
   }
   for (const flag of flags) {
     const [name, value] = split("--param", flag);
-    const spec = declared[name];
-    if (!spec) {
-      const names = Object.keys(declared);
-      throw new UsageError(
-        `--param ${name}: ratel.yaml declares no such parameter${names.length ? ` (${names.join(", ")})` : ""}`,
-      );
-    }
-    params[name] = typed(name, spec, value);
+    params[name] = typed(name, declaredSpec(config, name), value);
   }
   return params;
+}
+
+/**
+ * The `--param` flags of an eval run. A value with commas is a list: each item is typed as
+ * `parseParams` types a value, and the parameter goes to `matrix`, not to `params` (with its default).
+ */
+export function parseParamFlags(
+  config: RatelConfig,
+  flags: readonly string[],
+): { params: Record<string, ParamValue>; matrix: Record<string, ParamValue[]> } {
+  const isList = (flag: string) => flag.slice(flag.indexOf("=") + 1).includes(",");
+  const params = parseParams(
+    config,
+    flags.filter((flag) => !isList(flag)),
+  );
+  const matrix: Record<string, ParamValue[]> = {};
+  for (const flag of flags.filter(isList)) {
+    const [name, values] = split("--param", flag);
+    const spec = declaredSpec(config, name);
+    matrix[name] = values.split(",").map((value) => typed(name, spec, value));
+    delete params[name];
+  }
+  return { params, matrix };
 }
 
 /** The input of a run: `--input` as JSON (else as text), `@file`, or `input.example`. */
@@ -69,6 +85,17 @@ export function parseTools(
     tools[name] = { mode: mode as ToolMode };
   }
   return tools;
+}
+
+/** The declaration of a parameter in `ratel.yaml`, or a usage error. */
+function declaredSpec(config: RatelConfig, name: string) {
+  const declared = config.params ?? {};
+  const spec = declared[name];
+  if (spec) return spec;
+  const names = Object.keys(declared);
+  throw new UsageError(
+    `--param ${name}: ratel.yaml declares no such parameter${names.length ? ` (${names.join(", ")})` : ""}`,
+  );
 }
 
 function split(flag: string, text: string): [string, string] {

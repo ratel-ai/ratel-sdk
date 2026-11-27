@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Comparison } from "./run.js";
 
 const CLI = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
 const VECTORS = new URL(
@@ -23,13 +24,15 @@ const comparison = vector("comparison.regressed");
 comparison.candidate.experimentId = ID;
 const pinned = vector("baseline.pinned");
 const differ = vector("error.scorers-differ");
+const evalsList = vector("evals.response.list");
+const [REFUNDS, TONE] = evalsList.evals as Array<{ evalId: string; name: string }>;
 /** A folder with no ratel.yaml: the run sends no params. */
 const EMPTY = mkdtempSync(join(tmpdir(), "ratel-eval-"));
 /** A ratel.yaml that declares the parameters model and tone. */
 const YAML = join(mkdtempSync(join(tmpdir(), "ratel-eval-")), "ratel.yaml");
 writeFileSync(
   YAML,
-  "name: support-demo\ninput:\n  example: hi\nparams:\n  model: { type: enum, options: [x, y], default: y }\n  tone: { type: string, default: friendly }\n",
+  "name: support-demo\ninput:\n  example: hi\nparams:\n  model: { type: enum, options: [x, y], default: y }\n  tone: { type: string, default: friendly }\n  depth: { type: number }\n  verbose: { type: boolean }\n",
 );
 
 type Call = { method: string; path: string; auth: string | undefined; body: string };
@@ -39,10 +42,31 @@ let url: string;
 let calls: Call[];
 /** The answers of the reads, in order. The last one repeats. */
 let reads: Answer[];
+/** The answers of the reads of one experiment, by its id. Else `reads`. */
+let readsOf: Record<string, Answer[]>;
+/**
+ * The answer of `POST /evals/{eval}/runs`. `POST /evals/runs` gets it as its one part, unless
+ * `starts` is set.
+ */
 let start: Answer;
+let starts: Answer | null;
+/** The answer of `GET /evals`. */
+let evals: Answer;
 /** The answers of `/baseline` and, in order, of `/comparison`. */
 let baseline: Answer;
 let comparisons: Answer[];
+/** The answers of `/comparison` of one experiment, by its id. Else `comparisons`. */
+let comparisonsOf: Record<string, Answer[]>;
+
+/** `POST /evals/runs` with `start` as its one part, when `start` is a started run. */
+function startsOf(answer: Answer): Answer {
+  const { status, body } = answer;
+  if (status >= 300 || typeof body !== "object" || body === null) return answer;
+  return {
+    status,
+    body: { v: 1, runs: [{ eval: REFUNDS.name, evalId: REFUNDS.evalId, ...body }] },
+  };
+}
 
 beforeEach(async () => {
   calls = [];
@@ -50,6 +74,10 @@ beforeEach(async () => {
   reads = [{ status: 200, body: experiment }];
   baseline = { status: 200, body: pinned };
   comparisons = [{ status: 200, body: comparison }];
+  readsOf = {};
+  starts = null;
+  evals = { status: 200, body: evalsList };
+  comparisonsOf = {};
   server = createServer((req, res) => {
     let body = "";
     req.on("data", (chunk) => {
@@ -60,13 +88,19 @@ beforeEach(async () => {
       calls.push({ method, path, auth: headers.authorization, body });
       const next = (answers: Answer[]) =>
         (answers.length > 1 ? answers.shift() : answers[0]) as Answer;
-      const answer = path.endsWith("/baseline")
+      const route = path.split("?")[0] ?? "";
+      const id = /\/experiments\/([^/]+)/.exec(route)?.[1] ?? "";
+      const answer = route.endsWith("/baseline")
         ? baseline
-        : path.endsWith("/comparison")
-          ? next(comparisons)
-          : method === "POST"
-            ? start
-            : next(reads);
+        : route.endsWith("/comparison")
+          ? next(comparisonsOf[id] ?? comparisons)
+          : route === "/api/v1/evals/runs"
+            ? (starts ?? startsOf(start))
+            : method === "POST"
+              ? start
+              : route === "/api/v1/evals"
+                ? evals
+                : next(readsOf[id] ?? reads);
       res.statusCode = answer.status;
       res.end(typeof answer.body === "string" ? answer.body : JSON.stringify(answer.body));
     });
@@ -99,9 +133,21 @@ function ratel(args: string[], env: Record<string, string | undefined> = {}) {
   });
 }
 
+/** The calls that start a run: there is none before each check of the client. */
+const posts = () => calls.filter(({ method }) => method === "POST");
+
 /** The completed experiment with these counts for each case. */
 const withCounts = (...counts: Array<[pass: number, fail: number, invalid: number]>) => ({
   ...experiment,
+  counts: counts.reduce(
+    (sum, [pass, fail, invalid]) => ({
+      pass: sum.pass + pass,
+      fail: sum.fail + fail,
+      invalid: sum.invalid + invalid,
+      open: 0,
+    }),
+    { pass: 0, fail: 0, invalid: 0, open: 0 },
+  ),
   cases: counts.map(([pass, fail, invalid], index) => ({
     ...experiment.cases[0],
     name: `case ${index}`,
@@ -200,7 +246,7 @@ describe("exit codes", () => {
 it("sends the options with the key", async () => {
   await ratel(["run", "--version", ID, "--trials", "5", "-f", YAML, "--param", "model=x"]);
   expect(calls.map(({ method, path, auth }) => [method, path, auth])).toEqual([
-    ["POST", "/api/v1/evals/experiments", "Bearer rtl_key"],
+    ["POST", "/api/v1/evals/runs", "Bearer rtl_key"],
     ["GET", `/api/v1/evals/experiments/${ID}`, "Bearer rtl_key"],
   ]);
   expect(JSON.parse(calls[0]?.body ?? "")).toEqual({
@@ -388,8 +434,10 @@ describe("--compare-baseline", () => {
   it("reads the baseline, starts the run and reads the comparison", async () => {
     await ratel(COMPARE);
     expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
-      "GET /api/v1/evals/baseline",
-      "POST /api/v1/evals/experiments",
+      "GET /api/v1/evals",
+      `GET /api/v1/evals/baseline?eval=${REFUNDS.evalId}`,
+      `GET /api/v1/evals/baseline?eval=${TONE.evalId}`,
+      "POST /api/v1/evals/runs",
       `GET /api/v1/evals/experiments/${ID}`,
       `GET /api/v1/evals/experiments/${ID}/comparison`,
     ]);
@@ -432,7 +480,7 @@ describe("--compare-baseline", () => {
     const { code, out } = await ratel([...COMPARE, "--json"]);
     expect(code).toBe(3);
     expect(JSON.parse(out).error).toBe("no_baseline");
-    expect(calls).toHaveLength(1);
+    expect(posts()).toEqual([]);
   });
 
   it("3: it cannot be used with --no-wait", async () => {
@@ -486,7 +534,7 @@ describe("--compare-baseline", () => {
   ])("4: a baseline %j that is not readable starts no run", async (value) => {
     baseline = { status: 200, body: { baseline: value } };
     expect((await ratel(COMPARE)).code).toBe(4);
-    expect(calls).toHaveLength(1);
+    expect(posts()).toEqual([]);
   });
 
   it.each([
@@ -509,7 +557,7 @@ describe("--compare-baseline", () => {
   it("3: an old server with no baseline route gets no run", async () => {
     baseline = { status: 404, body: { error: "not_found", message: "Not found." } };
     expect((await ratel(COMPARE)).code).toBe(3);
-    expect(calls).toHaveLength(1);
+    expect(posts()).toEqual([]);
   });
 
   it("a wait that fails has the id of the paid run", async () => {
@@ -592,13 +640,13 @@ describe("the suite and --eval", () => {
     reads = [{ status: 200, body: withDelta }];
     const { code } = await ratel(["run"]);
     expect(code).toBe(1);
-    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-experiment.request.latest"));
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-runs.request.latest"));
   });
 
   it("--eval sends the names of the evals, in order", async () => {
     reads = [{ status: 200, body: withDelta }];
     await ratel(["run", "--eval", "Refunds", "--eval", "Tone", "--label", "refunds"]);
-    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-experiment.request.evals"));
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-runs.request.evals"));
   });
 
   it("--eval --json prints each eval with its score, counts, scorers and delta", async () => {
@@ -708,5 +756,320 @@ describe("the suite and --eval", () => {
     expect(code).toBe(0);
     expect(out).toContain("excluded: Tone stays friendly");
     expect(out).toContain("eval Refunds (v2): 66.7% score");
+  });
+});
+
+describe("a run of each eval", () => {
+  const noted = vector("start-runs.response.note");
+  const refusedPart = vector("start-runs.response.refused-part");
+  const withVariants = vector("experiment.run-variants");
+  const [first, second] = noted.runs;
+  const ID2: string = second.experimentId;
+  const VERSION = "33333333-3333-4333-8333-333333333333";
+  const paths = () => calls.map(({ method, path }) => `${method} ${path}`);
+  const body = () => JSON.parse(posts()[0]?.body ?? "");
+  /** Ratel starts the runs of Refunds (ID) and Tone (ID2, with a note); they end with these counts. */
+  const endedEach = (a: [number, number, number], b: [number, number, number]) => {
+    starts = { status: 201, body: noted };
+    readsOf = {
+      [ID]: [{ status: 200, body: withCounts(a) }],
+      [ID2]: [{ status: 200, body: { ...withCounts(b), experimentId: ID2, url: second.url } }],
+    };
+  };
+
+  it("without --eval starts one run for each eval and waits for each", async () => {
+    endedEach([3, 0, 0], [3, 0, 0]);
+    expect((await ratel(["run"])).code).toBe(0);
+    expect(paths()).toEqual([
+      "POST /api/v1/evals/runs",
+      `GET /api/v1/evals/experiments/${ID}`,
+      `GET /api/v1/evals/experiments/${ID2}`,
+    ]);
+    expect(body()).toEqual({ sandboxVersion: "latest" });
+  });
+
+  it("one --eval starts the run of that eval, by its URL-encoded name", async () => {
+    await ratel(["run", "--eval", "Late refunds/v2", "--trials", "2"]);
+    expect(paths()[0]).toBe("POST /api/v1/evals/Late%20refunds%2Fv2/runs");
+    expect(body()).toEqual({ sandboxVersion: "latest", trials: 2 });
+  });
+
+  it.each([
+    [[3, 0, 0], [2, 0, 1], 2],
+    [[0, 3, 0], [3, 0, 0], 1],
+    [[0, 3, 0], [2, 0, 1], 2],
+    [[3, 0, 0], [3, 0, 0], 0],
+  ] as const)("--json: one document with a part for each eval; the exit code is the highest (%j %j)", async (a, b, expected) => {
+    endedEach([...a], [...b]);
+    const { code, out } = await ratel(["run", "--json"]);
+    expect(code).toBe(expected);
+    expect(out.trim().split("\n")).toHaveLength(1);
+    const document = JSON.parse(out);
+    expect(document).toMatchObject({ v: 1, exitCode: expected });
+    expect(document.runs).toEqual([
+      expect.objectContaining({
+        eval: "Refunds",
+        evalId: first.evalId,
+        experimentId: ID,
+        url: experiment.url,
+        counts: { pass: a[0], fail: a[1], invalid: a[2], open: 0 },
+      }),
+      expect.objectContaining({
+        eval: "Tone",
+        evalId: second.evalId,
+        experimentId: ID2,
+        note: second.note,
+      }),
+    ]);
+    expect(document.runs.map(({ exitCode }: { exitCode: number }) => exitCode)).toEqual([
+      a[1] > 0 ? 1 : a[2] > 0 ? 2 : 0,
+      b[1] > 0 ? 1 : b[2] > 0 ? 2 : 0,
+    ]);
+  });
+
+  it("3: a refused part, and the other run still ends", async () => {
+    starts = { status: 201, body: refusedPart };
+    ended([0, 3, 0]);
+    const { code, out } = await ratel(["run", "--json"]);
+    expect(code).toBe(3);
+    const [, refused] = refusedPart.runs;
+    expect(JSON.parse(out).runs).toEqual([
+      expect.objectContaining({ eval: "Refunds", experimentId: ID, exitCode: 1 }),
+      { ...refused, exitCode: 3 },
+    ]);
+    expect(paths()).toContain(`GET /api/v1/evals/experiments/${ID}`);
+    const text = await ratel(["run"]);
+    expect(text.code).toBe(3);
+    expect(text.out).toContain(`refused: ${refused.message}`);
+  });
+
+  it("a --version of another sandbox does not refuse the eval: it prints the note", async () => {
+    endedEach([3, 0, 0], [3, 0, 0]);
+    const { code, out, err } = await ratel(["run", "--version", VERSION]);
+    expect(code).toBe(0);
+    expect(body()).toEqual({ sandboxVersion: VERSION });
+    expect(err).toContain(`Tone: ${second.note}`);
+    expect(out).toContain("== Refunds\n");
+    expect(out).toContain("== Tone\n");
+    expect(out).toContain(`${second.url}\n`);
+  });
+
+  it("--no-wait prints the id of each run, and 3 with a refused part", async () => {
+    endedEach([3, 0, 0], [3, 0, 0]);
+    const text = await ratel(["run", "--no-wait"]);
+    expect([text.code, text.out]).toEqual([0, `${ID}\n${ID2}\n`]);
+    expect(calls).toHaveLength(1);
+    const json = await ratel(["run", "--no-wait", "--json"]);
+    expect(JSON.parse(json.out)).toMatchObject({
+      v: 1,
+      exitCode: 0,
+      runs: [{ experimentId: ID }, { experimentId: ID2, note: second.note }],
+    });
+    starts = { status: 201, body: refusedPart };
+    expect((await ratel(["run", "--no-wait"])).code).toBe(3);
+  });
+
+  it("one part keeps the document of one run, with its note", async () => {
+    starts = { status: 201, body: { v: 1, runs: [second] } };
+    readsOf = { [ID2]: [{ status: 200, body: { ...withCounts([3, 0, 0]), experimentId: ID2 } }] };
+    const { code, out } = await ratel(["run", "--json"]);
+    expect(code).toBe(0);
+    const document = JSON.parse(out);
+    expect(document).toMatchObject({ experimentId: ID2, note: second.note });
+    expect(document).not.toHaveProperty("runs");
+  });
+
+  it("3: Ratel starts no run", async () => {
+    starts = { status: 201, body: { v: 1, runs: [] } };
+    expect((await ratel(["run"])).code).toBe(3);
+  });
+
+  it.each([
+    [{ v: 1 }],
+    [{ v: 1, runs: "x" }],
+    [{ v: 1, runs: [{}] }],
+    [{ v: 1, runs: [{ eval: "Refunds", evalId: "x" }] }],
+  ])("4: the started runs are not readable %j", async (answer) => {
+    starts = { status: 201, body: answer };
+    expect((await ratel(["run"])).code).toBe(4);
+  });
+
+  it("the score, the delta and the variants of a run", async () => {
+    starts = { status: 201, body: noted };
+    readsOf = {
+      [ID]: [{ status: 200, body: withVariants }],
+      [ID2]: [{ status: 200, body: { ...withVariants, experimentId: ID2 } }],
+    };
+    const { out } = await ratel(["run", "--json"]);
+    const [part] = JSON.parse(out).runs;
+    expect(part).toMatchObject({
+      score: withVariants.run.score,
+      delta: withVariants.runDelta,
+      variants: withVariants.run.variants,
+    });
+    const text = await ratel(["run"]);
+    expect(text.out).toContain("eval Refunds: 75% score, 2/3 pass, +8.3 points\n");
+    expect(text.out).toContain(
+      "  variant 0 (tone=dry, model=claude-sonnet-5-5, depth=1): 100% score, 3/3 pass\n",
+    );
+  });
+
+  it("the text of one run has the score of the run and each variant", async () => {
+    reads = [{ status: 200, body: withVariants }];
+    const { out } = await ratel(["run", "--eval", "Refunds"]);
+    expect(out).toContain(
+      "  variant 3 (tone=dry, model=claude-opus-5-5, depth=2): 66.7% score, 2/3 pass\n",
+    );
+  });
+
+  it("the text of a run with no matrix has no variant line", async () => {
+    const plain = {
+      ...withVariants,
+      variants: [],
+      run: {
+        ...withVariants.run,
+        variants: [{ ...withVariants.run.variants[0], index: null, params: {} }],
+      },
+    };
+    reads = [{ status: 200, body: plain }];
+    const { out } = await ratel(["run", "--eval", "Refunds"]);
+    expect(out).not.toContain("variant");
+  });
+
+  it("--param with commas is a matrix: each value is typed, and the default leaves the params", async () => {
+    await ratel([
+      "run",
+      "-f",
+      YAML,
+      "--param",
+      "model=x,y",
+      "--param",
+      "depth=1,2",
+      "--param",
+      "verbose=true,false",
+      "--param",
+      "tone=dry",
+    ]);
+    expect(body()).toEqual({
+      sandboxVersion: "latest",
+      sandbox: "support-demo",
+      params: { tone: "dry" },
+      matrix: { model: ["x", "y"], depth: [1, 2], verbose: [true, false] },
+    });
+  });
+
+  it("12 combinations are allowed", async () => {
+    await ratel(["run", "-f", YAML, "--param", "model=x,y", "--param", "depth=1,2,3,4,5,6"]);
+    expect(body().matrix).toEqual({ model: ["x", "y"], depth: [1, 2, 3, 4, 5, 6] });
+  });
+
+  it.each([
+    [["--param", "model=x,y", "--param", "depth=1,2,3,4,5,6,7"], "12"],
+    [["--param", "depth=1,x"], "number"],
+    [["--param", "model=x,z"], "one of"],
+    [["--param", "depth=1,,2"], "number"],
+  ])("3: a wrong matrix %j starts no run", async (args, problem) => {
+    const { code, err } = await ratel(["run", "-f", YAML, ...args]);
+    expect(code).toBe(3);
+    expect(err).toContain(problem);
+    expect(calls).toEqual([]);
+  });
+
+  it("--json of a wrong matrix is one usage document", async () => {
+    const { out } = await ratel([
+      "run",
+      "--json",
+      "-f",
+      YAML,
+      "--param",
+      "model=x,y",
+      "--param",
+      "depth=1,2,3,4,5,6,7",
+    ]);
+    expect(JSON.parse(out)).toEqual({ error: "usage", message: expect.stringContaining("14") });
+  });
+
+  it("--dataset names the dataset of the run, with --version", async () => {
+    await ratel(["run", "--dataset", "Hard refunds", "--version", VERSION]);
+    expect(body()).toEqual({ sandboxVersion: VERSION, dataset: "Hard refunds" });
+  });
+
+  it("3: --dataset is empty", async () => {
+    expect((await ratel(["run", "--dataset", " "])).code).toBe(3);
+    expect(calls).toEqual([]);
+  });
+
+  describe("--compare-baseline", () => {
+    it("checks the baseline of each eval, compares each run and exits with the highest verdict", async () => {
+      endedEach([3, 0, 0], [3, 0, 0]);
+      comparisonsOf = {
+        [ID]: [{ status: 200, body: { ...comparison, verdict: "improved" } }],
+        [ID2]: [
+          {
+            status: 200,
+            body: {
+              ...comparison,
+              verdict: "inconclusive",
+              candidate: { ...comparison.candidate, experimentId: ID2 },
+            },
+          },
+        ],
+      };
+      const { code, out } = await ratel(["run", "--compare-baseline", "--json"]);
+      expect(code).toBe(2);
+      expect(paths()).toEqual([
+        "GET /api/v1/evals",
+        `GET /api/v1/evals/baseline?eval=${REFUNDS.evalId}`,
+        `GET /api/v1/evals/baseline?eval=${TONE.evalId}`,
+        "POST /api/v1/evals/runs",
+        `GET /api/v1/evals/experiments/${ID}`,
+        `GET /api/v1/evals/experiments/${ID}/comparison`,
+        `GET /api/v1/evals/experiments/${ID2}`,
+        `GET /api/v1/evals/experiments/${ID2}/comparison`,
+      ]);
+      const document = JSON.parse(out);
+      expect(document.exitCode).toBe(2);
+      expect(
+        document.runs.map(
+          ({ exitCode, comparison }: { exitCode: number; comparison: Comparison }) => [
+            exitCode,
+            comparison.verdict,
+          ],
+        ),
+      ).toEqual([
+        [0, "improved"],
+        [2, "inconclusive"],
+      ]);
+    });
+
+    it("--eval checks only the baseline of the evals named, by name or by id", async () => {
+      await ratel(["run", "--compare-baseline", "--eval", "Tone"]);
+      expect(paths().slice(0, 3)).toEqual([
+        "GET /api/v1/evals",
+        `GET /api/v1/evals/baseline?eval=${TONE.evalId}`,
+        "POST /api/v1/evals/Tone/runs",
+      ]);
+      calls = [];
+      await ratel(["run", "--compare-baseline", "--eval", REFUNDS.evalId, "--eval", "Tone"]);
+      expect(paths().slice(0, 4)).toEqual([
+        "GET /api/v1/evals",
+        `GET /api/v1/evals/baseline?eval=${REFUNDS.evalId}`,
+        `GET /api/v1/evals/baseline?eval=${TONE.evalId}`,
+        "POST /api/v1/evals/runs",
+      ]);
+    });
+
+    it("3: an --eval that Ratel does not have starts no run", async () => {
+      const { code, out } = await ratel(["run", "--compare-baseline", "--eval", "Nope", "--json"]);
+      expect(code).toBe(3);
+      expect(JSON.parse(out).error).toBe("not_found");
+      expect(posts()).toEqual([]);
+    });
+
+    it("4: a list of evals that is not readable starts no run", async () => {
+      evals = { status: 200, body: { v: 1, evals: [{ name: "Refunds" }] } };
+      expect((await ratel(["run", "--compare-baseline"])).code).toBe(4);
+      expect(posts()).toEqual([]);
+    });
   });
 });
