@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **`ratel_ai.serve`: run a Python agent image on Ratel.** `serve(run)` answers the run contract of `protocol/sandbox/v1` (`GET /ratel/health`, `POST /ratel/run`) on `$PORT`, with the same behavior as `@ratel-ai/sdk/serve`. `tool(name, execute=..., fake=...)` applies the mode of each run: `simulated` answers from `fake`, `recorded` from the fixture with the same normalized arguments, `live` from `execute`. The response lists each call with its mode, and the values of the secrets in `$RATEL_SECRET_NAMES` are redacted. `run` can be sync or async. The module uses the standard library only and never loads the native module. See `examples/sandbox-python-agent`.
+
 ## [0.14.0] - 2026-11-26
 
 This is a breaking minor release. It includes all the work of the `0.13.0-rc.*` releases below. `0.13.0` has no GA release: upgrade from `0.12.x` or a `0.13.0-rc.*` straight to `0.14.0`.

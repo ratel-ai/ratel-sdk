@@ -308,6 +308,36 @@ executors stay local. Definition events after an attach carry
 `ratel.catalog.use_definition_overrides=true`. Opting in is one-way for the life of the process.
 These APIs may change without a major-version bump.
 
+## Run an agent image on Ratel: `ratel_ai.serve`
+
+`ratel_ai.serve` makes the Docker image of an agent answer the Ratel run contract
+([`protocol/sandbox/v1`](../../../protocol/sandbox/v1/README.md)). It uses the standard library only
+and never loads the native module, so a slim image can use `serve.py` alone.
+
+```python
+from ratel_ai.serve import RunArgs, serve, tool
+
+refund_order = tool(
+    "refund_order",
+    execute=refund,                                  # the real function: mode live
+    fake=lambda order_id: {"order_id": order_id, "status": "refunded"},  # mode simulated
+)
+
+def run(args: RunArgs) -> dict:                      # sync or async
+    return agent.reply(args.input, tone=args.params["tone"], tools=[refund_order])
+
+serve(run)                                           # $PORT, default 8080, on 0.0.0.0
+```
+
+`serve(run)` answers `GET /ratel/health` and `POST /ratel/run`. An invalid request answers 400 and
+a raised error answers 500, both with `{"error": {"code", "message"}}`. Each run sets the mode of
+each tool (default `simulated`): `simulated` answers from `fake` (none: `ToolCallError` with the code
+`no_fake`), `recorded` from the fixture with the same normalized arguments (none: `no_fixture`),
+`live` from `execute`. The response lists each call with its mode. Outside a run, a tool runs
+`execute`. `current_run()` gives the run id and the traceparent, and `record_usage()` adds model
+usage. The values of the secrets in `$RATEL_SECRET_NAMES` are redacted from each response. See
+[`examples/sandbox-python-agent`](../../../examples/sandbox-python-agent/README.md).
+
 ## Ratel Platform
 
 `ratel-ai` is the SDK of the Ratel Platform. It manages the context of an agent at runtime, in

@@ -1,0 +1,21 @@
+# The configuration of the agent on Ratel. The Dockerfile holds its environment.
+name: support-python
+image:
+  dockerfile: Dockerfile
+  context: .
+run:
+  mode: http
+  port: 8080
+  timeoutSeconds: 60
+input:
+  example:
+    message: My desk lamp of order A100 never worked. Can I have a refund?
+params:
+  tone:
+    type: enum
+    options: [friendly, formal]
+    default: friendly
+    description: The tone of the answers.
+tools:
+  lookup_order: { mode: live }        # read-only: it runs for real
+  refund_order: { mode: simulated }   # a side effect: it answers from its fake handler
