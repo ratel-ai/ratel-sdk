@@ -60,7 +60,8 @@
     },
     "trialsPerCase": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "description": "The most trials of a case in this run. Each eval can have its own trials."
     },
     "counts": {
       "$ref": "#/$defs/counts"
@@ -104,6 +105,81 @@
           }
         }
       }
+    },
+    "baselineId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The run that the deltas compare with: the pinned baseline. Null: no baseline, or this run is the baseline. Only with the suite."
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "ok",
+            "verdict",
+            "rule",
+            "excludedMessage"
+          ],
+          "properties": {
+            "ok": {
+              "const": true
+            },
+            "verdict": {
+              "enum": [
+                "regressed",
+                "improved",
+                "unchanged",
+                "inconclusive"
+              ]
+            },
+            "rule": {
+              "type": "string",
+              "minLength": 1
+            },
+            "excludedMessage": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Why some cases do not decide: the scorers of their eval differ. Null: each compared case decides."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "ok",
+            "reason",
+            "message"
+          ],
+          "properties": {
+            "ok": {
+              "const": false
+            },
+            "reason": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "description": "The verdict of the run against the baseline, the same rule as the comparison. Null with no baseline. Only with the suite."
+    },
+    "evals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/eval"
+      },
+      "description": "Each eval of the run with its score and its delta against the baseline, with or without `evals` in the request. Only with the suite."
     },
     "createdAt": {
       "type": "string",
@@ -219,6 +295,175 @@
               }
             }
           }
+        }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "required": [
+        "evalId",
+        "name",
+        "version",
+        "cases",
+        "counts",
+        "score",
+        "scorers",
+        "delta",
+        "deltaRefusal"
+      ],
+      "properties": {
+        "evalId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "cases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "counts": {
+          "$ref": "#/$defs/counts"
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The mean of the pass rates of the scorers over the valid trials, from 0 to 1. Null: no valid trial."
+        },
+        "scorers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "scorerId",
+              "name",
+              "gating",
+              "pass",
+              "fail",
+              "notScored",
+              "passRate"
+            ],
+            "properties": {
+              "scorerId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "gating": {
+                "type": "boolean"
+              },
+              "pass": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fail": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "notScored": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "passRate": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "score",
+                "scorers"
+              ],
+              "properties": {
+                "score": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "scorers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "scorerId",
+                      "delta"
+                    ],
+                    "properties": {
+                      "scorerId": {
+                        "type": "string"
+                      },
+                      "delta": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "minimum": -1,
+                        "maximum": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "description": "The score minus the score of the same eval in the baseline run. Null: no baseline, or see deltaRefusal."
+        },
+        "deltaRefusal": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "reason",
+                "message"
+              ],
+              "properties": {
+                "reason": {
+                  "enum": [
+                    "not_in_baseline",
+                    "scorers_differ"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          ],
+          "description": "Why the eval has no delta against the baseline."
         }
       }
     }
