@@ -47,7 +47,8 @@ command with its place and its JSON path, for example
 ## `ratel push`
 
 ```
-ratel push [-f ratel.yaml] [--image ref] [--platform os/arch] [--no-wait] [--timeout seconds] [--json]
+ratel push [-f ratel.yaml] [--image ref] [--platform os/arch] [--no-wait] [--timeout seconds]
+           [--ci] [--json]
 ```
 
 1. Reads and checks `ratel.yaml`, then checks Docker and `RATEL_API_KEY`.
@@ -67,7 +68,54 @@ smoke check fails, it prints the contract error and the container logs.
 | `--platform` | The platform of the build (default `linux/amd64`) |
 | `--no-wait` | Do not wait for the smoke check |
 | `--timeout` | The longest wait for the smoke check, in seconds (default 900) |
+| `--ci` | In a GitHub Actions job: also send the repository, the branch, the pull request, the base commit and the diff (below) |
 | `--json` | Print one JSON document: the version, `image`, `git`, `bundle`, `smoke` and `url` |
+
+### `ratel push --ci` in GitHub Actions
+
+Run `ratel push --ci` on each push and pull request, and each commit becomes a version on Ratel.
+Ratel reads the diff to run the evals that the change touches.
+
+```yaml
+# .github/workflows/ratel.yml
+name: Ratel
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the base commit, for the diff
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - run: npx @ratel-ai/cli push --ci
+        env:
+          RATEL_API_KEY: ${{ secrets.RATEL_API_KEY }}
+```
+
+`--ci` reads the job's environment (`GITHUB_ACTIONS`, `GITHUB_EVENT_NAME`, `GITHUB_EVENT_PATH`,
+`GITHUB_REPOSITORY_ID`, `GITHUB_REPOSITORY`, `GITHUB_HEAD_REF`, `GITHUB_REF_NAME`) and adds these
+to `git`:
+
+| Field | A pull request | A push |
+|---|---|---|
+| `repository` | `{ id, fullName }` | the same |
+| `branch` | its head branch | the pushed branch |
+| `pullRequest` | its number | `null` |
+| `baseCommit` | its base | the branch's previous head (`null` for a new branch) |
+| `title`, `author` | its title and author | the commit's first line, the pusher |
+| `diff` | `git diff <baseCommit>...<commit>` | the same |
+
+- **Too large:** a diff over 512 KiB is left out, with `diffTruncated: true`.
+- **No base:** with no base, or a base git does not have (a shallow clone), there is no diff, and
+  Ratel runs every eval.
+- **Merge commits:** a pull request's job must check out the pull request's head, not the merge
+  commit GitHub checks out by default (`ref:` above). `--ci` stops with a usage error otherwise.
+- **Forks:** GitHub gives no secrets to a fork's workflow, so a fork's pull request does not push.
+- **Outside Actions:** `--ci` anywhere else is a usage error, and nothing is built.
 
 ## `ratel run --local`
 

@@ -15,7 +15,8 @@ export interface MainIo {
 }
 
 export const USAGE = `Usage:
-  ratel push [-f ratel.yaml] [--image ref] [--platform os/arch] [--no-wait] [--timeout seconds] [--json]
+  ratel push [-f ratel.yaml] [--image ref] [--platform os/arch] [--no-wait] [--timeout seconds]
+             [--ci] [--json]
   ratel run --local [-f ratel.yaml] [--image ref] [--input json|@file] [--param name=value]...
                     [--tool name=mode]... [--fixtures @file] [--json]
   ratel run [-f ratel.yaml] [--version id] [--input json|@file] [--param name=value]...
@@ -30,6 +31,9 @@ Environment:
   RATEL_API_KEY   a project key of Ratel (push, run without --local)
   RATEL_BASE_URL  the API root of Ratel, with /api/v1 (default https://app.ratel.sh/api/v1)
 
+--ci, in a GitHub Actions job, also sends the repository, the branch, the pull request, the base
+commit and the diff, so Ratel runs the evals the change touches.
+
 Exit codes: 0 ok, 1 the agent failed, 2 usage or ratel.yaml, 3 Ratel refused, 4 Docker or Ratel unavailable.
 `;
 
@@ -38,6 +42,7 @@ const OPTIONS = {
   image: { type: "string" },
   platform: { type: "string", default: "linux/amd64" },
   "no-wait": { type: "boolean" },
+  ci: { type: "boolean" },
   timeout: { type: "string" },
   json: { type: "boolean" },
   local: { type: "boolean" },
@@ -89,6 +94,7 @@ export async function main(argv: string[], io: MainIo): Promise<number> {
           platform: values.platform,
           wait: !values["no-wait"],
           timeoutMs: timeout * 1000,
+          ci: values.ci === true,
         },
         commandIo,
       );

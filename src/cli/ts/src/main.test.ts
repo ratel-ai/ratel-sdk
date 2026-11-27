@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -199,6 +200,73 @@ describe("ratel push", () => {
       limit: "sandbox_versions_per_day",
     });
     expect(err).toContain("The limit sandbox_versions_per_day (2) is reached.");
+  });
+
+  it("--ci sends the pull request, its base and the diff from a GitHub Actions job", async () => {
+    const file = project(HTTP_YAML);
+    const dir = join(file, "..");
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], {
+        cwd: dir,
+        encoding: "utf8",
+      }).trim();
+    git("init", "-q");
+    git("add", ".");
+    git("commit", "-q", "-m", "first");
+    const base = git("rev-parse", "HEAD");
+    writeFileSync(join(dir, "tools.ts"), "export const refundOrder = 1;\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "second");
+    const head = git("rev-parse", "HEAD");
+    const event = join(dir, "..", `event-${Date.now()}.json`);
+    writeFileSync(
+      event,
+      JSON.stringify({
+        number: 12,
+        pull_request: {
+          title: "Refund once",
+          user: { login: "octo" },
+          head: { sha: head, ref: "fix/refund-once" },
+          base: { sha: base, ref: "main" },
+        },
+      }),
+    );
+
+    const code = await ratel(["push", "-f", file, "--ci", "--json"], {
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "pull_request",
+      GITHUB_EVENT_PATH: event,
+      GITHUB_REPOSITORY: "acme/support-agent",
+      GITHUB_REPOSITORY_ID: "4242",
+      GITHUB_HEAD_REF: "fix/refund-once",
+      GITHUB_REF_NAME: "12/merge",
+    });
+
+    expect(err).not.toContain("ratel: ");
+    expect(code).toBe(0);
+    const created = platform.json("/api/v1/sandboxes/versions") as { git: Record<string, unknown> };
+    expect(created.git).toMatchObject({
+      commit: head,
+      dirty: false,
+      repository: { id: 4242, fullName: "acme/support-agent" },
+      branch: "fix/refund-once",
+      pullRequest: 12,
+      baseCommit: base,
+      title: "Refund once",
+      author: "octo",
+    });
+    expect(created.git.diff).toContain("+export const refundOrder = 1;");
+    // The printed result names the pull request, and never carries the diff.
+    const doc = JSON.parse(out);
+    expect(doc.git).toMatchObject({ branch: "fix/refund-once", pullRequest: 12 });
+    expect(doc.git).not.toHaveProperty("diff");
+  });
+
+  it("--ci outside GitHub Actions is a usage error, and nothing is built", async () => {
+    const code = await ratel(["push", "-f", project(HTTP_YAML), "--ci"]);
+    expect(code).toBe(2);
+    expect(err).toContain("GitHub Actions");
+    expect(docker.calls.some((c) => c[0] === "build")).toBe(false);
   });
 
   it("never sends the key to an upload on another origin", async () => {
