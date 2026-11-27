@@ -46,6 +46,24 @@ value is in this folder.
 
 `pnpm start "<message>"` runs the agent on this machine with the real tools (`src/main.ts`).
 
+## Traces
+
+Ratel gives each run container `RATEL_BASE_URL` (the API root of the Ratel that started the run)
+and `RATEL_API_KEY` (a run token). `src/otlp.ts` sends the traces to `$RATEL_BASE_URL/traces`, so a
+run on any Ratel sends its traces back to that Ratel with no change here. `RATEL_OTLP_ENDPOINT`
+replaces that address. With neither (`pnpm start` with no env), the agent exports nothing.
+
+Ratel adds the host of its own address to the outbound allow-list of the VM. Do not add it to
+`network.allow`.
+
+A Ratel server on your machine: the VM must reach it. Set `SANDBOX_CALLBACK_URL` of the server to
+an address that the VM can open:
+
+- `SANDBOX_PROVIDER=local-docker`: `SANDBOX_CALLBACK_URL=http://host.docker.internal:<port>`.
+- A remote VM provider: a public tunnel to the server, for example
+  `cloudflared tunnel --url http://localhost:<port>`, and `SANDBOX_CALLBACK_URL=https://<name>.trycloudflare.com`.
+  Ratel allows that host for the VM. Keep the tunnel out of `ratel.yaml`.
+
 ## The weak behavior
 
 The first prompt (`src/prompt.ts`) tells the agent to refund a damaged item with no lookup. Order
@@ -63,6 +81,7 @@ src/support-agent.ts   the agent: the model loop and its spans
 src/tools.ts           the two tools
 src/prompt.ts          the prompt, with the weak line
 src/telemetry.ts       OpenTelemetry providers
+src/otlp.ts            where the traces go: RATEL_OTLP_ENDPOINT, else RATEL_BASE_URL/traces
 src/main.ts            a run on your machine with the real tools
 test/agent.test.ts     a fake model: refund_order is simulated and the real refund never runs
 ```

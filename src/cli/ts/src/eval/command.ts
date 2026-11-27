@@ -27,7 +27,8 @@ export const EVAL_USAGE = `Usage: ratel eval run [--version <id|latest>] [--eval
                       [--json] [--no-wait] [--compare-baseline]
        ratel eval baseline pin <experiment-id> [--json]
 
-Runs the suite (each eval of the project) on an image version, or only each --eval. It prints the
+Runs the suite (each eval of the sandbox) on an image version, or only each --eval. The default
+version is the newest ready version of the sandbox of ratel.yaml (its name), or of the evals named. It prints the
 counts of each case and the score of each eval. With --compare-baseline, prints the verdict against
 the pinned baseline, and it gives the exit code. --trials is the trials of each case. Default: the
 trials of each eval. --param takes a parameter that ratel.yaml declares. The defaults of ratel.yaml
@@ -130,6 +131,8 @@ export async function evalCommand(argv: string[], io: EvalIo): Promise<number> {
 
 type Options = {
   sandboxVersion: string;
+  /** The sandbox of ratel.yaml, sent with `latest`: a project can have more than one sandbox. */
+  sandbox?: string;
   trials?: number;
   params?: Record<string, ParamValue>;
   label?: string;
@@ -197,7 +200,7 @@ async function read(argv: string[]): Promise<Options | string> {
     if (error instanceof CliError) return error.message;
     throw error;
   }
-  const { params, runTimeoutSeconds } = config;
+  const { params, runTimeoutSeconds, sandbox } = config;
   const waitSeconds =
     // With no --trials each eval uses its own trials, up to MAX_TRIALS: the wait covers the most.
     timeout ?? (trials ?? MAX_TRIALS) * runTimeoutSeconds + WAIT_MARGIN_SECONDS;
@@ -206,6 +209,7 @@ async function read(argv: string[]): Promise<Options | string> {
     timeoutMs: waitSeconds * 1000,
     ...(trials ? { trials } : {}),
     ...(params ? { params } : {}),
+    ...(sandbox && base.sandboxVersion === "latest" ? { sandbox } : {}),
     ...(values.label ? { label: values.label } : {}),
     ...(values.name ? { name: values.name } : {}),
     ...(values.eval.length > 0 ? { evals: values.eval } : {}),
@@ -215,12 +219,12 @@ async function read(argv: string[]): Promise<Options | string> {
 /**
  * The parameter values of the run: the defaults of `ratel.yaml` with each `--param` applied. With
  * no `ratel.yaml` and no `--param`, none: the version keeps its own defaults. Also the
- * `run.timeoutSeconds` of `ratel.yaml`, for the default of `--timeout`.
+ * `run.timeoutSeconds` of `ratel.yaml`, for the default of `--timeout`, and its `name`: the sandbox.
  */
 async function readConfig(
   file: string | undefined,
   flags: string[],
-): Promise<{ params?: Record<string, ParamValue>; runTimeoutSeconds: number }> {
+): Promise<{ params?: Record<string, ParamValue>; runTimeoutSeconds: number; sandbox?: string }> {
   const path = file ?? "ratel.yaml";
   if (file === undefined && flags.length === 0 && !existsSync(path)) {
     return { runTimeoutSeconds: DEFAULT_RUN_TIMEOUT_SECONDS };
@@ -236,6 +240,7 @@ async function readConfig(
   return {
     params: parseParams(config, flags),
     runTimeoutSeconds: config.run?.timeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS,
+    sandbox: config.name,
   };
 }
 

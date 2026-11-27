@@ -15,8 +15,11 @@ The wire contract to start and read an eval run, and to compare it with a pinned
 The paths are under `RATEL_BASE_URL`, the API root with `/api/v1`.
 | `error` | The body of each refused call |
 
-An experiment runs the suite, each eval of the project with each of its cases (a case counts at once: there is no approval), on one image
-version (a `version` of [`sandbox/v1`](../../sandbox/v1)), or on the newest ready one (`latest`).
+An experiment runs the suite, each eval of one sandbox with each of its cases (a case counts at once: there is no approval), on one image
+version (a `version` of [`sandbox/v1`](../../sandbox/v1)), or on the newest ready version of that sandbox (`latest`).
+`sandbox` names the sandbox (the `name` of `ratel.yaml`). Without it, `latest` takes the sandbox of the evals
+named, or else the sandbox of the newest ready version. A version of another sandbox, and evals of
+more than one sandbox, are refused with `wrong_sandbox` (409).
 `evals` runs only the evals with these names (1 to 100). An unknown name is refused with
 `not_found` (404), and an eval of another agent with `wrong_sandbox` (409). `trials` is the trials
 of each case. Without it, each eval has its own trials (3 unless the eval sets another). `params` holds the

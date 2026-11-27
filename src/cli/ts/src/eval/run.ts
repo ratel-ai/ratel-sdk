@@ -5,6 +5,8 @@ export type EvalRunOptions = {
   apiKey: string;
   /** An image version id, or `latest`. */
   sandboxVersion: string;
+  /** The sandbox whose newest ready version `latest` is. */
+  sandbox?: string;
   /** The trials of each case. Absent: the trials of each eval. */
   trials?: number;
   /** The parameter values of each run. */
@@ -98,6 +100,7 @@ export async function startEvalRun({
   url,
   apiKey,
   sandboxVersion,
+  sandbox,
   trials,
   params,
   label,
@@ -106,6 +109,7 @@ export async function startEvalRun({
 }: EvalRunOptions): Promise<StartedExperiment> {
   const body = {
     sandboxVersion,
+    ...(sandbox ? { sandbox } : {}),
     ...(trials ? { trials } : {}),
     ...(params ? { params } : {}),
     ...(label ? { label } : {}),

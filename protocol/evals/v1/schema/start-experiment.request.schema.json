@@ -8,7 +8,13 @@
   "properties": {
     "sandboxVersion": {
       "anyOf": [{ "const": "latest" }, { "type": "string", "minLength": 1 }],
-      "description": "The id of an image version (protocol/sandbox/v1 version), or the newest version that is ready."
+      "description": "The id of an image version (protocol/sandbox/v1 version), or the newest ready version of the sandbox of the run."
+    },
+    "sandbox": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The sandbox of the run: the name of its ratel.yaml. Absent: the sandbox of the evals named, else of the newest ready version."
     },
     "trials": {
       "type": "integer",
@@ -36,7 +42,7 @@
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1, "maxLength": 200 },
-      "description": "The names of the evals to run, from 1 to 100. Absent: the suite, each eval of the project. An unknown name is refused with not_found (404)."
+      "description": "The names of the evals to run, from 1 to 100. Absent: the suite, each eval of the sandbox. An unknown name is refused with not_found (404)."
     }
   }
 }

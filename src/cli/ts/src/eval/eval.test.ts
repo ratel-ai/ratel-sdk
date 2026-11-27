@@ -224,6 +224,7 @@ it("sends --label and --name, and the defaults of ./ratel.yaml", async () => {
   ]);
   expect(JSON.parse(calls[0]?.body ?? "")).toEqual({
     sandboxVersion: "latest",
+    sandbox: "support-demo",
     params: { model: "y", tone: "friendly" },
     label: "refunds",
     name: "tone dry",
@@ -241,6 +242,22 @@ it("--json with --compare-baseline has the parameter values, the verdict and the
   expect(document.params).toEqual({ model: "y", tone: "friendly" });
   expect(document.comparison.verdict).toBe("regressed");
   expect(document.comparison.changedCases).toEqual(comparison.changedCases);
+});
+
+it("latest is the newest ready version of the sandbox of ratel.yaml, not of the project", async () => {
+  // A project can have more than one sandbox: the run names the one of its ratel.yaml.
+  for (const version of [[], ["--version", "latest"]]) {
+    calls = [];
+    await ratel(["run", ...version, "-f", YAML]);
+    expect(JSON.parse(calls[0]?.body ?? "")).toMatchObject({
+      sandboxVersion: "latest",
+      sandbox: "support-demo",
+    });
+  }
+  // A version id names its sandbox itself.
+  calls = [];
+  await ratel(["run", "--version", ID, "-f", YAML]);
+  expect(JSON.parse(calls[0]?.body ?? "")).not.toHaveProperty("sandbox");
 });
 
 it("the default is the latest version and the trials of Ratel", async () => {

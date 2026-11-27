@@ -13,8 +13,9 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { otlpEndpoint } from "./otlp.js";
 
-const endpoint = process.env.RATEL_OTLP_ENDPOINT;
+const endpoint = otlpEndpoint(process.env);
 const apiKey = process.env.RATEL_API_KEY;
 
 const provider = new NodeTracerProvider({
