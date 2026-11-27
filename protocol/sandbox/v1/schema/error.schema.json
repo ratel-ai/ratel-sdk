@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/error.schema.json",
+  "title": "Error",
+  "description": "The body of each non-200 answer: a stable code and a sentence. A refusal over a limit names the limit.",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": { "$ref": "#/$defs/errorBody" }
+  },
+  "$defs": {
+    "errorBody": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "description": "A stable code, e.g. invalid_request, run_failed, tool_failed, no_fixture, no_fake, timeout, not_found, limit_reached."
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "limit": { "type": "string", "minLength": 1 },
+        "max": { "type": "number" },
+        "current": { "type": "number" }
+      },
+      "if": { "properties": { "code": { "const": "limit_reached" } } },
+      "then": { "required": ["limit", "max", "current"] }
+    }
+  }
+}

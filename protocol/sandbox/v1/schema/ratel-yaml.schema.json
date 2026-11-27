@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/ratel-yaml.schema.json",
+  "title": "RatelYaml",
+  "description": "The parsed ratel.yaml of one agent. It holds the configuration. The Dockerfile holds the environment. Ratel stores the parsed file on each sandbox version and renders the input editor and the parameter controls from it. Unknown fields are refused, so a typo fails before a build.",
+  "type": "object",
+  "required": ["name", "input"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "description": "The name of the agent: lowercase letters, digits and hyphens."
+    },
+    "image": {
+      "description": "How to get the image. A build (dockerfile and context, relative to ratel.yaml) or an existing image reference. Absent: a build of ./Dockerfile in the folder of ratel.yaml.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dockerfile": { "$ref": "#/$defs/relativePath", "default": "Dockerfile" },
+            "context": { "$ref": "#/$defs/relativePath", "default": "." }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["ref"],
+          "additionalProperties": false,
+          "properties": { "ref": { "type": "string", "minLength": 1, "pattern": "^[^\\s]+$" } }
+        }
+      ]
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["http", "command"], "default": "http" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8080, "description": "HTTP mode: the port of $PORT." },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Command mode: the command (exec form). It reads the request on stdin and writes the response on stdout."
+        },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600, "default": 300 }
+      },
+      "if": { "required": ["mode"], "properties": { "mode": { "const": "command" } } },
+      "then": { "required": ["command"] }
+    },
+    "input": {
+      "type": "object",
+      "required": ["example"],
+      "additionalProperties": false,
+      "properties": {
+        "example": { "description": "Any JSON. The smoke check of each version runs it with simulated tools." },
+        "schema": { "type": "object", "description": "An optional JSON schema of the input." }
+      }
+    },
+    "params": {
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$" },
+      "additionalProperties": { "$ref": "#/$defs/param" }
+    },
+    "secrets": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "The names of the secrets. Never values. The prefixes RATEL_, AWS_ and BOAT_ are reserved.",
+      "items": { "type": "string", "pattern": "^(?!RATEL_|AWS_|BOAT_)[A-Z_][A-Z0-9_]{0,127}$" }
+    },
+    "tools": {
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,128}$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "mode": { "enum": ["simulated", "recorded", "live"], "default": "simulated" } }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "type": "array",
+          "uniqueItems": true,
+          "description": "The domains that the container can reach. A leading *. allows the subdomains.",
+          "items": {
+            "type": "string",
+            "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativePath": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$" },
+    "param": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["string", "number", "boolean", "enum"] },
+        "default": { "type": ["string", "number", "boolean"] },
+        "description": { "type": "string" },
+        "options": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": ["string", "number"] } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "enum" } } },
+          "then": { "required": ["options"] },
+          "else": { "not": { "required": ["options"] } }
+        },
+        { "if": { "required": ["default"], "properties": { "type": { "const": "string" } } }, "then": { "properties": { "default": { "type": "string" } } } },
+        { "if": { "required": ["default"], "properties": { "type": { "const": "number" } } }, "then": { "properties": { "default": { "type": "number" } } } },
+        { "if": { "required": ["default"], "properties": { "type": { "const": "boolean" } } }, "then": { "properties": { "default": { "type": "boolean" } } } }
+      ]
+    }
+  }
+}

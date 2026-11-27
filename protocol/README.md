@@ -23,6 +23,14 @@ Both versions publish the `IntentGraph` usage-ranking shape — a producer contr
 the local learner and Ratel Cloud, not a synced endpoint
 ([ADR-0014](../docs/adr/0014-adaptive-usage-ranking.md)).
 
+## Sandbox contract
+
+`sandbox/v1/` is a separate contract: how Ratel runs the Docker image of an agent. The
+container answers `GET /ratel/health` and `POST /ratel/run` on `$PORT` (HTTP mode), or reads
+the request on stdin and writes the response on stdout (command mode). It has JSON schemas for
+the run request, the run response, the error and `ratel.yaml`, and its own conformance vectors
+and verifier. See [`sandbox/v1/README.md`](sandbox/v1/README.md).
+
 ## Versioning
 
 Each **major** version is a subfolder. Preview versions may change before graduation. Within a
