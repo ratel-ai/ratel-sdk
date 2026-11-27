@@ -58,9 +58,6 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   write("src/rankers/python/pyproject.toml", `[project]\nname = "ratel-ai-rankers-plugin"\nversion = "${pyVersion}"\n`);
   write("src/rankers/python/native/Cargo.toml", cargo("ratel-rankers-python-native"));
   write("src/rankers/python/CHANGELOG.md", changelog(version));
-  // cloud-sdk: the pure-HTTP Ratel Cloud client — an independent npm unit.
-  write("src/cloud-sdk/ts/package.json", json("@ratel-ai/cloud-sdk"));
-  write("src/cloud-sdk/ts/CHANGELOG.md", changelog(version));
 
   return { root, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -77,7 +74,6 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("mastra-v0.1.0-rc.1"), { unit: "mastra", version: "0.1.0-rc.1" });
   assert.deepEqual(parseTag("rankers-ts-v0.1.0-rc.1"), { unit: "rankers-ts", version: "0.1.0-rc.1" });
   assert.deepEqual(parseTag("rankers-py-v0.1.0"), { unit: "rankers-py", version: "0.1.0" });
-  assert.deepEqual(parseTag("cloud-sdk-v0.7.0-rc.4"), { unit: "cloud-sdk", version: "0.7.0-rc.4" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {
@@ -108,18 +104,6 @@ test("mastra rc tag passes when the adapter package + its changelog match", () =
     assert.equal(r.ok, true, r.errors.join("; "));
     assert.equal(r.unit, "mastra");
     assert.equal(r.version, "0.1.0-rc.1");
-    assert.equal(r.distTag, "rc");
-  } finally {
-    repo.cleanup();
-  }
-});
-
-test("cloud-sdk rc tag passes when the package + its changelog match", () => {
-  const repo = makeRepo("0.7.0-rc.4");
-  try {
-    const r = checkReleaseTag("cloud-sdk-v0.7.0-rc.4", { root: repo.root });
-    assert.equal(r.ok, true, r.errors.join("; "));
-    assert.equal(r.unit, "cloud-sdk");
     assert.equal(r.distTag, "rc");
   } finally {
     repo.cleanup();
