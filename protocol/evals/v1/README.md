@@ -7,7 +7,8 @@ The wire contract to start and read an eval run, and to compare it with a pinned
 
 | Schema | Use |
 |---|---|
-| `start-experiment.request`, `start-experiment.response` | `POST /evals/experiments` (permission `evals:write`) |
+| `start-runs.request`, `start-runs.response` | `POST /evals/runs` (permission `evals:write`): one run for each eval |
+| `start-experiment.request`, `start-experiment.response` | `POST /evals/experiments` (permission `evals:write`): one experiment over the suite |
 | `experiment` | `GET /evals/experiments/{id}` (permission `evals:read`) |
 | `pin-baseline.request`, `baseline` | `GET`, `PUT` and `DELETE /evals/baseline` (`evals:read`, the others `evals:write`) |
 | `comparison` | `GET /evals/experiments/{id}/comparison` (`evals:read`) |
@@ -42,6 +43,25 @@ from pass to fail, else `inconclusive` when a compared case is invalid (or none 
 `removed` and does not decide. A case is `excluded` when the scorers of its eval differ between the
 two runs: it does not decide, and the comparison can still have a verdict. The refusals (409) are
 `no_baseline`, `same_experiment`, `not_completed` and `scorers_differ`.
+
+## Runs of one eval
+
+`POST /evals/runs` starts one run for each eval, or for each eval of `evals`. A run belongs to one
+eval: it uses the dataset of the eval, its runtime (its pinned version, else the newest ready version
+of its sandbox) and its scorers. A query dataset (the newest traces, the traces of a task, an RQL
+query, or a choice of Ratel) is resolved when the run starts, and the run keeps its rows. Each change
+of the request applies to these runs only: `dataset`, added `rows`, `scorers`, `sandboxVersion`,
+`params`, `matrix` and `trials`. A `sandboxVersion` applies only to the evals of its sandbox: each
+other eval runs on its own runtime, and its part has a `note`. A `matrix` gives a list of values for
+some params: a run has one variant for each combination, at most 12. The answer has a part for each
+eval: a run (`experimentId`, read it at `GET /evals/experiments/{id}`) or a refusal (`error`,
+`message`). `skipped` has the evals that were left out (no row, or no gating scorer) when `evals` is
+absent. A read of a run of one eval also has `evalId`, `dataset`, `changes`, `score` (the mean of the
+scores of its variants), `delta` (against the pinned baseline of the eval, or the reason why there is
+none) and `variants`, each with its own score and delta. A trial has its `variant`.
+
+`PUT /evals/baseline` pins a run of one eval as the baseline of that eval, and a suite experiment as
+the baseline of the project. `GET /evals/baseline` also gives `evals`: the pin of each eval.
 
 ## Compatibility
 

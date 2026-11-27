@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/start-runs.response.schema.json",
+  "title": "The runs that started",
+  "description": "The answer of POST /api/v1/evals/runs (201, at least one run started). Each part of `runs` is a run of one eval (read it at GET /evals/experiments/{experimentId}), or an eval that was refused with the reason. `skipped` has each eval that was left out. When no run starts, the answer is an error with `runs` and `skipped`.",
+  "type": "object",
+  "required": [
+    "runs"
+  ],
+  "properties": {
+    "runs": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "evalId",
+              "eval",
+              "experimentId",
+              "state",
+              "url"
+            ],
+            "properties": {
+              "evalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "eval": {
+                "type": "string"
+              },
+              "experimentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "enum": [
+                  "running",
+                  "completed"
+                ]
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "variants": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              },
+              "note": {
+                "type": "string",
+                "description": "Why a change of the request did not apply to this eval."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "evalId",
+              "eval",
+              "error",
+              "message"
+            ],
+            "properties": {
+              "evalId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "eval": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "evalId",
+          "eval",
+          "error",
+          "message"
+        ],
+        "properties": {
+          "evalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eval": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

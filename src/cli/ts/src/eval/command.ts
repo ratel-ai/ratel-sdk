@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { resolvePlatformConfig } from "@ratel-ai/sdk/platform";
-import { type ParamValue, parseParams } from "../args.js";
+import { type ParamValue, parseMatrix, parseParams } from "../args.js";
 import { loadConfig } from "../config.js";
 import { CliError } from "../errors.js";
 import { oneLine } from "../output.js";
@@ -16,25 +16,30 @@ import {
   evalRowsOf,
   exitCodeOf,
   pinBaseline,
+  type RunPart,
   requireBaseline,
-  startEvalRun,
+  startEvalRuns,
   VERDICT_EXIT,
   waitForEvalRun,
+  worstExit,
 } from "./run.js";
 
-export const EVAL_USAGE = `Usage: ratel eval run [--version <id|latest>] [--eval <name>]... [--trials <n>] [-f ratel.yaml]
-                      [--param name=value]... [--label <label>] [--name <name>] [--timeout <seconds>]
-                      [--json] [--no-wait] [--compare-baseline]
+export const EVAL_USAGE = `Usage: ratel eval run [--version <id|latest>] [--eval <name>]... [--dataset <name>] [--trials <n>]
+                      [-f ratel.yaml] [--param name=value[,value]...]... [--label <label>] [--name <name>]
+                      [--timeout <seconds>] [--json] [--no-wait] [--compare-baseline]
        ratel eval baseline pin <experiment-id> [--json]
 
-Runs the suite (each eval of the sandbox) on an image version, or only each --eval. The default
-version is the newest ready version of the sandbox of ratel.yaml (its name), or of the evals named. It prints the
-counts of each case and the score of each eval. With --compare-baseline, prints the verdict against
-the pinned baseline, and it gives the exit code. --trials is the trials of each case. Default: the
-trials of each eval. --param takes a parameter that ratel.yaml declares. The defaults of ratel.yaml
-apply. --timeout is the longest wait for the end of the run. Default: trials (20, the most, when not
-given) times run.timeoutSeconds of ratel.yaml (300 when not given), plus 600. At the deadline it exits
-with 4.
+Starts one run for each eval of the sandbox of ratel.yaml, or one run of each --eval. Each eval runs
+on its own runtime: its pinned version, else the newest ready version of its sandbox. --version runs
+the evals of its sandbox on that version, and only those: an eval of another sandbox keeps its own.
+--dataset runs the evals on another dataset, for these runs only. It prints the counts of each case
+and the score of each eval. With --compare-baseline, prints the verdict against the pinned baseline
+of each eval, and it gives the exit code. --trials is the trials of each case. Default: the trials of
+each eval. --param takes a parameter that ratel.yaml declares, and the defaults of ratel.yaml apply.
+--param name=a,b,c gives a list of values: each run has one variant for each combination (at most 12).
+--timeout is the longest wait for the end of the runs. Default: trials (20, the most, when not given)
+times the variants times run.timeoutSeconds of ratel.yaml (300 when not given), plus 600. At the
+deadline it exits with 4. With more evals the exit code is a fail, else an invalid, else a refusal.
 
   RATEL_API_KEY   a project key with the permissions evals:read and evals:write
   RATEL_BASE_URL  the API root of Ratel, with /api/v1 (default https://app.ratel.sh/api/v1)
@@ -48,6 +53,8 @@ const MAX_TRIALS = 20;
 /** The most --eval names of one run, and the longest name (protocol/evals/v1 start-experiment). */
 const MAX_EVALS = 100;
 const MAX_EVAL_NAME = 200;
+/** The most combinations of a matrix (protocol/evals/v1 start-runs). */
+const MAX_VARIANTS = 12;
 /** The run.timeoutSeconds of ratel.yaml when it is not given (protocol/sandbox/v1). */
 const DEFAULT_RUN_TIMEOUT_SECONDS = 300;
 /** The time on top of the trials: the queue and the scorers. */
@@ -97,7 +104,19 @@ export async function evalCommand(argv: string[], io: EvalIo): Promise<number> {
       return EVAL_EXIT.pass;
     }
     if (options.compare) await requireBaseline({ url, apiKey });
-    const started = await startEvalRun({ ...options, url, apiKey });
+    const { runs, skipped, legacy } = await startEvalRuns({ ...options, url, apiKey });
+    if (!legacy) {
+      return await eachEval(
+        runs,
+        skipped,
+        options,
+        { url, apiKey },
+        io,
+        json ? print : null,
+        document,
+      );
+    }
+    const started = legacy;
     if (options.compare) run = { experimentId: started.experimentId, url: started.url };
     if (!options.wait) {
       if (json) print(withParams(started));
@@ -139,6 +158,10 @@ type Options = {
   name?: string;
   /** The names of the evals to run. Absent: the suite. */
   evals?: string[];
+  /** Another dataset for these runs only. */
+  dataset?: string;
+  /** For some params, a list of values (`--param name=a,b`). */
+  matrix?: Record<string, ParamValue[]>;
   wait: boolean;
   compare: boolean;
   /** The longest wait for the end of the run. */
@@ -168,11 +191,12 @@ async function read(argv: string[]): Promise<Options | string> {
   if (positionals[0] === "baseline") {
     const [, command, pin, ...rest] = positionals;
     if (command !== "pin" || !pin || rest.length > 0) return "Unknown command.";
-    const lists = ["json", "param", "eval"];
+    const lists = ["json", "param", "eval", "dataset"];
     const other = Object.keys(values).find((name) => !lists.includes(name));
     if (other) return `--${other} is not an option of baseline pin.`;
     if (values.param.length > 0) return "--param is not an option of baseline pin.";
     if (values.eval.length > 0) return "--eval is not an option of baseline pin.";
+    if (values.dataset !== undefined) return "--dataset is not an option of baseline pin.";
     return { ...base, pin };
   }
   if (positionals.length !== 1 || positionals[0] !== "run") return "Unknown command.";
@@ -185,7 +209,7 @@ async function read(argv: string[]): Promise<Options | string> {
   if (timeout !== undefined && !(Number.isInteger(timeout) && timeout >= 1)) {
     return "--timeout is a whole number of seconds from 1.";
   }
-  for (const flag of ["label", "name"] as const) {
+  for (const flag of ["label", "name", "dataset"] as const) {
     if (values[flag] !== undefined && values[flag].trim() === "") return `--${flag} is empty.`;
   }
   if (values.eval.some((name) => name.trim() === "")) return "--eval is empty.";
@@ -200,16 +224,23 @@ async function read(argv: string[]): Promise<Options | string> {
     if (error instanceof CliError) return error.message;
     throw error;
   }
-  const { params, runTimeoutSeconds, sandbox } = config;
+  const { params, matrix, runTimeoutSeconds, sandbox } = config;
+  const variants = Object.values(matrix ?? {}).reduce((product, list) => product * list.length, 1);
+  if (variants > MAX_VARIANTS) {
+    return `--param gives ${variants} combinations. A run has at most ${MAX_VARIANTS}.`;
+  }
   const waitSeconds =
     // With no --trials each eval uses its own trials, up to MAX_TRIALS: the wait covers the most.
-    timeout ?? (trials ?? MAX_TRIALS) * runTimeoutSeconds + WAIT_MARGIN_SECONDS;
+    timeout ?? (trials ?? MAX_TRIALS) * variants * runTimeoutSeconds + WAIT_MARGIN_SECONDS;
   return {
     ...base,
     timeoutMs: waitSeconds * 1000,
     ...(trials ? { trials } : {}),
     ...(params ? { params } : {}),
+    ...(matrix && Object.keys(matrix).length > 0 ? { matrix } : {}),
+    // The sandbox of ratel.yaml chooses the evals. A version names its sandbox itself.
     ...(sandbox && base.sandboxVersion === "latest" ? { sandbox } : {}),
+    ...(values.dataset ? { dataset: values.dataset } : {}),
     ...(values.label ? { label: values.label } : {}),
     ...(values.name ? { name: values.name } : {}),
     ...(values.eval.length > 0 ? { evals: values.eval } : {}),
@@ -224,7 +255,12 @@ async function read(argv: string[]): Promise<Options | string> {
 async function readConfig(
   file: string | undefined,
   flags: string[],
-): Promise<{ params?: Record<string, ParamValue>; runTimeoutSeconds: number; sandbox?: string }> {
+): Promise<{
+  params?: Record<string, ParamValue>;
+  matrix?: Record<string, ParamValue[]>;
+  runTimeoutSeconds: number;
+  sandbox?: string;
+}> {
   const path = file ?? "ratel.yaml";
   if (file === undefined && flags.length === 0 && !existsSync(path)) {
     return { runTimeoutSeconds: DEFAULT_RUN_TIMEOUT_SECONDS };
@@ -237,8 +273,10 @@ async function readConfig(
     );
   }
   const { config } = await loadConfig(path);
+  const { single, matrix } = parseMatrix(config, flags);
   return {
-    params: parseParams(config, flags),
+    params: parseParams(config, single),
+    ...(Object.keys(matrix).length > 0 ? { matrix } : {}),
     runTimeoutSeconds: config.run?.timeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS,
     sandbox: config.name,
   };
@@ -254,6 +292,7 @@ function parse(argv: string[]) {
       file: { type: "string", short: "f" },
       param: { type: "string", multiple: true, default: [] as string[] },
       eval: { type: "string", multiple: true, default: [] as string[] },
+      dataset: { type: "string" },
       label: { type: "string" },
       name: { type: "string" },
       timeout: { type: "string" },
@@ -263,6 +302,100 @@ function parse(argv: string[]) {
       help: { type: "boolean", short: "h" },
     },
   });
+}
+
+/**
+ * The runs of more evals (`POST /evals/runs`): waits for each run, reads its comparison with
+ * `--compare-baseline`, and prints one part for each eval. A run that fails to end or to be read is
+ * a part with its error; the other runs go on. The exit code is the worst of the parts.
+ */
+async function eachEval(
+  runs: readonly RunPart[],
+  skipped: readonly RunPart[],
+  options: Options,
+  address: { url: string; apiKey: string },
+  io: EvalIo,
+  print: ((value: unknown) => void) | null,
+  document: (experiment: Experiment) => Record<string, unknown>,
+): Promise<number> {
+  const deadline = Date.now() + options.timeoutMs;
+  const parts: Array<Record<string, unknown>> = [];
+  const codes: number[] = [];
+  const lines: string[] = [];
+  const named = (part: RunPart) => ({
+    eval: part.eval,
+    ...(part.evalId ? { evalId: part.evalId } : {}),
+    ...(part.note ? { note: part.note } : {}),
+  });
+  for (const part of runs) {
+    const title = `eval ${oneLine(part.eval ?? "?")}`;
+    if (part.note) lines.push(`${title}: ${oneLine(part.note)}`);
+    if (!part.experimentId) {
+      parts.push({ ...named(part), error: part.error, message: part.message });
+      codes.push(EVAL_EXIT.refused);
+      lines.push(`${title}: refused: ${oneLine(part.message ?? part.error ?? "")}`);
+      continue;
+    }
+    const id = part.experimentId;
+    if (!options.wait) {
+      parts.push({ ...named(part), experimentId: id, state: part.state, url: part.url });
+      codes.push(EVAL_EXIT.pass);
+      lines.push(`${title}: ${oneLine(id)}`);
+      continue;
+    }
+    io.stderr(`ratel: experiment ${oneLine(id)} of ${title} started\n`);
+    try {
+      const timeoutMs = Math.max(1, deadline - Date.now());
+      const experiment = await waitForEvalRun(id, address, { timeoutMs });
+      if (options.compare) {
+        const comparison = await compareEvalRun(id, address);
+        parts.push({ ...named(part), ...document({ ...experiment, comparison }) });
+        codes.push(VERDICT_EXIT[comparison.verdict]);
+        lines.push(`${title}:`, report(experiment).trimEnd(), compared(comparison).trimEnd());
+      } else {
+        parts.push({ ...named(part), ...document(experiment) });
+        codes.push(exitCodeOf(experiment));
+        lines.push(`${title}:`, report(experiment).trimEnd());
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const body = error instanceof EvalCallError ? error.body : {};
+      parts.push({
+        ...named(part),
+        error: "eval_run_failed",
+        ...body,
+        message,
+        experimentId: id,
+        url: part.url,
+      });
+      codes.push(error instanceof EvalCallError ? error.exitCode : EVAL_EXIT.unavailable);
+      lines.push(`${title}: ${oneLine(message)}`);
+    }
+  }
+  for (const part of skipped) {
+    lines.push(
+      `eval ${oneLine(part.eval ?? "?")}: left out: ${oneLine(part.message ?? part.error ?? "")}`,
+    );
+  }
+  const code = runs.length === 0 ? EVAL_EXIT.refused : worstExit(codes);
+  if (print) {
+    print({
+      runs: parts,
+      ...(skipped.length > 0
+        ? {
+            skipped: skipped.map((part) => ({
+              ...named(part),
+              error: part.error,
+              message: part.message,
+            })),
+          }
+        : {}),
+      ...(options.matrix ? { matrix: options.matrix } : {}),
+    });
+  } else {
+    io.stdout(`${lines.join("\n")}\n`);
+  }
+  return code;
 }
 
 function isAddress(text: string): boolean {

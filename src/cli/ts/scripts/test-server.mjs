@@ -154,6 +154,38 @@ const server = createServer(async (req, res) => {
       evaluate(version, experiment, body.trials ?? 3);
       return send(201, { experimentId, state: "running", url: experiment.url });
     }
+    if (req.method === "POST" && path === "/api/v1/evals/runs") {
+      // One eval, "Cases", whose rows are cases.json. A matrix runs each combination after the other.
+      const body = await json(req);
+      const version = body.sandboxVersion && body.sandboxVersion !== "latest"
+        ? versions.get(body.sandboxVersion)
+        : [...versions.values()].reverse().find((v) => v.status === "ready");
+      if (!version || version.status !== "ready") return send(404, { error: "not_found", message: "No ready version." });
+      if (CASES.length === 0) return send(409, { error: "no_cases", message: "The eval has no case." });
+      const combos = combinations(body.matrix ?? {});
+      if (combos.length > 12) return send(400, { error: "invalid_matrix", message: "At most 12 combinations." });
+      const experimentId = `e_${experiments.size + 1}`;
+      const params = { ...(body.params ?? {}), ...combos[0] };
+      const experiment = {
+        experimentId,
+        state: "running",
+        url: `${origin}/evals/experiments/${experimentId}`,
+        sandboxVersionId: version.versionId,
+        name: body.name ?? null,
+        params,
+        evalId: "00000000-0000-4000-8000-0000000000e1",
+        variants: combos.map((values, index) => ({ index, values, params: { ...(body.params ?? {}), ...values } })),
+        counts: { pass: 0, fail: 0, invalid: 0, open: 0 },
+        cases: [],
+      };
+      experiments.set(experimentId, experiment);
+      log(`  run ${experimentId} of Cases on ${version.versionId}: ${combos.length} variant(s)`);
+      evaluate(version, experiment, body.trials ?? 3);
+      return send(201, {
+        runs: [{ evalId: experiment.evalId, eval: "Cases", experimentId, state: "running", url: experiment.url, variants: combos.length }],
+        skipped: [],
+      });
+    }
     if (req.method === "GET" && (m = /^\/api\/v1\/evals\/experiments\/([^/]+)$/.exec(path))) {
       const experiment = experiments.get(m[1]);
       return experiment ? send(200, experiment) : send(404, { error: "not_found", message: "No such experiment." });
@@ -250,6 +282,15 @@ async function evaluate(version, experiment, trials) {
     experiment.counts[key] = experiment.cases.reduce((n, c) => n + c.counts[key], 0);
   }
   experiment.state = "completed";
+}
+
+/** Each combination of a matrix: one empty combination with none. */
+function combinations(matrix) {
+  let out = [{}];
+  for (const name of Object.keys(matrix).sort()) {
+    out = out.flatMap((one) => matrix[name].map((value) => ({ ...one, [name]: value })));
+  }
+  return out;
 }
 
 /** The verdict rule of protocol/evals/v1. */

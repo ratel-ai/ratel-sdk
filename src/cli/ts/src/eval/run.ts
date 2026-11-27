@@ -17,7 +17,30 @@ export type EvalRunOptions = {
   name?: string;
   /** The names of the evals to run. Absent: the suite. */
   evals?: string[];
+  /** Another dataset for these runs only (a name or an id). */
+  dataset?: string;
+  /** For some params, a list of values: a run has one variant for each combination. */
+  matrix?: Record<string, Array<string | number | boolean>>;
 };
+
+/** The run of one eval as `POST /evals/runs` answers it: started, or refused with the reason. */
+export type RunPart = {
+  eval: string | null;
+  evalId?: string;
+  experimentId?: string;
+  state?: string;
+  url?: string;
+  variants?: number;
+  note?: string;
+  error?: string;
+  message?: string;
+};
+
+/**
+ * The runs that started: one for each eval (`runs`), with the evals that Ratel left out. `legacy`
+ * is an answer with one experiment and no `runs`: an older Ratel.
+ */
+export type StartedRuns = { runs: RunPart[]; skipped: RunPart[]; legacy: StartedExperiment | null };
 
 export type Counts = { pass: number; fail: number; invalid: number; open: number };
 
@@ -121,6 +144,67 @@ export async function startEvalRun({
   return answer as StartedExperiment;
 }
 
+/**
+ * Starts one run for each eval, or for each eval of `evals` (`POST /evals/runs`). A version of one
+ * sandbox applies only to the evals of that sandbox: Ratel runs each other eval on its own runtime.
+ */
+export async function startEvalRuns({
+  url,
+  apiKey,
+  sandboxVersion,
+  sandbox,
+  trials,
+  params,
+  label,
+  name,
+  evals,
+  dataset,
+  matrix,
+}: EvalRunOptions): Promise<StartedRuns> {
+  const body = {
+    // `latest` is the default: each eval keeps its own runtime (a pinned version, or its newest).
+    ...(sandboxVersion !== "latest" ? { sandboxVersion } : {}),
+    ...(sandbox ? { sandbox } : {}),
+    ...(trials ? { trials } : {}),
+    ...(params ? { params } : {}),
+    ...(label ? { label } : {}),
+    ...(name ? { name } : {}),
+    ...(evals?.length ? { evals } : {}),
+    ...(dataset ? { dataset } : {}),
+    ...(matrix && Object.keys(matrix).length > 0 ? { matrix } : {}),
+  };
+  const answer = await call("POST", `${origin(url)}/evals/runs`, apiKey, body);
+  if (Array.isArray(answer.runs)) {
+    const parts = answer.runs.filter(isPart);
+    if (parts.length !== answer.runs.length) throw unreadable();
+    const skipped = Array.isArray(answer.skipped) ? answer.skipped.filter(isPart) : [];
+    return { runs: parts, skipped, legacy: null };
+  }
+  if (typeof answer.experimentId !== "string") throw unreadable();
+  return { runs: [], skipped: [], legacy: answer as StartedExperiment };
+}
+
+/** The exit code of runs of more evals: a fail, else an invalid, else a refusal, else no answer. */
+export function worstExit(codes: readonly number[]): number {
+  for (const code of [
+    EVAL_EXIT.fail,
+    EVAL_EXIT.invalid,
+    EVAL_EXIT.refused,
+    EVAL_EXIT.unavailable,
+  ]) {
+    if (codes.includes(code)) return code;
+  }
+  return EVAL_EXIT.pass;
+}
+
+function isPart(value: unknown): value is RunPart {
+  return (
+    isObject(value) &&
+    (value.eval === null || typeof value.eval === "string") &&
+    (typeof value.experimentId === "string" || typeof value.error === "string")
+  );
+}
+
 /** Reads the experiment until it is completed, or throws `wait_timeout` (exit 4) at the deadline. */
 export async function waitForEvalRun(
   experimentId: string,
@@ -151,11 +235,16 @@ export async function waitForEvalRun(
   }
 }
 
-/** Throws when no baseline is pinned: a run costs money, and it would have nothing to compare. */
+/**
+ * Throws when no baseline is pinned: a run costs money, and it would have nothing to compare. A
+ * pin of the project, or a pin of an eval (`evals`), is a baseline.
+ */
 export async function requireBaseline({ url, apiKey }: Address): Promise<void> {
   const answer = await call("GET", `${origin(url)}/evals/baseline`, apiKey);
+  const ofEvals = Array.isArray(answer.evals) ? answer.evals.filter(isBaseline) : [];
+  if (answer.baseline === null && ofEvals.length > 0) return;
   if (answer.baseline === null) {
-    const message = "The project has no pinned baseline. Pin an experiment first.";
+    const message = "The project has no pinned baseline. Pin a run of each eval first.";
     throw new EvalCallError(message, EVAL_EXIT.refused, { error: "no_baseline" });
   }
   if (!isBaseline(answer.baseline)) throw unreadable();

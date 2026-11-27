@@ -191,6 +191,216 @@
         "null"
       ],
       "format": "date-time"
+    },
+    "evalId": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "format": "uuid"
+        }
+      ],
+      "description": "The eval of a run of one eval (POST /evals/runs). Null for a suite experiment."
+    },
+    "dataset": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "datasetId",
+            "name",
+            "kind",
+            "rows"
+          ],
+          "properties": {
+            "datasetId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "fixed",
+                "last_traces",
+                "task_traces",
+                "rql",
+                "choose"
+              ]
+            },
+            "settings": {
+              "type": "object"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "resolvedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      ],
+      "description": "The dataset as the run used it: a query dataset is resolved when the run starts, and the run keeps its rows. Null before datasets."
+    },
+    "changes": {
+      "type": "object",
+      "description": "What the run changed for itself only: datasetId, extraRows, scorers, sandboxVersionId, params, matrix, trials."
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      ],
+      "description": "For a run of one eval: the mean of the scores of its variants."
+    },
+    "delta": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "score"
+          ],
+          "properties": {
+            "score": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "reason",
+            "message"
+          ],
+          "properties": {
+            "reason": {
+              "enum": [
+                "scorers_differ",
+                "not_in_baseline"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "description": "For a run of one eval: its score minus the score of the pinned baseline of the eval, or the reason why there is none."
+    },
+    "variants": {
+      "type": "array",
+      "description": "For a run of one eval: one variant for each combination of the matrix (one with no matrix). At most 12 items.",
+      "items": {
+        "type": "object",
+        "required": [
+          "index",
+          "values",
+          "params",
+          "counts",
+          "score"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "values": {
+            "type": "object"
+          },
+          "params": {
+            "type": "object"
+          },
+          "counts": {
+            "$ref": "#/$defs/counts"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            ]
+          },
+          "scorers": {
+            "type": "array"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "score"
+                ],
+                "properties": {
+                  "score": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -1,
+                        "maximum": 1
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "reason",
+                  "message"
+                ],
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "scorers_differ",
+                      "not_in_baseline"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -295,6 +505,11 @@
               }
             }
           }
+        },
+        "variant": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The variant of the trial. 0 with no matrix."
         }
       }
     },

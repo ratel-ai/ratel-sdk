@@ -32,6 +32,40 @@ export function parseParams(
   return params;
 }
 
+/**
+ * The `--param` flags of an eval run: a value with commas is a list of values for the matrix
+ * (`--param tone=dry,warm`), each one typed as ratel.yaml declares it. The other flags stay as
+ * they are, for `parseParams`. A list has each value one time.
+ */
+export function parseMatrix(
+  config: RatelConfig,
+  flags: readonly string[],
+): { single: string[]; matrix: Record<string, ParamValue[]> } {
+  const declared = config.params ?? {};
+  const single: string[] = [];
+  const matrix: Record<string, ParamValue[]> = {};
+  for (const flag of flags) {
+    const [name, value] = split("--param", flag);
+    if (!value.includes(",")) {
+      single.push(flag);
+      continue;
+    }
+    const spec = declared[name];
+    if (!spec) {
+      const names = Object.keys(declared);
+      throw new UsageError(
+        `--param ${name}: ratel.yaml declares no such parameter${names.length ? ` (${names.join(", ")})` : ""}`,
+      );
+    }
+    const values = value.split(",").map((one) => typed(name, spec, one));
+    if (new Set(values).size !== values.length) {
+      throw new UsageError(`--param ${name}: a value is given two times`);
+    }
+    matrix[name] = values;
+  }
+  return { single, matrix };
+}
+
 /** The input of a run: `--input` as JSON (else as text), `@file`, or `input.example`. */
 export function parseInput(config: RatelConfig, flag: string | undefined): unknown {
   if (flag === undefined) return config.input.example;

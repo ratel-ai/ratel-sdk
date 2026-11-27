@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/start-runs.request.schema.json",
+  "title": "The request to start a run of each eval",
+  "description": "The body of POST {RATEL_BASE_URL}/evals/runs (permission evals:write). It starts one run for each eval, or for each eval of `evals`. Each change applies to these runs only.",
+  "type": "object",
+  "properties": {
+    "evals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "description": "The evals to run, by name or id. Absent: each eval of `sandbox`, else each eval of the project. An eval with no row or no gating scorer is left out (`skipped`). At most 100 items."
+    },
+    "sandbox": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The sandbox of the caller (the name of its ratel.yaml). It chooses the evals when `evals` is absent."
+    },
+    "sandboxVersion": {
+      "anyOf": [
+        {
+          "const": "latest"
+        },
+        {
+          "type": "string",
+          "format": "uuid"
+        }
+      ],
+      "description": "A version id, or `latest`. A version applies only to the evals of its sandbox: each other eval runs on its own runtime, and its part has a `note`. Absent: each eval runs on its own runtime (its pinned version, else the newest ready version of its sandbox)."
+    },
+    "dataset": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Another dataset (name or id) for these runs."
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "input": {},
+          "expectedOutput": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 20000
+          }
+        }
+      },
+      "description": "Rows of typed values that each run adds to the rows of its dataset. At most 500 items."
+    },
+    "scorers": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Other scorers of the library: {source: project, scorerId}, {source: predefined, key, value?}, with gating. At most 50 items."
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      },
+      "description": "Values that go over the default params of each eval."
+    },
+    "matrix": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        "description": "At most 12 items."
+      },
+      "description": "For some params, a list of values. A run has one variant for each combination: at most 12 combinations, else 400 invalid_matrix."
+    },
+    "trials": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "description": "The trials of each row in each variant. Absent: the trials of each eval."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Only the rows of a fixed dataset with this label."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The name of each run."
+    }
+  }
+}

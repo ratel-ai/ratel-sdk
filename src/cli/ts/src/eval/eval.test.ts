@@ -200,7 +200,7 @@ describe("exit codes", () => {
 it("sends the options with the key", async () => {
   await ratel(["run", "--version", ID, "--trials", "5", "-f", YAML, "--param", "model=x"]);
   expect(calls.map(({ method, path, auth }) => [method, path, auth])).toEqual([
-    ["POST", "/api/v1/evals/experiments", "Bearer rtl_key"],
+    ["POST", "/api/v1/evals/runs", "Bearer rtl_key"],
     ["GET", `/api/v1/evals/experiments/${ID}`, "Bearer rtl_key"],
   ]);
   expect(JSON.parse(calls[0]?.body ?? "")).toEqual({
@@ -223,7 +223,6 @@ it("sends --label and --name, and the defaults of ./ratel.yaml", async () => {
     join(folder, "ratel.yaml"),
   ]);
   expect(JSON.parse(calls[0]?.body ?? "")).toEqual({
-    sandboxVersion: "latest",
     sandbox: "support-demo",
     params: { model: "y", tone: "friendly" },
     label: "refunds",
@@ -244,15 +243,14 @@ it("--json with --compare-baseline has the parameter values, the verdict and the
   expect(document.comparison.changedCases).toEqual(comparison.changedCases);
 });
 
-it("latest is the newest ready version of the sandbox of ratel.yaml, not of the project", async () => {
+it("the sandbox of ratel.yaml chooses the evals, and each eval keeps its own runtime", async () => {
   // A project can have more than one sandbox: the run names the one of its ratel.yaml.
   for (const version of [[], ["--version", "latest"]]) {
     calls = [];
     await ratel(["run", ...version, "-f", YAML]);
-    expect(JSON.parse(calls[0]?.body ?? "")).toMatchObject({
-      sandboxVersion: "latest",
-      sandbox: "support-demo",
-    });
+    const body = JSON.parse(calls[0]?.body ?? "");
+    expect(body).toMatchObject({ sandbox: "support-demo" });
+    expect(body).not.toHaveProperty("sandboxVersion");
   }
   // A version id names its sandbox itself.
   calls = [];
@@ -260,9 +258,9 @@ it("latest is the newest ready version of the sandbox of ratel.yaml, not of the 
   expect(JSON.parse(calls[0]?.body ?? "")).not.toHaveProperty("sandbox");
 });
 
-it("the default is the latest version and the trials of Ratel", async () => {
+it("the default is the runtime and the trials of each eval", async () => {
   await ratel(["run"]);
-  expect(JSON.parse(calls[0]?.body ?? "")).toEqual({ sandboxVersion: "latest" });
+  expect(JSON.parse(calls[0]?.body ?? "")).toEqual({});
 });
 
 it("waits for the end, also after a read that failed", async () => {
@@ -389,7 +387,7 @@ describe("--compare-baseline", () => {
     await ratel(COMPARE);
     expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
       "GET /api/v1/evals/baseline",
-      "POST /api/v1/evals/experiments",
+      "POST /api/v1/evals/runs",
       `GET /api/v1/evals/experiments/${ID}`,
       `GET /api/v1/evals/experiments/${ID}/comparison`,
     ]);
@@ -592,13 +590,13 @@ describe("the suite and --eval", () => {
     reads = [{ status: 200, body: withDelta }];
     const { code } = await ratel(["run"]);
     expect(code).toBe(1);
-    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-experiment.request.latest"));
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-runs.request.each"));
   });
 
   it("--eval sends the names of the evals, in order", async () => {
     reads = [{ status: 200, body: withDelta }];
     await ratel(["run", "--eval", "Refunds", "--eval", "Tone", "--label", "refunds"]);
-    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-experiment.request.evals"));
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-runs.request.evals"));
   });
 
   it("--eval --json prints each eval with its score, counts, scorers and delta", async () => {
@@ -708,5 +706,105 @@ describe("the suite and --eval", () => {
     expect(code).toBe(0);
     expect(out).toContain("excluded: Tone stays friendly");
     expect(out).toContain("eval Refunds (v2): 66.7% score");
+  });
+});
+
+describe("a run of each eval (POST /evals/runs)", () => {
+  const runs = vector("start-runs.response.each");
+  const [refunds, tone] = runs.runs;
+  const answer = (parts: unknown[], skipped: unknown[] = []) => {
+    start = { status: 201, body: { runs: parts, skipped } };
+  };
+
+  it("--json prints one document with a part for each eval, and the worst exit code", async () => {
+    answer([refunds, { ...tone, experimentId: ID }]);
+    ended([3, 0, 0]);
+    const passed = await ratel(["run", "--json"]);
+    expect(passed.code).toBe(0);
+    expect(passed.out.trim().split("\n")).toHaveLength(1);
+    const document = JSON.parse(passed.out);
+    expect(document.runs.map(({ eval: name }: { eval: string }) => name)).toEqual([
+      "Refunds",
+      "Tone",
+    ]);
+    expect(document.runs[0]).toMatchObject({ evalId: refunds.evalId, experimentId: ID });
+    expect(document.runs[0].cases[0].counts.pass).toBe(3);
+    ended([2, 1, 0]);
+    expect((await ratel(["run", "--json"])).code).toBe(1);
+    ended([2, 0, 1]);
+    expect((await ratel(["run"])).code).toBe(2);
+  });
+
+  it("3: a refused eval is a part with its reason; the other evals still run", async () => {
+    answer(runs.runs, runs.skipped);
+    ended([3, 0, 0]);
+    const { code, out } = await ratel(["run", "--json"]);
+    expect(code).toBe(3);
+    const document = JSON.parse(out);
+    expect(document.runs[1]).toEqual({
+      eval: "Tone",
+      evalId: tone.evalId,
+      error: tone.error,
+      message: tone.message,
+    });
+    expect(document.skipped[0].eval).toBe(runs.skipped[0].eval);
+    const text = await ratel(["run"]);
+    expect(text.out).toContain(`eval Refunds:\ncase 0 (v1): 3 pass, 0 fail, 0 invalid`);
+    expect(text.out).toContain(`eval Tone: refused: ${tone.message}`);
+    expect(text.out).toContain(`eval ${runs.skipped[0].eval}: left out:`);
+  });
+
+  it("a version of another sandbox does not apply: the note says so", async () => {
+    const note = "The version is of the sandbox support-demo. This eval runs on billing-demo.";
+    answer([{ ...refunds, note }]);
+    ended([3, 0, 0]);
+    const { out } = await ratel(["run", "--version", ID]);
+    expect(out).toContain(`eval Refunds: ${note}`);
+    expect(JSON.parse(calls.find(({ method }) => method === "POST")?.body ?? "")).toEqual({
+      sandboxVersion: ID,
+    });
+  });
+
+  it("--dataset and --param name=a,b send another dataset and a matrix", async () => {
+    answer([refunds]);
+    await ratel([
+      "run",
+      "-f",
+      YAML,
+      "--dataset",
+      "Golden",
+      "--param",
+      "tone=dry,warm",
+      "--param",
+      "model=x,y",
+    ]);
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-runs.request.matrix"));
+  });
+
+  it.each([
+    [["run", "-f", YAML, "--param", "model=x,z"]],
+    [["run", "-f", YAML, "--param", "tone=a,a"]],
+    [["run", "-f", YAML, "--param", "tone=a,b,c,d,e,f,g", "--param", "model=x,y"]],
+    [["run", "--dataset", ""]],
+    [["baseline", "pin", ID, "--dataset", "Golden"]],
+  ])("3: wrong %j", async (args) => {
+    expect((await ratel(args)).code).toBe(3);
+    expect(calls).toEqual([]);
+  });
+
+  it("--compare-baseline reads the comparison of each run; a pin of an eval is a baseline", async () => {
+    baseline = { status: 200, body: vector("baseline.of-evals") };
+    answer([refunds]);
+    ended([3, 0, 0]);
+    const { code, out } = await ratel(["run", "--compare-baseline", "--json"]);
+    expect(code).toBe(1);
+    expect(JSON.parse(out).runs[0].comparison.verdict).toBe("regressed");
+  });
+
+  it("--no-wait prints the id of each run", async () => {
+    answer(runs.runs);
+    const { code, out } = await ratel(["run", "--no-wait"]);
+    expect(code).toBe(3);
+    expect(out).toContain(`eval Refunds: ${refunds.experimentId}`);
   });
 });
