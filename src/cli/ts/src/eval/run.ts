@@ -5,6 +5,7 @@ export type EvalRunOptions = {
   apiKey: string;
   /** An image version id, or `latest`. */
   sandboxVersion: string;
+  /** The trials of each case. Absent: the trials of each eval. */
   trials?: number;
   /** The parameter values of each run. */
   params?: Record<string, string | number | boolean>;
@@ -12,6 +13,8 @@ export type EvalRunOptions = {
   label?: string;
   /** The name of the experiment. */
   name?: string;
+  /** The names of the evals to run. Absent: the suite. */
+  evals?: string[];
 };
 
 export type Counts = { pass: number; fail: number; invalid: number; open: number };
@@ -26,6 +29,22 @@ export type Experiment = {
   cases: Array<{ caseId: string; name: string; number: number; counts: Counts }>;
   [field: string]: unknown;
 };
+
+/**
+ * One eval of the run, as `--json` prints it: the score (the mean pass rate of its scorers over the
+ * valid trials, 0 to 1, or null), the trial counts, the scorers, and the delta against the baseline
+ * (`{ score, scorers }` of Ratel, or null). It never changes the exit code.
+ */
+export type EvalSummary = {
+  name: string;
+  score: number | null;
+  counts: Counts | null;
+  scorers: unknown[];
+  delta: { score: number | null; [field: string]: unknown } | null;
+};
+
+/** An eval with the reason why it has no delta, for the text output. */
+export type EvalRow = EvalSummary & { version: number | null; deltaRefusal: string | null };
 
 export type Baseline = { experimentId: string; url: string; pinnedBy: string; pinnedAt: string };
 
@@ -83,6 +102,7 @@ export async function startEvalRun({
   params,
   label,
   name,
+  evals,
 }: EvalRunOptions): Promise<StartedExperiment> {
   const body = {
     sandboxVersion,
@@ -90,6 +110,7 @@ export async function startEvalRun({
     ...(params ? { params } : {}),
     ...(label ? { label } : {}),
     ...(name ? { name } : {}),
+    ...(evals?.length ? { evals } : {}),
   };
   const answer = await call("POST", `${origin(url)}/evals/experiments`, apiKey, body);
   if (typeof answer.experimentId !== "string") throw unreadable();
@@ -177,6 +198,26 @@ export function exitCodeOf({ cases }: Pick<Experiment, "cases">): number {
   return EVAL_EXIT.pass;
 }
 
+/**
+ * The evals of the run, or null when Ratel sent none (an older Ratel). The rows that are not
+ * readable are left out: the evals only inform, and the cases give the exit code.
+ */
+export function evalRowsOf({ evals }: Record<string, unknown>): EvalRow[] | null {
+  if (!Array.isArray(evals)) return null;
+  return evals.filter(isEvalRow).map((row) => ({
+    name: row.name,
+    version: Number.isInteger(row.version) ? (row.version as number) : null,
+    score: rate(row.score),
+    counts: isCounts(row.counts) ? row.counts : null,
+    scorers: Array.isArray(row.scorers) ? row.scorers : [],
+    delta: isObject(row.delta) ? { ...row.delta, score: delta(row.delta.score) } : null,
+    deltaRefusal:
+      isObject(row.deltaRefusal) && typeof row.deltaRefusal.reason === "string"
+        ? row.deltaRefusal.reason
+        : null,
+  }));
+}
+
 /** The gate must not read a verdict of another run, or one that the contract does not have. */
 function isComparison(answer: Record<string, unknown>, experimentId: string): answer is Comparison {
   const { verdict, rule, url, baseline, candidate, changedCases, otherCases } = answer;
@@ -212,6 +253,27 @@ function isSide(value: unknown): boolean {
     isObject(value.counts) &&
     [value.counts.pass, value.counts.fail, value.counts.invalid].every(Number.isInteger)
   );
+}
+
+function isEvalRow(row: unknown): row is Record<string, unknown> & { name: string } {
+  return isObject(row) && typeof row.name === "string";
+}
+
+function isCounts(value: unknown): value is Counts {
+  return (
+    isObject(value) &&
+    [value.pass, value.fail, value.invalid, value.open].every(
+      (n) => Number.isInteger(n) && (n as number) >= 0,
+    )
+  );
+}
+
+function rate(value: unknown): number | null {
+  return typeof value === "number" && value >= 0 && value <= 1 ? value : null;
+}
+
+function delta(value: unknown): number | null {
+  return typeof value === "number" && value >= -1 && value <= 1 ? value : null;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

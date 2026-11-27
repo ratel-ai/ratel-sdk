@@ -566,3 +566,130 @@ describe("baseline pin", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("the suite and --eval", () => {
+  const withDelta = vector("experiment.suite-delta");
+  const withRefusal = vector("experiment.suite-delta-refusal");
+
+  it("runs the suite: the body has no evals and no trials", async () => {
+    reads = [{ status: 200, body: withDelta }];
+    const { code } = await ratel(["run"]);
+    expect(code).toBe(1);
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-experiment.request.latest"));
+  });
+
+  it("--eval sends the names of the evals, in order", async () => {
+    reads = [{ status: 200, body: withDelta }];
+    await ratel(["run", "--eval", "Refunds", "--eval", "Tone", "--label", "refunds"]);
+    expect(JSON.parse(calls[0]?.body ?? "")).toEqual(vector("start-experiment.request.evals"));
+  });
+
+  it("--eval --json prints each eval with its score, counts, scorers and delta", async () => {
+    reads = [{ status: 200, body: withDelta }];
+    const { code, out } = await ratel(["run", "--eval", "Refunds", "--json"]);
+    expect(code).toBe(1);
+    expect(out.trim().split("\n")).toHaveLength(1);
+    const [row] = withDelta.evals;
+    expect(JSON.parse(out).evals).toEqual([
+      {
+        name: "Refunds",
+        score: row.score,
+        counts: row.counts,
+        scorers: row.scorers,
+        delta: row.delta,
+      },
+    ]);
+  });
+
+  it("--json has a null delta when the eval has no delta", async () => {
+    reads = [{ status: 200, body: withRefusal }];
+    const { out } = await ratel(["run", "--json"]);
+    expect(
+      JSON.parse(out).evals.map(({ name, delta }: { name: string; delta: unknown }) => [
+        name,
+        delta,
+      ]),
+    ).toEqual([
+      ["Refunds", null],
+      ["Tone", null],
+    ]);
+  });
+
+  it("--json without evals from Ratel has no evals", async () => {
+    const { out } = await ratel(["run", "--json"]);
+    expect(JSON.parse(out)).not.toHaveProperty("evals");
+  });
+
+  it("prints one line for each eval: the score, pass/total and the delta in points", async () => {
+    reads = [{ status: 200, body: withDelta }];
+    const { out } = await ratel(["run"]);
+    expect(out).toBe(
+      `Late refund (v1): 2 pass, 1 fail, 0 invalid\neval Refunds (v2): 67% score, 2/3 pass, +33.3 points\n${withDelta.url}\n`,
+    );
+  });
+
+  it("prints the reason when an eval has no delta, and no score with no valid trial", async () => {
+    reads = [{ status: 200, body: withRefusal }];
+    const { out } = await ratel(["run"]);
+    expect(out).toContain("eval Refunds (v2): 67% score, 2/3 pass, no delta: scorers_differ\n");
+    expect(out).toContain("eval Tone (v1): no score, 0/3 pass, no delta: not_in_baseline\n");
+  });
+
+  it("the eval line has no control character of a name", async () => {
+    const [row] = withDelta.evals;
+    reads = [
+      { status: 200, body: { ...withDelta, evals: [{ ...row, name: "x\u001b[2J\nfake" }] } },
+    ];
+    const { out } = await ratel(["run"]);
+    expect(out).toContain("eval x [2J fake (v2)");
+  });
+
+  it("evals that are not readable change nothing: the counts of the cases give the exit code", async () => {
+    for (const evals of ["x", [null], [{}], [{ name: "Refunds", score: "high", counts: null }]]) {
+      reads = [{ status: 200, body: { ...withCounts([3, 0, 0]), evals } }];
+      const { code, out } = await ratel(["run", "--json"]);
+      expect(code).toBe(0);
+      expect(JSON.parse(out).experimentId).toBe(ID);
+    }
+  }, 30_000);
+
+  it.each([
+    [["run", "--eval", ""]],
+    [["run", "--eval", "  "]],
+    [["run", "--eval", "x".repeat(201)]],
+    [["run", ...Array.from({ length: 101 }, (_, i) => ["--eval", `e${i}`]).flat()]],
+    [["baseline", "pin", ID, "--eval", "Refunds"]],
+  ])("3: wrong --eval %#", async (args) => {
+    expect((await ratel(args)).code).toBe(3);
+    expect(calls).toEqual([]);
+  });
+
+  it("3: wrong_sandbox is a refusal, like no_cases", async () => {
+    start = {
+      status: 409,
+      body: { error: "wrong_sandbox", message: "The eval Tone is of another agent." },
+    };
+    const { code, out } = await ratel(["run", "--eval", "Tone", "--json"]);
+    expect(code).toBe(3);
+    expect(JSON.parse(out)).toEqual({
+      error: "wrong_sandbox",
+      message: "The eval Tone is of another agent.",
+    });
+  });
+
+  it("3: an unknown eval name is a refusal", async () => {
+    start = { status: 404, body: { error: "not_found", message: "No eval Nope." } };
+    expect((await ratel(["run", "--eval", "Nope"])).code).toBe(3);
+  });
+
+  it("--compare-baseline: a case with change excluded keeps the verdict of the comparison", async () => {
+    const excluded = vector("comparison.excluded");
+    excluded.candidate.experimentId = ID;
+    comparisons = [{ status: 200, body: excluded }];
+    reads = [{ status: 200, body: withDelta }];
+    const { code, out } = await ratel(["run", "--compare-baseline"]);
+    expect(code).toBe(1);
+    expect(out).toContain("excluded: Tone stays friendly");
+    expect(out).toContain("eval Refunds (v2): 67% score");
+  });
+});

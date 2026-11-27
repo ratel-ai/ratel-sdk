@@ -108,18 +108,33 @@ end and prints the output and a link. `--json` prints the run as one JSON docume
 ## `ratel eval`
 
 ```
-ratel eval run [--version id|latest] [--trials n] [-f ratel.yaml] [--param name=value]...
-               [--label label] [--name name] [--timeout seconds] [--json] [--no-wait]
-               [--compare-baseline]
+ratel eval run [--version id|latest] [--eval name]... [--trials n] [-f ratel.yaml]
+               [--param name=value]... [--label label] [--name name] [--timeout seconds] [--json]
+               [--no-wait] [--compare-baseline]
 ratel eval baseline pin <experiment-id> [--json]
 ```
 
-`ratel eval run` runs each approved case on an image version (default `latest`, the newest ready
-version) through [`protocol/evals/v1`](../../../protocol/evals/v1/README.md), waits for the end and
-prints the counts of each case and a link. `--param` takes a parameter that `ratel.yaml` declares
-(`./ratel.yaml` or `-f`), and the defaults of `ratel.yaml` apply. `--label` runs only the cases with
-the label, and `--name` names the experiment. `--json` prints one JSON document: the experiment, its
-`params` and, with `--compare-baseline`, the `comparison` (verdict, rule and changed cases).
+`ratel eval run` runs the suite (each eval of the project, with its approved cases) on an image
+version (default `latest`, the newest ready version) through
+[`protocol/evals/v1`](../../../protocol/evals/v1/README.md), waits for the end and prints the counts
+of each case, one line for each eval and a link. `--eval <name>` runs only that eval: give it again
+for more evals. `--trials` is the trials of each case. Without it, each eval has its own trials.
+`--param` takes a parameter that `ratel.yaml` declares (`./ratel.yaml` or `-f`), and the defaults of
+`ratel.yaml` apply. `--label` runs only the cases with the label, and `--name` names the experiment.
+
+The line of an eval has its score (the mean pass rate of its scorers over the valid trials), its
+passed trials of all trials, and its delta against the pinned baseline in percentage points, or the
+reason why it has no delta (`not_in_baseline`, `scorers_differ`):
+
+```
+eval Refunds (v2): 67% score, 2/3 pass, +33.3 points
+```
+
+`--json` prints one JSON document: the experiment, its `params`, `evals` and, with
+`--compare-baseline`, the `comparison` (verdict, rule and changed cases). Each item of `evals` is
+`{ name, score, counts, scorers, delta }`: `score` is from 0 to 1 or null, `delta` is the
+`{ score, scorers }` of Ratel or null. An older Ratel sends no evals, and then the document has no
+`evals`. The evals do not change the exit code.
 `--compare-baseline` needs a pinned baseline: `ratel eval baseline pin <experiment-id>`.
 
 `--timeout` is the longest wait for the end of the run, in whole seconds. The default is

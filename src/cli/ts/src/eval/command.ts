@@ -11,7 +11,9 @@ import {
   compareEvalRun,
   EVAL_EXIT,
   EvalCallError,
+  type EvalRow,
   type Experiment,
+  evalRowsOf,
   exitCodeOf,
   pinBaseline,
   requireBaseline,
@@ -20,23 +22,31 @@ import {
   waitForEvalRun,
 } from "./run.js";
 
-export const EVAL_USAGE = `Usage: ratel eval run [--version <id|latest>] [--trials <n>] [-f ratel.yaml] [--param name=value]...
-                      [--label <label>] [--name <name>] [--timeout <seconds>] [--json] [--no-wait]
-                      [--compare-baseline]
+export const EVAL_USAGE = `Usage: ratel eval run [--version <id|latest>] [--eval <name>]... [--trials <n>] [-f ratel.yaml]
+                      [--param name=value]... [--label <label>] [--name <name>] [--timeout <seconds>]
+                      [--json] [--no-wait] [--compare-baseline]
        ratel eval baseline pin <experiment-id> [--json]
 
-Runs each approved case on an image version and prints the counts of each case. With
---compare-baseline, prints the verdict against the pinned baseline, and it gives the exit code.
---param takes a parameter that ratel.yaml declares. The defaults of ratel.yaml apply.
---timeout is the longest wait for the end of the run. Default: trials (3 when not given) times
-run.timeoutSeconds of ratel.yaml (300 when not given), plus 600. At the deadline it exits with 4.
+Runs the suite (each eval of the project) on an image version, or only each --eval. It prints the
+counts of each case and the score of each eval. With --compare-baseline, prints the verdict against
+the pinned baseline, and it gives the exit code. --trials is the trials of each case. Default: the
+trials of each eval. --param takes a parameter that ratel.yaml declares. The defaults of ratel.yaml
+apply. --timeout is the longest wait for the end of the run. Default: trials (3 when not given)
+times run.timeoutSeconds of ratel.yaml (300 when not given), plus 600. At the deadline it exits
+with 4.
 
   RATEL_API_KEY   a project key with the permissions evals:read and evals:write
   RATEL_BASE_URL  the API root of Ratel, with /api/v1 (default https://app.ratel.sh/api/v1)
 `;
 
 const MAX_TRIALS = 20;
-/** The trials of Ratel when --trials is not given (protocol/evals/v1 start-experiment). */
+/** The most --eval names of one run, and the longest name (protocol/evals/v1 start-experiment). */
+const MAX_EVALS = 100;
+const MAX_EVAL_NAME = 200;
+/**
+ * The trials for the default --timeout when --trials is not given. Then each eval has its own
+ * trials, which the CLI does not know before the run.
+ */
 const DEFAULT_TRIALS = 3;
 /** The run.timeoutSeconds of ratel.yaml when it is not given (protocol/sandbox/v1). */
 const DEFAULT_RUN_TIMEOUT_SECONDS = 300;
@@ -74,6 +84,11 @@ export async function evalCommand(argv: string[], io: EvalIo): Promise<number> {
   let run: { experimentId: string; url: string } | null = null;
   const withParams = <T extends object>(value: T) =>
     options.params ? { ...value, params: options.params } : value;
+  const document = <T extends Experiment>(experiment: T) => {
+    const rows = evalRowsOf(experiment);
+    const { evals: _, ...rest } = experiment;
+    return withParams(rows ? { ...rest, evals: rows.map(summary) } : rest);
+  };
   try {
     if (options.pin) {
       const pinned = await pinBaseline(options.pin, { url, apiKey });
@@ -98,11 +113,11 @@ export async function evalCommand(argv: string[], io: EvalIo): Promise<number> {
     const exitCode = exitCodeOf(experiment);
     if (options.compare) {
       const comparison = await compareEvalRun(started.experimentId, { url, apiKey });
-      if (json) print(withParams({ ...experiment, comparison }));
+      if (json) print(document({ ...experiment, comparison }));
       else io.stdout(report(experiment) + compared(comparison));
       return VERDICT_EXIT[comparison.verdict];
     }
-    if (json) print(withParams(experiment));
+    if (json) print(document(experiment));
     else io.stdout(report(experiment));
     return exitCode;
   } catch (error) {
@@ -120,6 +135,8 @@ type Options = {
   params?: Record<string, ParamValue>;
   label?: string;
   name?: string;
+  /** The names of the evals to run. Absent: the suite. */
+  evals?: string[];
   wait: boolean;
   compare: boolean;
   /** The longest wait for the end of the run. */
@@ -149,9 +166,11 @@ async function read(argv: string[]): Promise<Options | string> {
   if (positionals[0] === "baseline") {
     const [, command, pin, ...rest] = positionals;
     if (command !== "pin" || !pin || rest.length > 0) return "Unknown command.";
-    const other = Object.keys(values).find((name) => name !== "json" && name !== "param");
+    const lists = ["json", "param", "eval"];
+    const other = Object.keys(values).find((name) => !lists.includes(name));
     if (other) return `--${other} is not an option of baseline pin.`;
     if (values.param.length > 0) return "--param is not an option of baseline pin.";
+    if (values.eval.length > 0) return "--eval is not an option of baseline pin.";
     return { ...base, pin };
   }
   if (positionals.length !== 1 || positionals[0] !== "run") return "Unknown command.";
@@ -167,6 +186,11 @@ async function read(argv: string[]): Promise<Options | string> {
   for (const flag of ["label", "name"] as const) {
     if (values[flag] !== undefined && values[flag].trim() === "") return `--${flag} is empty.`;
   }
+  if (values.eval.some((name) => name.trim() === "")) return "--eval is empty.";
+  if (values.eval.some((name) => name.length > MAX_EVAL_NAME)) {
+    return `--eval is a name of at most ${MAX_EVAL_NAME} characters.`;
+  }
+  if (values.eval.length > MAX_EVALS) return `--eval is given at most ${MAX_EVALS} times.`;
   let config: Awaited<ReturnType<typeof readConfig>>;
   try {
     config = await readConfig(values.file, values.param);
@@ -184,6 +208,7 @@ async function read(argv: string[]): Promise<Options | string> {
     ...(params ? { params } : {}),
     ...(values.label ? { label: values.label } : {}),
     ...(values.name ? { name: values.name } : {}),
+    ...(values.eval.length > 0 ? { evals: values.eval } : {}),
   };
 }
 
@@ -223,6 +248,7 @@ function parse(argv: string[]) {
       trials: { type: "string" },
       file: { type: "string", short: "f" },
       param: { type: "string", multiple: true, default: [] as string[] },
+      eval: { type: "string", multiple: true, default: [] as string[] },
       label: { type: "string" },
       name: { type: "string" },
       timeout: { type: "string" },
@@ -240,12 +266,34 @@ function isAddress(text: string): boolean {
   return ["http:", "https:"].includes(protocol) && !username && !password;
 }
 
-function report({ cases, url }: Experiment): string {
+function report(experiment: Experiment): string {
+  const { cases, url } = experiment;
   const lines = cases.map(
     ({ name, number, counts }) =>
       `${oneLine(name)} (v${number}): ${counts.pass} pass, ${counts.fail} fail, ${counts.invalid} invalid`,
   );
-  return `${[...lines, oneLine(url)].join("\n")}\n`;
+  const evals = (evalRowsOf(experiment) ?? []).map(evalLine);
+  return `${[...lines, ...evals, oneLine(url)].join("\n")}\n`;
+}
+
+/** `eval <name> (v<n>): <score>% score, <pass>/<total> pass, <delta> points`, or why no delta. */
+function evalLine({ name, version, score, counts, delta, deltaRefusal }: EvalRow): string {
+  const parts = [score === null ? "no score" : `${Math.round(score * 100)}% score`];
+  if (counts) parts.push(`${counts.pass}/${counts.pass + counts.fail + counts.invalid} pass`);
+  if (delta && delta.score !== null) parts.push(`${points(delta.score)} points`);
+  else if (deltaRefusal) parts.push(`no delta: ${oneLine(deltaRefusal)}`);
+  return `eval ${oneLine(name)}${version === null ? "" : ` (v${version})`}: ${parts.join(", ")}`;
+}
+
+/** A difference of two scores (0 to 1) in percentage points, with its sign and one decimal. */
+function points(difference: number): string {
+  const value = Math.round(difference * 1000) / 10;
+  return `${value > 0 ? "+" : ""}${value}`;
+}
+
+/** The eval as `--json` prints it. */
+function summary({ name, score, counts, scorers, delta }: EvalRow) {
+  return { name, score, counts, scorers, delta };
 }
 
 function compared({ verdict, rule, url, baseline, changedCases }: Comparison): string {

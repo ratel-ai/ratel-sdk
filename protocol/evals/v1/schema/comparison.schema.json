@@ -118,8 +118,10 @@
             "unchanged",
             "inconclusive",
             "added",
-            "removed"
-          ]
+            "removed",
+            "excluded"
+          ],
+          "description": "`excluded`: the scorers of the eval of the case differ between the two runs, so the case does not decide the verdict."
         },
         "baseline": {
           "$ref": "#/$defs/side"
