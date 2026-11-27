@@ -726,9 +726,23 @@ is behind three subpaths. None of them loads the native addon:
 | `@ratel-ai/sdk/platform/testing` | `MockPlatform`, an in-process fake of the Platform API |
 
 The OpenTelemetry exporter packages that `@ratel-ai/sdk/otel` uses are optional peers: install
-them only when you use it. `@ratel-ai/cloud-sdk` is a deprecated shim that re-exports these
-subpaths under its old entry points. Runnable examples are in
+them only when you use it. Runnable examples are in
 [`examples/platform/`](../../../examples/platform/README.md).
+
+#### Migrate from `@ratel-ai/cloud-sdk`
+
+`@ratel-ai/cloud-sdk` is deprecated on npm and gets no new version. Remove it and import
+`@ratel-ai/sdk` instead:
+
+| Old import (`@ratel-ai/cloud-sdk`) | New import (`@ratel-ai/sdk`) |
+| --- | --- |
+| `@ratel-ai/cloud-sdk` | `@ratel-ai/sdk/platform` |
+| `@ratel-ai/cloud-sdk/runtime` | `@ratel-ai/sdk/platform` |
+| `@ratel-ai/cloud-sdk/otel` | `@ratel-ai/sdk/otel` |
+| `@ratel-ai/cloud-sdk/testing` | `@ratel-ai/sdk/platform/testing` |
+| `RatelCloudSdk`, `CloudSdkError`, `CloudSkill`, `CloudSuggestion` | `RatelPlatformClient`, `PlatformError`, `PlatformSkill`, `PlatformSuggestion` |
+| `ratelCloud`, `RatelCloud`, `RatelCloudOptions` | `ratelPlatform`, `RatelPlatform`, `RatelPlatformOptions` |
+| `MockCloud`, `MockCloudOptions` | `MockPlatform`, `MockPlatformOptions` |
 
 Management & supervised self-improvement client for [Ratel Platform](https://app.ratel.sh): manage a project's
 **platform skills catalog**, run **intent analysis** on conversations, and review the resulting
