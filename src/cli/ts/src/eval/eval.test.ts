@@ -922,6 +922,20 @@ describe("a run of each eval", () => {
     );
   });
 
+  it("the text of a run with no matrix has no variant line", async () => {
+    const plain = {
+      ...withVariants,
+      variants: [],
+      run: {
+        ...withVariants.run,
+        variants: [{ ...withVariants.run.variants[0], index: null, params: {} }],
+      },
+    };
+    reads = [{ status: 200, body: plain }];
+    const { out } = await ratel(["run", "--eval", "Refunds"]);
+    expect(out).not.toContain("variant");
+  });
+
   it("--param with commas is a matrix: each value is typed, and the default leaves the params", async () => {
     await ratel([
       "run",

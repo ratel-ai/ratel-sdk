@@ -447,7 +447,9 @@ function runLines(name: string, summary: RunSummary): string[] {
     scorers: [],
     evalId: null,
   });
-  return [line, ...variants.map(variantLine)];
+  // A run with no matrix has one variant with no index: the eval line says it all.
+  const shown = variants.filter((variant) => variant.index !== null);
+  return [line, ...shown.map(variantLine)];
 }
 
 /** `  variant <index> (<name>=<value>, ...): <score>% score, <pass>/<total> pass`. */
