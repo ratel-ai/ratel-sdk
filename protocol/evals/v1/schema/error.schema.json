@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/error.schema.json",
+  "title": "A refusal",
+  "description": "The body of each refused call. A refused key has no message.",
+  "type": "object",
+  "required": [
+    "error"
+  ],
+  "properties": {
+    "error": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "scorers": {
+      "type": "array",
+      "description": "With `scorers_differ`: each scorer that differs.",
+      "items": {
+        "type": "object",
+        "required": [
+          "caseId",
+          "caseName",
+          "name",
+          "difference"
+        ],
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "caseName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "difference": {
+            "enum": [
+              "changed",
+              "gating",
+              "added",
+              "removed"
+            ]
+          }
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": [
+        "experimentId",
+        "url",
+        "pinnedBy",
+        "pinnedAt"
+      ],
+      "properties": {
+        "experimentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "pinnedBy": {
+          "type": "string",
+          "description": "The identity of a person, or `key:<id>`."
+        },
+        "pinnedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "With a refused comparison: the pinned baseline."
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/pin-baseline.request.schema.json",
+  "title": "Pin a baseline",
+  "description": "The body of PUT /api/v1/evals/baseline.",
+  "type": "object",
+  "required": [
+    "experimentId"
+  ],
+  "properties": {
+    "experimentId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

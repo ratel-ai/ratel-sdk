@@ -105,7 +105,56 @@ ratel run [-f ratel.yaml] [--version id] [--input json|@file] [--param name=valu
 Runs the newest ready version of the agent of `ratel.yaml` on Ratel (or `--version`), waits for the
 end and prints the output and a link. `--json` prints the run as one JSON document.
 
-## Exit codes
+## `ratel eval`
+
+```
+ratel eval run [--version id|latest] [--trials n] [-f ratel.yaml] [--param name=value]...
+               [--label label] [--name name] [--timeout seconds] [--json] [--no-wait]
+               [--compare-baseline]
+ratel eval baseline pin <experiment-id> [--json]
+```
+
+`ratel eval run` runs each approved case on an image version (default `latest`, the newest ready
+version) through [`protocol/evals/v1`](../../../protocol/evals/v1/README.md), waits for the end and
+prints the counts of each case and a link. `--param` takes a parameter that `ratel.yaml` declares
+(`./ratel.yaml` or `-f`), and the defaults of `ratel.yaml` apply. `--label` runs only the cases with
+the label, and `--name` names the experiment. `--json` prints one JSON document: the experiment, its
+`params` and, with `--compare-baseline`, the `comparison` (verdict, rule and changed cases).
+`--compare-baseline` needs a pinned baseline: `ratel eval baseline pin <experiment-id>`.
+
+`--timeout` is the longest wait for the end of the run, in whole seconds. The default is
+`trials × run.timeoutSeconds + 600`: `trials` is `--trials` (3 when not given) and
+`run.timeoutSeconds` comes from `ratel.yaml` (300 when not given or with no `ratel.yaml`). Give a
+larger `--timeout` for many cases. At the deadline the command exits with 4, and `--json` prints
+`{"error": "wait_timeout", "message", "experimentId"}`. The run can still end on Ratel.
+
+The exit codes of `ratel eval` are a contract of CI gates, and they did not change:
+
+| Code | `ratel eval run` | With `--compare-baseline` |
+|---|---|---|
+| 0 | Each case passes | `improved` or `unchanged` |
+| 1 | A case fails | `regressed` |
+| 2 | A case is invalid and none fails | `inconclusive` |
+| 3 | Ratel refused the call, or a wrong flag or `ratel.yaml` | the same |
+| 4 | Ratel did not answer, its answer is not readable, or the run did not end in `--timeout` | the same |
+
+## Try it with the test server
+
+`scripts/test-server.mjs` is a local server of the push, runs and evals API (not Ratel, not
+published). It checks each body against the protocol schemas and does real work on this machine:
+`docker load` of the uploaded tarball, the smoke check, the runs and the eval trials, each with
+`ratel run --local`.
+
+```sh
+node src/cli/ts/scripts/test-server.mjs 4580 examples/sandbox-command-agent/cases.json
+export RATEL_BASE_URL=http://127.0.0.1:4580/api/v1 RATEL_API_KEY=rtl_test
+cd examples/sandbox-command-agent
+ratel push && ratel run --input '{"text":"hi"}'
+ratel eval run --name baseline && ratel eval baseline pin e_1
+ratel eval run --param style=shout --compare-baseline     # regressed: exit 1
+```
+
+## Exit codes of `push` and `run`
 
 | Code | Meaning |
 |---|---|

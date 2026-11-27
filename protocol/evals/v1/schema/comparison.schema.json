@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/comparison.schema.json",
+  "title": "A comparison",
+  "description": "The answer of GET /api/v1/evals/experiments/{id}/comparison (200): the experiment against the pinned baseline. It has no captured text.",
+  "type": "object",
+  "required": [
+    "v",
+    "verdict",
+    "rule",
+    "baseline",
+    "candidate",
+    "url",
+    "changedCases",
+    "otherCases"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "verdict": {
+      "enum": [
+        "regressed",
+        "improved",
+        "unchanged",
+        "inconclusive"
+      ]
+    },
+    "rule": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The text of the rule that decided."
+    },
+    "baseline": {
+      "type": "object",
+      "required": [
+        "experimentId",
+        "url",
+        "pinnedBy",
+        "pinnedAt"
+      ],
+      "properties": {
+        "experimentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "pinnedBy": {
+          "type": "string",
+          "description": "The identity of a person, or `key:<id>`."
+        },
+        "pinnedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "experimentId",
+        "url"
+      ],
+      "properties": {
+        "experimentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "changedCases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/case"
+      },
+      "description": "Each case that is not unchanged."
+    },
+    "otherCases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "required": [
+        "caseId",
+        "name",
+        "change",
+        "baseline",
+        "candidate"
+      ],
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "change": {
+          "enum": [
+            "regressed",
+            "improved",
+            "unchanged",
+            "inconclusive",
+            "added",
+            "removed"
+          ]
+        },
+        "baseline": {
+          "$ref": "#/$defs/side"
+        },
+        "candidate": {
+          "$ref": "#/$defs/side"
+        }
+      }
+    },
+    "side": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "versionId",
+            "number",
+            "status",
+            "counts"
+          ],
+          "properties": {
+            "versionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "status": {
+              "enum": [
+                "pass",
+                "fail",
+                "invalid"
+              ]
+            },
+            "counts": {
+              "type": "object",
+              "required": [
+                "pass",
+                "fail",
+                "invalid",
+                "open"
+              ],
+              "properties": {
+                "pass": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "fail": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "invalid": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "open": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

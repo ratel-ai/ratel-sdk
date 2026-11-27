@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // A local test server for the push API and the runs API of protocol/sandbox/v1.
 //
-//   node src/cli/ts/scripts/test-server.mjs [port]      (default 4580)
+//   node src/cli/ts/scripts/test-server.mjs [port] [cases.json]      (default 4580)
 //   RATEL_BASE_URL=http://127.0.0.1:4580/api/v1 RATEL_API_KEY=rtl_test ratel push
 //
 // It is not Ratel. It checks each body against the schemas of the protocol, keeps the versions
 // in memory, and does a real smoke check on this machine: `docker load` of the uploaded tarball,
 // then `ratel run --local` of input.example with all tools simulated. It never sends data out.
+//
+// Evals (protocol/evals/v1): cases.json is a JSON array of {name, input, expect: {contains}}. A
+// trial is one run of the image: it passes when the run ends and its output has `contains`.
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, mkdtempSync, writeFileSync } from "node:fs";
+import { createReadStream, createWriteStream, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -23,6 +26,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, "../dist/cli.js");
 const KEY = process.env.TEST_SERVER_KEY ?? "rtl_test";
 const PORT = Number(process.argv[2] ?? 4580);
+const CASES = process.argv[3] ? JSON.parse(readFileSync(process.argv[3], "utf8")) : [];
+const experiments = new Map();
+let baseline = null;
 const STORE = mkdtempSync(join(tmpdir(), "ratel-test-server-"));
 const versions = new Map();
 const runs = new Map();
@@ -124,6 +130,52 @@ const server = createServer(async (req, res) => {
       const run = runs.get(m[1]);
       return run ? send(200, run) : send(404, { error: "not_found", message: "No such run." });
     }
+    if (req.method === "POST" && path === "/api/v1/evals/experiments") {
+      const body = await json(req);
+      const version =
+        body.sandboxVersion === "latest"
+          ? [...versions.values()].reverse().find((v) => v.status === "ready")
+          : versions.get(body.sandboxVersion);
+      if (!version || version.status !== "ready") return send(404, { error: "not_found", message: "No ready version." });
+      if (CASES.length === 0) return send(409, { error: "no_cases", message: "No case is approved." });
+      const experimentId = `e_${experiments.size + 1}`;
+      const experiment = {
+        experimentId,
+        state: "running",
+        url: `${origin}/evals/experiments/${experimentId}`,
+        sandboxVersionId: version.versionId,
+        name: body.name ?? null,
+        params: body.params ?? {},
+        counts: { pass: 0, fail: 0, invalid: 0, open: 0 },
+        cases: [],
+      };
+      experiments.set(experimentId, experiment);
+      log(`  experiment ${experimentId} on ${version.versionId} params ${JSON.stringify(experiment.params)}`);
+      evaluate(version, experiment, body.trials ?? 3);
+      return send(201, { experimentId, state: "running", url: experiment.url });
+    }
+    if (req.method === "GET" && (m = /^\/api\/v1\/evals\/experiments\/([^/]+)$/.exec(path))) {
+      const experiment = experiments.get(m[1]);
+      return experiment ? send(200, experiment) : send(404, { error: "not_found", message: "No such experiment." });
+    }
+    if (path === "/api/v1/evals/baseline" && req.method === "GET") return send(200, { baseline });
+    if (path === "/api/v1/evals/baseline" && req.method === "PUT") {
+      const { experimentId } = await json(req);
+      const experiment = experiments.get(experimentId);
+      if (!experiment || experiment.state !== "completed") {
+        return send(409, { error: "not_completed", message: "The experiment has not ended." });
+      }
+      baseline = { experimentId, url: experiment.url, pinnedBy: "test-server", pinnedAt: new Date().toISOString() };
+      return send(200, { baseline });
+    }
+    if (req.method === "GET" && (m = /^\/api\/v1\/evals\/experiments\/([^/]+)\/comparison$/.exec(path))) {
+      const candidate = experiments.get(m[1]);
+      if (!baseline) return send(409, { error: "no_baseline", message: "No baseline is pinned." });
+      if (!candidate || candidate.state !== "completed") {
+        return send(409, { error: "not_completed", message: "The experiment has not ended." });
+      }
+      return send(200, compare(experiments.get(baseline.experimentId), candidate, origin));
+    }
     send(404, { error: "not_found", message: `No route ${req.method} ${path}.` });
   } catch (error) {
     send(500, { error: "server_error", message: error.message });
@@ -176,6 +228,58 @@ async function runImage(version, { input, params = [], tools = [] }) {
   const doc = JSON.parse(stdout);
   if (doc.request === undefined) return { error: { code: doc.error, message: doc.message }, logs: "", durationMs: 0 };
   return doc;
+}
+
+/** Each case, `trials` times, one run of the image each. */
+async function evaluate(version, experiment, trials) {
+  const params = Object.entries(experiment.params).map(([k, v]) => `${k}=${v}`);
+  for (const [index, spec] of CASES.entries()) {
+    const counts = { pass: 0, fail: 0, invalid: 0, open: trials };
+    const row = { caseId: `c_${index + 1}`, name: spec.name, number: 1, counts };
+    experiment.cases.push(row);
+    for (let trial = 0; trial < trials; trial++) {
+      const result = await runImage(version, { input: JSON.stringify(spec.input), params });
+      counts.open -= 1;
+      if (result.error) counts.invalid += 1;
+      else if (JSON.stringify(result.response.output).includes(spec.expect.contains)) counts.pass += 1;
+      else counts.fail += 1;
+    }
+    log(`  ${experiment.experimentId} ${spec.name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.invalid} invalid`);
+  }
+  for (const key of ["pass", "fail", "invalid"]) {
+    experiment.counts[key] = experiment.cases.reduce((n, c) => n + c.counts[key], 0);
+  }
+  experiment.state = "completed";
+}
+
+/** The verdict rule of protocol/evals/v1. */
+function compare(before, after, origin) {
+  const status = (c) => (c.counts.fail > 0 ? "fail" : c.counts.pass > 0 ? "pass" : "invalid");
+  const side = (c) => (c ? { number: c.number, status: status(c), counts: c.counts } : null);
+  const rows = after.cases.map((c) => {
+    const old = before.cases.find((b) => b.caseId === c.caseId);
+    const [a, b] = [old && status(old), status(c)];
+    const change = !old ? "added" : a === "pass" && b === "fail" ? "regressed" : a === "fail" && b === "pass" ? "improved" : a === b ? "unchanged" : "changed";
+    return { caseId: c.caseId, name: c.name, change, baseline: side(old), candidate: side(c) };
+  });
+  const changes = rows.map((r) => r.change);
+  const verdict = changes.includes("regressed")
+    ? "regressed"
+    : rows.some((r) => r.candidate?.status === "invalid" || r.baseline?.status === "invalid")
+      ? "inconclusive"
+      : changes.includes("improved")
+        ? "improved"
+        : "unchanged";
+  return {
+    v: 1,
+    verdict,
+    rule: "Regressed: a case went from pass to fail.",
+    url: `${after.url}/compare`,
+    baseline: { ...baseline },
+    candidate: { experimentId: after.experimentId, url: after.url },
+    changedCases: rows.filter((r) => r.change !== "unchanged"),
+    otherCases: rows.filter((r) => r.change === "unchanged"),
+  };
 }
 
 function sh(command, args, input) {

@@ -31,6 +31,9 @@ the request on stdin and writes the response on stdout (command mode). It has JS
 the run request, the run response, the error and `ratel.yaml`, and its own conformance vectors
 and verifier. See [`sandbox/v1/README.md`](sandbox/v1/README.md).
 
+`evals/v1/` is the evals contract: start an experiment of the cases on an image version, read it,
+pin a baseline and compare. See [`evals/v1/README.md`](evals/v1/README.md).
+
 ## Versioning
 
 Each **major** version is a subfolder. Preview versions may change before graduation. Within a
