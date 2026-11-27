@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **`@ratel-ai/sdk/serve` (experimental).** `serve(run)` makes the Docker image of an agent answer the Ratel run contract `protocol/sandbox/v1`: `GET /ratel/health` and `POST /ratel/run` on `$PORT`. `tool(name, {execute, fake})` applies the tool mode of each run (`simulated`, `recorded`, `live`) and records each call. The subpath uses Node built-ins only and never loads the native addon.
+
 ### Documentation
 
 - The source of the deprecated `@ratel-ai/cloud-sdk` is removed from the repository. The README keeps a migration table from `@ratel-ai/cloud-sdk` to `@ratel-ai/sdk`.

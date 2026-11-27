@@ -2,7 +2,8 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": [
     "src/index.ts",
-    "src/testkit/index.ts"
+    "src/testkit/index.ts",
+    "src/serve/index.ts"
   ],
   "readme": "none",
   "emit": "none",
