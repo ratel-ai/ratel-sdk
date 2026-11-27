@@ -1124,6 +1124,58 @@ describe("ratel().adaptTo(adapter)", () => {
     }
   });
 
+  it("a register rejected as registry busy can be retried once the active register settles", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const a = ratel({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      }).adaptTo(referenceAdapter());
+      const writeFile = { write_file: exec("Write a file to local disk.") };
+      const [first, second] = await Promise.allSettled([
+        a.tools.register({ read_file: exec("Read a file from local disk.") }),
+        a.tools.register(writeFile),
+      ]);
+      expect(first.status).toBe("fulfilled");
+      expect(second).toMatchObject({
+        status: "rejected",
+        reason: expect.objectContaining({ message: expect.stringMatching(/registry busy; await/) }),
+      });
+      expect(a.tools.has("write_file")).toBe(false);
+
+      // The error says to await the active operation and register again; doing so must work.
+      await a.tools.register(writeFile);
+      expect(a.tools.has("write_file")).toBe(true);
+      expect(await a.tools.invoke("write_file", {})).toEqual({ ok: true });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("a rejected register releases its passthrough ids too", async () => {
+    const server = await startDelayedEmbeddingServer();
+    try {
+      const a = ratel({
+        method: "semantic",
+        embedding: { url: server.url, model: "test-model" },
+      }).adaptTo(referenceAdapter());
+      const provider: FakeTool = { description: "provider-run search", inputSchema: {} };
+      const [, second] = await Promise.allSettled([
+        a.tools.register({ read_file: exec("Read a file from local disk.") }),
+        a.tools.register({ provider_search: provider, write_file: exec("Write a file.") }),
+      ]);
+      expect(second.status).toBe("rejected");
+      expect(a.tools.has("provider_search")).toBe(false); // the rejected call committed nothing
+      expect(a.modelTools()).not.toHaveProperty("provider_search");
+
+      await a.tools.register({ provider_search: provider, write_file: exec("Write a file.") });
+      expect(a.modelTools().provider_search).toBe(provider);
+      expect(a.tools.has("write_file")).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("adapted get/search/invoke are catalog-only: a passthrough is known to has() but not to them", async () => {
     const a = ratel().adaptTo(referenceAdapter());
     const provider: FakeTool = { description: "provider-run search", inputSchema: {} };

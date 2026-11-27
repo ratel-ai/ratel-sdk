@@ -844,7 +844,15 @@ export function ratel(config: RatelConfig = {}): Ratel {
         // The batch validated: commit the passthroughs, then index the executables.
         for (const [id, tool] of stagedPassthrough) passthrough.set(id, tool);
         for (const id of stagedClaims) claimedAdaptedToolIds.add(id);
-        return catalog.register(batch);
+        return catalog.register(batch).catch((error: unknown) => {
+          // A rejected register (e.g. "registry busy") must not keep its claims, or
+          // the retry the error asks for would skip these ids as already registered.
+          for (const [id] of stagedPassthrough) passthrough.delete(id);
+          for (const id of stagedClaims) {
+            if (!catalog.has(id)) claimedAdaptedToolIds.delete(id);
+          }
+          throw error;
+        });
       },
     };
 
