@@ -15,7 +15,7 @@ The wire contract to start and read an eval run, and to compare it with a pinned
 The paths are under `RATEL_BASE_URL`, the API root with `/api/v1`.
 | `error` | The body of each refused call |
 
-An experiment runs the suite, each eval of the project with its approved cases, on one image
+An experiment runs the suite, each eval of the project with each of its cases (a case counts at once: there is no approval), on one image
 version (a `version` of [`sandbox/v1`](../../sandbox/v1)), or on the newest ready one (`latest`).
 `evals` runs only the evals with these names (1 to 100). An unknown name is refused with
 `not_found` (404), and an eval of another agent with `wrong_sandbox` (409). `trials` is the trials

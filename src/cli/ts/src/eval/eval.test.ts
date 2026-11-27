@@ -280,10 +280,10 @@ describe("--json prints one document on the standard output", () => {
   });
 
   it("refusal", async () => {
-    start = { status: 409, body: { error: "no_cases", message: "No case is approved." } };
+    start = { status: 409, body: { error: "no_cases", message: "The eval has no case." } };
     const { code, out } = await ratel(["run", "--json"]);
     expect(code).toBe(3);
-    expect(JSON.parse(out)).toEqual({ error: "no_cases", message: "No case is approved." });
+    expect(JSON.parse(out)).toEqual({ error: "no_cases", message: "The eval has no case." });
   });
 
   it("wrong usage and no answer", async () => {

@@ -24,7 +24,7 @@
     "label": {
       "type": "string",
       "minLength": 1,
-      "description": "Run only the approved cases with this label."
+      "description": "Run only the cases with this label."
     },
     "name": {
       "type": "string",

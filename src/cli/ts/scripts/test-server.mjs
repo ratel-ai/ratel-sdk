@@ -137,7 +137,7 @@ const server = createServer(async (req, res) => {
           ? [...versions.values()].reverse().find((v) => v.status === "ready")
           : versions.get(body.sandboxVersion);
       if (!version || version.status !== "ready") return send(404, { error: "not_found", message: "No ready version." });
-      if (CASES.length === 0) return send(409, { error: "no_cases", message: "No case is approved." });
+      if (CASES.length === 0) return send(409, { error: "no_cases", message: "The eval has no case." });
       const experimentId = `e_${experiments.size + 1}`;
       const experiment = {
         experimentId,

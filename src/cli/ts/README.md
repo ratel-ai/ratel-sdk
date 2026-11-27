@@ -114,7 +114,7 @@ ratel eval run [--version id|latest] [--eval name]... [--trials n] [-f ratel.yam
 ratel eval baseline pin <experiment-id> [--json]
 ```
 
-`ratel eval run` runs the suite (each eval of the project, with its approved cases) on an image
+`ratel eval run` runs the suite (each eval of the project, with each of its cases) on an image
 version (default `latest`, the newest ready version) through
 [`protocol/evals/v1`](../../../protocol/evals/v1/README.md), waits for the end and prints the counts
 of each case, one line for each eval and a link. `--eval <name>` runs only that eval: give it again
