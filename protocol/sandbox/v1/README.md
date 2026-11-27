@@ -92,7 +92,12 @@ Push (`ratel push`):
 
 1. `POST /sandboxes/versions` with a `create-version.request`: the parsed `ratel.yaml`, the image
    digest, the git commit and the SHA-256 and size of the tarball. 201 answers a
-   `create-version.response` with the upload target.
+   `create-version.response` with the upload target. In a GitHub Actions job, `ratel push --ci`
+   also sends, in `git`:
+   - the repository, the branch, the pull request, the base commit, the title and the author;
+   - the diff from the base, at most 512 KiB (`diffTruncated` when larger).
+
+   Ratel records the commit and picks the evals that the diff touches.
 2. `PUT <upload.url>` with `upload.headers` sends the gzip of `docker save`. The key goes only
    when `upload.authorize` is true and the URL has the origin of `RATEL_BASE_URL`.
 3. `POST /sandboxes/versions/{id}/finalize` queues the preparation and answers 202 with a `version`.

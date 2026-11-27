@@ -20,7 +20,23 @@
       "required": ["commit", "dirty"],
       "properties": {
         "commit": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
-        "dirty": { "type": "boolean", "description": "Whether the folder of ratel.yaml has changes that are not committed." }
+        "dirty": { "type": "boolean", "description": "Whether the folder of ratel.yaml has changes that are not committed." },
+        "repository": {
+          "type": "object",
+          "required": ["id", "fullName"],
+          "description": "The GitHub repository of the commit (`ratel push --ci`).",
+          "properties": {
+            "id": { "type": "integer", "minimum": 1, "description": "GITHUB_REPOSITORY_ID: it survives a rename." },
+            "fullName": { "type": "string", "minLength": 1, "description": "owner/name." }
+          }
+        },
+        "branch": { "type": "string", "minLength": 1, "description": "The branch: a pull request's head branch, else the pushed branch." },
+        "pullRequest": { "type": ["integer", "null"], "minimum": 1, "description": "The pull request number, or null for a push." },
+        "baseCommit": { "type": ["string", "null"], "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$", "description": "What the change compares against: the pull request's base, or the branch's previous head. Null for a new branch." },
+        "title": { "type": "string", "description": "The pull request's title, else the first line of the commit message." },
+        "author": { "type": ["string", "null"], "description": "The GitHub login of the author." },
+        "diff": { "type": "string", "maxLength": 524288, "description": "`git diff <baseCommit>...<commit>`, at most 512 KiB (the push body is at most 1 MiB). Left out with no base, or when it is larger (then diffTruncated)." },
+        "diffTruncated": { "type": "boolean", "description": "True when the diff was over 512 KiB and was left out." }
       }
     },
     "bundle": {
