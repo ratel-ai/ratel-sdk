@@ -274,8 +274,18 @@ every `adaptTo` view) holds the management clients (`skills`, `suggestions`, `in
 and `${baseUrl}/logs` from the same settings; `RATEL_OTLP_ENDPOINT` and
 `RATEL_OTLP_LOGS_ENDPOINT` override them. The separate functions (`attach`, `ratelPlatform`,
 `attachIntentGraphSync`, `RatelPlatformClient` from `@ratel-ai/sdk/platform`) still work and read
-the same settings. The deprecated package `@ratel-ai/cloud-sdk` re-exports the old names of these
-subpaths.
+the same settings. `@ratel-ai/cloud-sdk` is deprecated on npm and gets no new version. Migrate
+from it to `@ratel-ai/sdk`:
+
+| Old import (`@ratel-ai/cloud-sdk`) | New import (`@ratel-ai/sdk`) |
+| --- | --- |
+| `@ratel-ai/cloud-sdk` | `@ratel-ai/sdk/platform` |
+| `@ratel-ai/cloud-sdk/runtime` | `@ratel-ai/sdk/platform` |
+| `@ratel-ai/cloud-sdk/otel` | `@ratel-ai/sdk/otel` |
+| `@ratel-ai/cloud-sdk/testing` | `@ratel-ai/sdk/platform/testing` |
+| `RatelCloudSdk`, `CloudSdkError`, `CloudSkill`, `CloudSuggestion` | `RatelPlatformClient`, `PlatformError`, `PlatformSkill`, `PlatformSuggestion` |
+| `ratelCloud`, `RatelCloud`, `RatelCloudOptions` | `ratelPlatform`, `RatelPlatform`, `RatelPlatformOptions` |
+| `MockCloud`, `MockCloudOptions` | `MockPlatform`, `MockPlatformOptions` |
 
 ### Run an agent image on Ratel: `@ratel-ai/sdk/serve`
 

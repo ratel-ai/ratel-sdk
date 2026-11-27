@@ -17,7 +17,6 @@ self-hosted). The platform (console and API) lives in [ratel-ai/ratel](https://g
 | `@ratel-ai/mastra` | npm | `src/adapters/ts-mastra` |
 | `@ratel-ai/telemetry` | npm | `src/telemetry/ts` |
 | `@ratel-ai/rankers-plugin` | npm | `src/rankers/ts` |
-| `@ratel-ai/cloud-sdk` (deprecated, not published again: use `@ratel-ai/sdk/platform` and `@ratel-ai/sdk/otel`) | npm | `src/cloud-sdk/ts` |
 | `ratel-ai` | PyPI | `src/sdk/python` |
 | `ratel-ai-telemetry` | PyPI | `src/telemetry/python` |
 | `ratel-ai-rankers-plugin` | PyPI | `src/rankers/python` |
@@ -28,8 +27,7 @@ examples for each SDK (`examples/platform/` for the Ratel Platform). `packages/s
 ## History
 
 This repository was split out of `ratel-ai/ratel` with `git filter-repo`, so `git log` keeps the
-history of every moved path. `@ratel-ai/cloud-sdk` came from `ratel-ai/ratel-cloud-sdk` as one
-squashed commit.
+history of every moved path.
 
 ## Develop
 
