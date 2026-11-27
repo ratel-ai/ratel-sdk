@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/start-runs.request.schema.json",
+  "title": "The request to start one run for each eval",
+  "description": "The body of POST {RATEL_BASE_URL}/evals/runs. Each field is optional.",
+  "type": "object",
+  "properties": {
+    "sandboxVersion": {
+      "anyOf": [
+        {
+          "const": "latest"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ],
+      "description": "The id of an image version (protocol/sandbox/v1 version), or latest: the newest ready version. Absent: latest. A version of another sandbox than the sandbox of an eval does not apply to that eval: the eval runs on the newest ready version of its own sandbox, and its part of the answer has a note."
+    },
+    "sandbox": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The sandbox whose newest ready version latest is: the name of its ratel.yaml."
+    },
+    "dataset": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The id or the name of a dataset. The run uses its cases in place of the cases of the eval. Only for this run: the eval does not change."
+    },
+    "params": {
+      "type": "object",
+      "description": "The parameter values that each run gets: a flat object of the parameters that ratel.yaml declares.",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "description": "The parameters with more than one value. Each combination of the values is one variant of the run, with the params. At most 12 combinations.",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        }
+      }
+    },
+    "trials": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "description": "The trials for each case. Absent: the trials of the eval."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Run only the cases with this label."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The name of the run."
+    },
+    "evals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "description": "The names or the ids of the evals to run, from 1 to 100. Absent: each eval. An unknown eval refuses the whole request with not_found (404)."
+    }
+  }
+}

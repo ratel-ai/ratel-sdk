@@ -8,8 +8,9 @@
 // in memory, and does a real smoke check on this machine: `docker load` of the uploaded tarball,
 // then `ratel run --local` of input.example with all tools simulated. It never sends data out.
 //
-// Evals (protocol/evals/v1): cases.json is a JSON array of {name, input, expect: {contains}}. A
-// trial is one run of the image: it passes when the run ends and its output has `contains`.
+// Evals (protocol/evals/v1): cases.json is a JSON array of {name, input, expect: {contains}}: the
+// cases of one eval, "cases". A trial is one run of the image: it passes when the run ends and its
+// output has `contains`. A matrix runs the cases once for each combination of its values.
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -28,6 +29,8 @@ const KEY = process.env.TEST_SERVER_KEY ?? "rtl_test";
 const PORT = Number(process.argv[2] ?? 4580);
 const CASES = process.argv[3] ? JSON.parse(readFileSync(process.argv[3], "utf8")) : [];
 const experiments = new Map();
+/** The one eval of the server: the cases of cases.json. */
+const EVAL = { evalId: "ev_1", name: "cases" };
 let baseline = null;
 const STORE = mkdtempSync(join(tmpdir(), "ratel-test-server-"));
 const versions = new Map();
@@ -131,33 +134,29 @@ const server = createServer(async (req, res) => {
       return run ? send(200, run) : send(404, { error: "not_found", message: "No such run." });
     }
     if (req.method === "POST" && path === "/api/v1/evals/experiments") {
+      const [status, started] = start(await json(req), origin);
+      return send(status, status === 201 ? { experimentId: started.experimentId, state: started.state, url: started.url } : started);
+    }
+    if (req.method === "POST" && path === "/api/v1/evals/runs") {
       const body = await json(req);
-      const version =
-        body.sandboxVersion === "latest"
-          ? [...versions.values()].reverse().find((v) => v.status === "ready")
-          : versions.get(body.sandboxVersion);
-      if (!version || version.status !== "ready") return send(404, { error: "not_found", message: "No ready version." });
-      if (CASES.length === 0) return send(409, { error: "no_cases", message: "The eval has no case." });
-      const experimentId = `e_${experiments.size + 1}`;
-      const experiment = {
-        experimentId,
-        state: "running",
-        url: `${origin}/evals/experiments/${experimentId}`,
-        sandboxVersionId: version.versionId,
-        name: body.name ?? null,
-        params: body.params ?? {},
-        counts: { pass: 0, fail: 0, invalid: 0, open: 0 },
-        cases: [],
-      };
-      experiments.set(experimentId, experiment);
-      log(`  experiment ${experimentId} on ${version.versionId} params ${JSON.stringify(experiment.params)}`);
-      evaluate(version, experiment, body.trials ?? 3);
-      return send(201, { experimentId, state: "running", url: experiment.url });
+      if (body.evals && !body.evals.every(isEval)) return send(404, { error: "not_found", message: "No such eval." });
+      const [status, started] = start(body, origin);
+      if (status === 201) return send(201, { v: 1, runs: [started] });
+      return status === 409 ? send(201, { v: 1, runs: [{ eval: EVAL.name, evalId: EVAL.evalId, ...started }] }) : send(status, started);
+    }
+    if (req.method === "POST" && (m = /^\/api\/v1\/evals\/([^/]+)\/runs$/.exec(path))) {
+      if (!isEval(decodeURIComponent(m[1]))) return send(404, { error: "not_found", message: "No such eval." });
+      const [status, started] = start(await json(req), origin);
+      return send(status, status === 201 ? { v: 1, ...started } : started);
+    }
+    if (req.method === "GET" && path === "/api/v1/evals") {
+      return send(200, { v: 1, evals: [{ ...EVAL, cases: CASES.length, scorers: 1, baselineScore: null, newestScore: null, series: [] }] });
     }
     if (req.method === "GET" && (m = /^\/api\/v1\/evals\/experiments\/([^/]+)$/.exec(path))) {
       const experiment = experiments.get(m[1]);
       return experiment ? send(200, experiment) : send(404, { error: "not_found", message: "No such experiment." });
     }
+    // One eval: the baseline of the eval (?eval=) is the pin of the server.
     if (path === "/api/v1/evals/baseline" && req.method === "GET") return send(200, { baseline });
     if (path === "/api/v1/evals/baseline" && req.method === "PUT") {
       const { experimentId } = await json(req);
@@ -183,6 +182,48 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => log(`test server on http://127.0.0.1:${PORT}/api/v1 (key ${KEY})`));
+
+/** Starts a run of the eval: [201, the started run] or [status, the refusal]. */
+function start(body, origin) {
+  const version =
+    (body.sandboxVersion ?? "latest") === "latest"
+      ? [...versions.values()].reverse().find((v) => v.status === "ready")
+      : versions.get(body.sandboxVersion);
+  if (!version || version.status !== "ready") return [404, { error: "not_found", message: "No ready version." }];
+  if (CASES.length === 0) return [409, { error: "no_cases", message: "The eval has no case." }];
+  const variants = combinations(body.matrix ?? {}).map((values, index) => ({ index, params: { ...(body.params ?? {}), ...values } }));
+  if (variants.length > 12) return [400, { error: "invalid_params", message: "The matrix has more than 12 combinations." }];
+  const experimentId = `e_${experiments.size + 1}`;
+  const experiment = {
+    experimentId,
+    evalId: EVAL.evalId,
+    state: "running",
+    url: `${origin}/evals/experiments/${experimentId}`,
+    sandboxVersionId: version.versionId,
+    name: body.name ?? null,
+    params: body.params ?? {},
+    variants: body.matrix ? variants : [],
+    run: null,
+    counts: { pass: 0, fail: 0, invalid: 0, open: 0 },
+    cases: [],
+  };
+  experiments.set(experimentId, experiment);
+  log(`  experiment ${experimentId} on ${version.versionId} params ${JSON.stringify(experiment.params)} variants ${variants.length}`);
+  evaluate(version, experiment, body.trials ?? 3, variants);
+  return [201, { eval: EVAL.name, evalId: EVAL.evalId, experimentId, state: "running", url: experiment.url }];
+}
+
+function isEval(nameOrId) {
+  return nameOrId === EVAL.name || nameOrId === EVAL.evalId;
+}
+
+/** Each combination of the values of a matrix, as params. No matrix: one empty combination. */
+function combinations(matrix) {
+  return Object.entries(matrix).reduce(
+    (all, [name, values]) => all.flatMap((params) => values.map((value) => ({ ...params, [name]: value }))),
+    [{}],
+  );
+}
 
 /** docker load, then the smoke check: input.example with all tools simulated. */
 async function prepare(version) {
@@ -230,25 +271,38 @@ async function runImage(version, { input, params = [], tools = [] }) {
   return doc;
 }
 
-/** Each case, `trials` times, one run of the image each. */
-async function evaluate(version, experiment, trials) {
-  const params = Object.entries(experiment.params).map(([k, v]) => `${k}=${v}`);
-  for (const [index, spec] of CASES.entries()) {
-    const counts = { pass: 0, fail: 0, invalid: 0, open: trials };
-    const row = { caseId: `c_${index + 1}`, name: spec.name, number: 1, counts };
-    experiment.cases.push(row);
-    for (let trial = 0; trial < trials; trial++) {
-      const result = await runImage(version, { input: JSON.stringify(spec.input), params });
-      counts.open -= 1;
-      if (result.error) counts.invalid += 1;
-      else if (JSON.stringify(result.response.output).includes(spec.expect.contains)) counts.pass += 1;
-      else counts.fail += 1;
+/** Each case of each variant, `trials` times, one run of the image each. */
+async function evaluate(version, experiment, trials, variants) {
+  const scored = [];
+  for (const variant of variants) {
+    const params = Object.entries(variant.params).map(([k, v]) => `${k}=${v}`);
+    const total = { pass: 0, fail: 0, invalid: 0, open: 0 };
+    for (const [index, spec] of CASES.entries()) {
+      const counts = { pass: 0, fail: 0, invalid: 0, open: trials };
+      const name = variants.length > 1 ? `${spec.name} [variant ${variant.index}]` : spec.name;
+      experiment.cases.push({ caseId: `c_${index + 1}_${variant.index}`, name, number: 1, counts });
+      for (let trial = 0; trial < trials; trial++) {
+        const result = await runImage(version, { input: JSON.stringify(spec.input), params });
+        counts.open -= 1;
+        if (result.error) counts.invalid += 1;
+        else if (JSON.stringify(result.response.output).includes(spec.expect.contains)) counts.pass += 1;
+        else counts.fail += 1;
+      }
+      for (const key of ["pass", "fail", "invalid"]) total[key] += counts[key];
+      log(`  ${experiment.experimentId} ${name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.invalid} invalid`);
     }
-    log(`  ${experiment.experimentId} ${spec.name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.invalid} invalid`);
+    const valid = total.pass + total.fail;
+    scored.push({ index: variants.length > 1 ? variant.index : null, params: variant.params, score: valid ? total.pass / valid : null, counts: total });
   }
   for (const key of ["pass", "fail", "invalid"]) {
     experiment.counts[key] = experiment.cases.reduce((n, c) => n + c.counts[key], 0);
   }
+  const scores = scored.map((v) => v.score).filter((score) => score !== null);
+  experiment.run = {
+    score: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+    rule: "The score of the run is the mean of the scores of its variants.",
+    variants: scored,
+  };
   experiment.state = "completed";
 }
 

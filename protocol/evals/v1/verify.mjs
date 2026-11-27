@@ -16,6 +16,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const SCHEMAS = [
   'start-experiment.request', 'start-experiment.response', 'experiment',
   'pin-baseline.request', 'baseline', 'comparison', 'error',
+  'start-runs.request', 'start-runs.response', 'start-eval-run.request', 'start-eval-run.response',
+  'evals.response',
 ];
 
 export const validate = validatorFor(join(HERE, 'schema'));

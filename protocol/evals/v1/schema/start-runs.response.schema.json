@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/start-runs.response.schema.json",
+  "title": "The started runs",
+  "description": "The answer of POST /api/v1/evals/runs (201): one part for each eval, a started run or a refusal. A refused part does not refuse the other parts.",
+  "type": "object",
+  "required": [
+    "v",
+    "runs"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/started"
+          },
+          {
+            "$ref": "#/$defs/refused"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "started": {
+      "type": "object",
+      "required": [
+        "eval",
+        "evalId",
+        "experimentId",
+        "state",
+        "url"
+      ],
+      "properties": {
+        "eval": {
+          "type": "string",
+          "description": "The name of the eval."
+        },
+        "evalId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "experimentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "state": {
+          "enum": [
+            "running",
+            "completed"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the run differs from the request. For example: sandboxVersion is of another sandbox, so the eval runs on the newest ready version of its own sandbox."
+        }
+      }
+    },
+    "refused": {
+      "type": "object",
+      "required": [
+        "eval",
+        "evalId",
+        "error",
+        "message"
+      ],
+      "properties": {
+        "eval": {
+          "type": "string"
+        },
+        "evalId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The reason of the refusal, as the error of a refused call: wrong_sandbox, invalid_params, no_cases, too_many_trials, too_many_running, no_content_access, query_failed, too_many_rows, invalid_scorers, not_ready, sandboxes_off."
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

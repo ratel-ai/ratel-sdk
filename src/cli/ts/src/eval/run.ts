@@ -1,4 +1,4 @@
-/** Starts an eval run over the API of `protocol/evals/v1` and waits for its end. */
+/** Starts the runs of evals over the API of `protocol/evals/v1` and waits for their end. */
 export type EvalRunOptions = {
   /** The API root of Ratel, with `/api/v1` (`RATEL_BASE_URL`). */
   url: string;
@@ -7,21 +7,61 @@ export type EvalRunOptions = {
   sandboxVersion: string;
   /** The sandbox whose newest ready version `latest` is. */
   sandbox?: string;
+  /** The id or the name of a dataset: its cases replace the cases of the eval, for this run only. */
+  dataset?: string;
   /** The trials of each case. Absent: the trials of each eval. */
   trials?: number;
   /** The parameter values of each run. */
-  params?: Record<string, string | number | boolean>;
+  params?: Record<string, ParamValue>;
+  /** The parameters with more than one value: each combination is a variant of the run. */
+  matrix?: Record<string, ParamValue[]>;
   /** Run only the cases with this label. */
   label?: string;
-  /** The name of the experiment. */
+  /** The name of the run. */
   name?: string;
-  /** The names of the evals to run. Absent: the suite. */
+  /** The names or the ids of the evals to run. Absent: each eval. */
   evals?: string[];
 };
 
-export type Counts = { pass: number; fail: number; invalid: number; open: number };
+type ParamValue = string | number | boolean;
 
-export type StartedExperiment = { experimentId: string; state: string; url: string };
+/** A run that Ratel started for an eval. `note` says why it differs from the request. */
+export type StartedRun = {
+  eval: string;
+  evalId: string;
+  experimentId: string;
+  state: string;
+  url: string;
+  note?: string;
+};
+
+/** An eval whose run Ratel refused: `error` is the reason of the refusal. */
+export type RefusedRun = { eval: string; evalId: string; error: string; message: string };
+
+/** The part of one eval in the answer of `POST /evals/runs`. */
+export type RunPart = StartedRun | RefusedRun;
+
+/** An eval of the project (`GET /evals`). */
+export type EvalListing = { evalId: string; name: string };
+
+/** The result of a run of one eval: from `run` and `runDelta`, else from its row of `evals`. */
+export type RunSummary = {
+  score: number | null;
+  counts: Counts | null;
+  delta: { score: number | null; [field: string]: unknown } | null;
+  deltaRefusal: string | null;
+  version: number | null;
+  variants: Variant[];
+};
+
+export type Variant = {
+  index: number | null;
+  params: Record<string, unknown>;
+  score: number | null;
+  counts: Counts | null;
+};
+
+export type Counts = { pass: number; fail: number; invalid: number; open: number };
 
 export type Experiment = {
   experimentId: string;
@@ -46,7 +86,11 @@ export type EvalSummary = {
 };
 
 /** An eval with the reason why it has no delta, for the text output. */
-export type EvalRow = EvalSummary & { version: number | null; deltaRefusal: string | null };
+export type EvalRow = EvalSummary & {
+  evalId: string | null;
+  version: number | null;
+  deltaRefusal: string | null;
+};
 
 export type Baseline = { experimentId: string; url: string; pinnedBy: string; pinnedAt: string };
 
@@ -96,29 +140,28 @@ const POLL_MS = 2_000;
 /** Reads that fail one after the other before the wait ends. */
 const POLL_FAILURES = 5;
 
-export async function startEvalRun({
-  url,
-  apiKey,
-  sandboxVersion,
-  sandbox,
-  trials,
-  params,
-  label,
-  name,
-  evals,
-}: EvalRunOptions): Promise<StartedExperiment> {
-  const body = {
-    sandboxVersion,
-    ...(sandbox ? { sandbox } : {}),
-    ...(trials ? { trials } : {}),
-    ...(params ? { params } : {}),
-    ...(label ? { label } : {}),
-    ...(name ? { name } : {}),
-    ...(evals?.length ? { evals } : {}),
-  };
-  const answer = await call("POST", `${origin(url)}/evals/experiments`, apiKey, body);
+/** Starts one run for each eval, or for each of `evals`. A refused eval is a part, not an error. */
+export async function startEvalRuns(options: EvalRunOptions): Promise<RunPart[]> {
+  const body = { ...bodyOf(options), ...(options.evals?.length ? { evals: options.evals } : {}) };
+  const answer = await call("POST", `${origin(options.url)}/evals/runs`, options.apiKey, body);
+  const { runs } = answer;
+  if (!Array.isArray(runs) || !runs.every(isRunPart)) throw unreadable();
+  return runs;
+}
+
+/** Starts a run of one eval, by its name or its id. Ratel refuses it with an error. */
+export async function startEvalRun(
+  evalName: string,
+  options: Omit<EvalRunOptions, "evals">,
+): Promise<StartedRun> {
+  const address = `${origin(options.url)}/evals/${encodeURIComponent(evalName)}/runs`;
+  const answer = await call("POST", address, options.apiKey, bodyOf(options));
   if (typeof answer.experimentId !== "string") throw unreadable();
-  return answer as StartedExperiment;
+  return { eval: evalName, ...answer } as StartedRun;
+}
+
+export function isRefused(part: RunPart): part is RefusedRun {
+  return "error" in part;
 }
 
 /** Reads the experiment until it is completed, or throws `wait_timeout` (exit 4) at the deadline. */
@@ -151,14 +194,36 @@ export async function waitForEvalRun(
   }
 }
 
-/** Throws when no baseline is pinned: a run costs money, and it would have nothing to compare. */
-export async function requireBaseline({ url, apiKey }: Address): Promise<void> {
-  const answer = await call("GET", `${origin(url)}/evals/baseline`, apiKey);
-  if (answer.baseline === null) {
-    const message = "The project has no pinned baseline. Pin an experiment first.";
-    throw new EvalCallError(message, EVAL_EXIT.refused, { error: "no_baseline" });
+/**
+ * Throws when an eval to run has no pinned baseline: a run costs money, and it would have nothing
+ * to compare. The evals to run are `names` (names or ids), else each eval of the project.
+ */
+export async function requireBaselines(
+  names: string[] | undefined,
+  address: Address,
+): Promise<void> {
+  const listed = await listEvals(address);
+  const chosen = names ? names.map((name) => evalNamed(listed, name)) : listed;
+  for (const { evalId, name } of chosen) {
+    const query = `eval=${encodeURIComponent(evalId)}`;
+    const answer = await call(
+      "GET",
+      `${origin(address.url)}/evals/baseline?${query}`,
+      address.apiKey,
+    );
+    if (answer.baseline === null) {
+      const message = `The eval ${name} has no pinned baseline. Pin an experiment first.`;
+      throw new EvalCallError(message, EVAL_EXIT.refused, { error: "no_baseline", evalId });
+    }
+    if (!isBaseline(answer.baseline)) throw unreadable();
   }
-  if (!isBaseline(answer.baseline)) throw unreadable();
+}
+
+/** The evals of the project. */
+export async function listEvals({ url, apiKey }: Address): Promise<EvalListing[]> {
+  const { evals } = await call("GET", `${origin(url)}/evals`, apiKey);
+  if (!Array.isArray(evals) || !evals.every(isListing)) throw unreadable();
+  return evals.map(({ evalId, name }) => ({ evalId, name }));
 }
 
 /** The experiment against the pinned baseline. The run is paid, so a failed read is tried again. */
@@ -209,6 +274,7 @@ export function exitCodeOf({ cases }: Pick<Experiment, "cases">): number {
 export function evalRowsOf({ evals }: Record<string, unknown>): EvalRow[] | null {
   if (!Array.isArray(evals)) return null;
   return evals.filter(isEvalRow).map((row) => ({
+    evalId: typeof row.evalId === "string" ? row.evalId : null,
     name: row.name,
     version: Number.isInteger(row.version) ? (row.version as number) : null,
     score: rate(row.score),
@@ -220,6 +286,41 @@ export function evalRowsOf({ evals }: Record<string, unknown>): EvalRow[] | null
         ? row.deltaRefusal.reason
         : null,
   }));
+}
+
+/**
+ * The result of a run of one eval. Its score, delta and variants come from `run` and `runDelta`;
+ * without them (an older Ratel), from the row of the eval in `evals`. The counts are of all its
+ * trials. The values that are not readable are null: they only inform.
+ */
+export function runSummaryOf(experiment: Experiment, evalId?: string): RunSummary {
+  const rows = evalRowsOf(experiment) ?? [];
+  const row =
+    rows.find((r) => r.evalId === (experiment.evalId ?? evalId)) ??
+    (rows.length === 1 ? rows[0] : undefined);
+  const { run, runDelta, runDeltaRefusal } = experiment;
+  const counts = isCounts(experiment.counts) ? experiment.counts : null;
+  if (!isObject(run)) {
+    return {
+      score: row?.score ?? null,
+      counts: row?.counts ?? counts,
+      delta: row?.delta ?? null,
+      deltaRefusal: row?.deltaRefusal ?? null,
+      version: row?.version ?? null,
+      variants: [],
+    };
+  }
+  return {
+    score: rate(run.score),
+    counts,
+    delta: isObject(runDelta) ? { ...runDelta, score: delta(runDelta.score) } : null,
+    deltaRefusal:
+      isObject(runDeltaRefusal) && typeof runDeltaRefusal.reason === "string"
+        ? runDeltaRefusal.reason
+        : null,
+    version: row?.version ?? null,
+    variants: Array.isArray(run.variants) ? run.variants.filter(isObject).map(variantOf) : [],
+  };
 }
 
 /** The gate must not read a verdict of another run, or one that the contract does not have. */
@@ -235,6 +336,49 @@ function isComparison(answer: Record<string, unknown>, experimentId: string): an
     candidate.experimentId === experimentId &&
     [changedCases, otherCases].every((rows) => Array.isArray(rows) && rows.every(isComparedCase))
   );
+}
+
+function bodyOf(options: Omit<EvalRunOptions, "evals">) {
+  const { sandboxVersion, sandbox, dataset, trials, params, matrix, label, name } = options;
+  return {
+    sandboxVersion,
+    ...(sandbox ? { sandbox } : {}),
+    ...(dataset ? { dataset } : {}),
+    ...(trials ? { trials } : {}),
+    ...(params ? { params } : {}),
+    ...(matrix && Object.keys(matrix).length > 0 ? { matrix } : {}),
+    ...(label ? { label } : {}),
+    ...(name ? { name } : {}),
+  };
+}
+
+function isRunPart(value: unknown): value is RunPart {
+  if (!isObject(value) || typeof value.eval !== "string" || typeof value.evalId !== "string") {
+    return false;
+  }
+  if (typeof value.error === "string") return true;
+  return typeof value.experimentId === "string" && typeof value.url === "string";
+}
+
+function isListing(value: unknown): value is EvalListing {
+  return isObject(value) && typeof value.evalId === "string" && typeof value.name === "string";
+}
+
+function evalNamed(listed: EvalListing[], name: string): EvalListing {
+  const found = listed.find((e) => e.name === name || e.evalId === name);
+  if (found) return found;
+  throw new EvalCallError(`The project has no eval ${name}.`, EVAL_EXIT.refused, {
+    error: "not_found",
+  });
+}
+
+function variantOf(value: Record<string, unknown>): Variant {
+  return {
+    index: Number.isInteger(value.index) ? (value.index as number) : null,
+    params: isObject(value.params) ? value.params : {},
+    score: rate(value.score),
+    counts: isCounts(value.counts) ? value.counts : null,
+  };
 }
 
 function isBaseline(value: unknown): value is Baseline {

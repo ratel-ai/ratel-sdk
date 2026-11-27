@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/evals.response.schema.json",
+  "title": "The evals of the project",
+  "description": "The answer of GET /api/v1/evals (200).",
+  "type": "object",
+  "required": [
+    "v",
+    "evals"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "evals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "evalId",
+          "name",
+          "cases",
+          "scorers",
+          "baselineScore",
+          "newestScore",
+          "series"
+        ],
+        "properties": {
+          "evalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cases": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The number of cases of the eval."
+          },
+          "scorers": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The number of scorers of the eval."
+          },
+          "baselineScore": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "The score of the pinned baseline of the eval. Null: no baseline, or no score."
+          },
+          "newestScore": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "The score of the newest completed run of the eval."
+          },
+          "series": {
+            "type": "array",
+            "description": "The completed runs of the eval, oldest first.",
+            "items": {
+              "type": "object",
+              "required": [
+                "experimentId",
+                "at",
+                "score"
+              ],
+              "properties": {
+                "experimentId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "score": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

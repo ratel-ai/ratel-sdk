@@ -7,13 +7,45 @@ The wire contract to start and read an eval run, and to compare it with a pinned
 
 | Schema | Use |
 |---|---|
-| `start-experiment.request`, `start-experiment.response` | `POST /evals/experiments` (permission `evals:write`) |
+| `start-runs.request`, `start-runs.response` | `POST /evals/runs`: one run for each eval (permission `evals:write`) |
+| `start-eval-run.request`, `start-eval-run.response` | `POST /evals/{eval}/runs`: a run of one eval (`evals:write`) |
+| `evals.response` | `GET /evals`: the evals of the project (`evals:read`) |
+| `start-experiment.request`, `start-experiment.response` | `POST /evals/experiments`: a run of the suite (permission `evals:write`) |
 | `experiment` | `GET /evals/experiments/{id}` (permission `evals:read`) |
 | `pin-baseline.request`, `baseline` | `GET`, `PUT` and `DELETE /evals/baseline` (`evals:read`, the others `evals:write`) |
 | `comparison` | `GET /evals/experiments/{id}/comparison` (`evals:read`) |
+| `error` | The body of each refused call |
 
 The paths are under `RATEL_BASE_URL`, the API root with `/api/v1`.
-| `error` | The body of each refused call |
+
+## Runs of one eval
+
+A run belongs to one eval. `POST /evals/runs` starts one run for each eval of the project, or for
+each of `evals` (names or ids, 1 to 100). An unknown eval refuses the whole request with `not_found`
+(404). The answer has one part for each eval: a started run `{ eval, evalId, experimentId, state,
+url, note? }`, or a refusal `{ eval, evalId, error, message }`. A refused part does not refuse the
+other parts. `POST /evals/{eval}/runs` (`{eval}` is a name or an id, URL-encoded) starts the run of
+one eval. It answers `{ v, eval, evalId, experimentId, state, url }`, or a refusal with the status of
+its reason: `not_found` 404, `wrong_sandbox` 409, `invalid_params` 400, `no_cases` 409,
+`too_many_trials` 413, `too_many_running` 429, `no_content_access` 403, `query_failed` 422,
+`too_many_rows` 413, `invalid_scorers` 400, `not_ready` 409, `sandboxes_off` 409.
+
+Each field of the two requests is optional. `sandboxVersion` is an image version or `latest` (the
+default). A version of another sandbox than the sandbox of an eval does not apply to that eval: the
+eval runs on the newest ready version of its own sandbox, and its part has a `note` that says so.
+`dataset` (an id or a name) runs the cases of the dataset in place of the cases of the eval, for this
+run only. `params` is a flat object of parameter values. `matrix` holds the parameters with more than
+one value: each combination of its values, with `params`, is one variant of the run (at most 12).
+`trials`, `label` and `name` are as for an experiment.
+
+The read of a run (`experiment`) also has `evalId`, `datasetId`, `variants` (each combination with its
+`params`), `run` (the `score` of the run, its `rule`, and the score and the counts of each variant),
+`runDelta` (the score minus the score of the baseline of the eval) and `runDeltaRefusal` (why there is
+no delta). Each eval has its own baseline: `GET /evals/baseline?eval=<evalId>`. Without `eval` it is
+the pin of the project, for runs of the suite. The comparison of a run compares it with the baseline
+of its eval.
+
+## Runs of the suite
 
 An experiment runs the suite, each eval of one sandbox with each of its cases (a case counts at once: there is no approval), on one image
 version (a `version` of [`sandbox/v1`](../../sandbox/v1)), or on the newest ready version of that sandbox (`latest`).

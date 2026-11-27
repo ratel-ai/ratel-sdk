@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/evals/v1/start-eval-run.response.schema.json",
+  "title": "A started run of one eval",
+  "description": "The answer of POST /api/v1/evals/{eval}/runs (201). A refusal is an error with the status of its reason.",
+  "type": "object",
+  "required": [
+    "v",
+    "eval",
+    "evalId",
+    "experimentId",
+    "state",
+    "url"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "eval": {
+      "type": "string",
+      "description": "The name of the eval."
+    },
+    "evalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "experimentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "state": {
+      "enum": [
+        "running",
+        "completed"
+      ]
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the run differs from the request. For example: sandboxVersion is of another sandbox, so the eval runs on the newest ready version of its own sandbox."
+    }
+  }
+}
