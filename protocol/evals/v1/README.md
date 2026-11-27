@@ -19,14 +19,14 @@ An experiment runs the suite, each eval of the project with its approved cases, 
 version (a `version` of [`sandbox/v1`](../../sandbox/v1)), or on the newest ready one (`latest`).
 `evals` runs only the evals with these names (1 to 100). An unknown name is refused with
 `not_found` (404), and an eval of another agent with `wrong_sandbox` (409). `trials` is the trials
-of each case. Without it, each eval has its own trials. `params` holds the
+of each case. Without it, each eval has its own trials (3 unless the eval sets another). `params` holds the
 parameter values of each run: a flat object of the parameters that `ratel.yaml` declares. `label`
 runs only the cases with that label, and `name` names the experiment. It freezes the case versions and their
 scorers, and it never changes. A trial is `pass`, `fail` or `invalid`. An infrastructure failure is
 `invalid`. The answers have raw counts and no captured text: the page at `url` shows the outputs and
 the reasons to a member of the project.
 
-A read of the suite also has `evals`: each eval with its `counts`, its scorers and its `score`, the
+A read of the suite also has `evals`, with or without `evals` in the request: each eval with its `counts`, its scorers and its `score`, the
 mean pass rate of its scorers over the valid trials (0 to 1, null with no valid trial). `delta` is
 the score minus the score of the same eval in the pinned baseline run (`baselineId`). When there is
 no delta, `deltaRefusal` says why: `not_in_baseline` or `scorers_differ`. `verdict` is the verdict
@@ -42,8 +42,11 @@ two runs: it does not decide, and the comparison can still have a verdict. The r
 
 ## Compatibility
 
-A receiver ignores fields that it does not know. New optional fields are additive in v1. A change
-to the meaning of a field needs a new major version.
+A receiver ignores fields that it does not know, and it accepts a `change` value that it does not
+know. New optional fields are additive in v1. A change to the meaning of a field needs a new major
+version. One exception: before evals, an absent `trials` meant 3 trials for each case. Now it means
+the trials of each eval, which are 3 unless the eval sets another. A sender that needs a fixed
+number gives `trials`.
 
 ## Conformance
 

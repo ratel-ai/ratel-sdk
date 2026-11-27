@@ -31,23 +31,22 @@ Runs the suite (each eval of the project) on an image version, or only each --ev
 counts of each case and the score of each eval. With --compare-baseline, prints the verdict against
 the pinned baseline, and it gives the exit code. --trials is the trials of each case. Default: the
 trials of each eval. --param takes a parameter that ratel.yaml declares. The defaults of ratel.yaml
-apply. --timeout is the longest wait for the end of the run. Default: trials (3 when not given)
-times run.timeoutSeconds of ratel.yaml (300 when not given), plus 600. At the deadline it exits
+apply. --timeout is the longest wait for the end of the run. Default: trials (20, the most, when not
+given) times run.timeoutSeconds of ratel.yaml (300 when not given), plus 600. At the deadline it exits
 with 4.
 
   RATEL_API_KEY   a project key with the permissions evals:read and evals:write
   RATEL_BASE_URL  the API root of Ratel, with /api/v1 (default https://app.ratel.sh/api/v1)
 `;
 
+/**
+ * The most trials of a case. The default --timeout uses it when --trials is not given: then each
+ * eval has its own trials, which the CLI does not know before the run.
+ */
 const MAX_TRIALS = 20;
 /** The most --eval names of one run, and the longest name (protocol/evals/v1 start-experiment). */
 const MAX_EVALS = 100;
 const MAX_EVAL_NAME = 200;
-/**
- * The trials for the default --timeout when --trials is not given. Then each eval has its own
- * trials, which the CLI does not know before the run.
- */
-const DEFAULT_TRIALS = 3;
 /** The run.timeoutSeconds of ratel.yaml when it is not given (protocol/sandbox/v1). */
 const DEFAULT_RUN_TIMEOUT_SECONDS = 300;
 /** The time on top of the trials: the queue and the scorers. */
@@ -200,7 +199,8 @@ async function read(argv: string[]): Promise<Options | string> {
   }
   const { params, runTimeoutSeconds } = config;
   const waitSeconds =
-    timeout ?? (trials ?? DEFAULT_TRIALS) * runTimeoutSeconds + WAIT_MARGIN_SECONDS;
+    // With no --trials each eval uses its own trials, up to MAX_TRIALS: the wait covers the most.
+    timeout ?? (trials ?? MAX_TRIALS) * runTimeoutSeconds + WAIT_MARGIN_SECONDS;
   return {
     ...base,
     timeoutMs: waitSeconds * 1000,
@@ -278,7 +278,7 @@ function report(experiment: Experiment): string {
 
 /** `eval <name> (v<n>): <score>% score, <pass>/<total> pass, <delta> points`, or why no delta. */
 function evalLine({ name, version, score, counts, delta, deltaRefusal }: EvalRow): string {
-  const parts = [score === null ? "no score" : `${Math.round(score * 100)}% score`];
+  const parts = [score === null ? "no score" : `${percent(score)}% score`];
   if (counts) parts.push(`${counts.pass}/${counts.pass + counts.fail + counts.invalid} pass`);
   if (delta && delta.score !== null) parts.push(`${points(delta.score)} points`);
   else if (deltaRefusal) parts.push(`no delta: ${oneLine(deltaRefusal)}`);
@@ -308,4 +308,10 @@ function compared({ verdict, rule, url, baseline, changedCases }: Comparison): s
 
 function passes({ counts: { pass, fail, invalid } }: CaseSide): string {
   return `${pass}/${pass + fail + invalid} pass${invalid > 0 ? `, ${invalid} invalid` : ""}`;
+}
+
+/** A rate as a percent with one decimal. Only a rate of 1 shows 100: 0.9996 is "99.9". */
+function percent(rate: number): string {
+  const rounded = Math.round(rate * 1000) / 10;
+  return String(rate < 1 ? Math.min(rounded, 99.9) : rounded);
 }

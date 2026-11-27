@@ -122,12 +122,12 @@ for more evals. `--trials` is the trials of each case. Without it, each eval has
 `--param` takes a parameter that `ratel.yaml` declares (`./ratel.yaml` or `-f`), and the defaults of
 `ratel.yaml` apply. `--label` runs only the cases with the label, and `--name` names the experiment.
 
-The line of an eval has its score (the mean pass rate of its scorers over the valid trials), its
+The line of an eval has its score (the mean pass rate of its scorers over the valid trials, with one decimal: only a rate of 1 shows 100%), its
 passed trials of all trials, and its delta against the pinned baseline in percentage points, or the
 reason why it has no delta (`not_in_baseline`, `scorers_differ`):
 
 ```
-eval Refunds (v2): 67% score, 2/3 pass, +33.3 points
+eval Refunds (v2): 66.7% score, 2/3 pass, +33.3 points
 ```
 
 `--json` prints one JSON document: the experiment, its `params`, `evals` and, with
@@ -138,7 +138,7 @@ eval Refunds (v2): 67% score, 2/3 pass, +33.3 points
 `--compare-baseline` needs a pinned baseline: `ratel eval baseline pin <experiment-id>`.
 
 `--timeout` is the longest wait for the end of the run, in whole seconds. The default is
-`trials × run.timeoutSeconds + 600`: `trials` is `--trials` (3 when not given) and
+`trials × run.timeoutSeconds + 600`: `trials` is `--trials` (20, the most trials of a case, when not given) and
 `run.timeoutSeconds` comes from `ratel.yaml` (300 when not given or with no `ratel.yaml`). Give a
 larger `--timeout` for many cases. At the deadline the command exits with 4, and `--json` prints
 `{"error": "wait_timeout", "message", "experimentId"}`. The run can still end on Ratel.

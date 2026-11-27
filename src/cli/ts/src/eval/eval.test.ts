@@ -624,14 +624,14 @@ describe("the suite and --eval", () => {
     reads = [{ status: 200, body: withDelta }];
     const { out } = await ratel(["run"]);
     expect(out).toBe(
-      `Late refund (v1): 2 pass, 1 fail, 0 invalid\neval Refunds (v2): 67% score, 2/3 pass, +33.3 points\n${withDelta.url}\n`,
+      `Late refund (v1): 2 pass, 1 fail, 0 invalid\neval Refunds (v2): 66.7% score, 2/3 pass, +33.3 points\n${withDelta.url}\n`,
     );
   });
 
   it("prints the reason when an eval has no delta, and no score with no valid trial", async () => {
     reads = [{ status: 200, body: withRefusal }];
     const { out } = await ratel(["run"]);
-    expect(out).toContain("eval Refunds (v2): 67% score, 2/3 pass, no delta: scorers_differ\n");
+    expect(out).toContain("eval Refunds (v2): 66.7% score, 2/3 pass, no delta: scorers_differ\n");
     expect(out).toContain("eval Tone (v1): no score, 0/3 pass, no delta: not_in_baseline\n");
   });
 
@@ -682,14 +682,14 @@ describe("the suite and --eval", () => {
     expect((await ratel(["run", "--eval", "Nope"])).code).toBe(3);
   });
 
-  it("--compare-baseline: a case with change excluded keeps the verdict of the comparison", async () => {
+  it("--compare-baseline: an excluded case that went from pass to fail does not decide the exit code", async () => {
     const excluded = vector("comparison.excluded");
     excluded.candidate.experimentId = ID;
     comparisons = [{ status: 200, body: excluded }];
     reads = [{ status: 200, body: withDelta }];
     const { code, out } = await ratel(["run", "--compare-baseline"]);
-    expect(code).toBe(1);
+    expect(code).toBe(0);
     expect(out).toContain("excluded: Tone stays friendly");
-    expect(out).toContain("eval Refunds (v2): 67% score");
+    expect(out).toContain("eval Refunds (v2): 66.7% score");
   });
 });

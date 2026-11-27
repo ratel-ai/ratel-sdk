@@ -60,7 +60,8 @@
     },
     "trialsPerCase": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "description": "The most trials of a case in this run. Each eval can have its own trials."
     },
     "counts": {
       "$ref": "#/$defs/counts"
@@ -178,7 +179,7 @@
       "items": {
         "$ref": "#/$defs/eval"
       },
-      "description": "Each eval of the run with its score and its delta against the baseline. Only with the suite."
+      "description": "Each eval of the run with its score and its delta against the baseline, with or without `evals` in the request. Only with the suite."
     },
     "createdAt": {
       "type": "string",
