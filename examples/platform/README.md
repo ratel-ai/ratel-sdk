@@ -7,9 +7,6 @@ first, from the repository root:
 pnpm --filter @ratel-ai/telemetry build && pnpm --filter "@ratel-ai/sdk..." build
 ```
 
-To run `e2e.mjs` and `runtime-attach-e2e.mjs` through the deprecated `@ratel-ai/cloud-sdk`
-shim instead, build it too and run `pnpm --filter @ratel-ai/cloud-sdk example:shim-e2e`.
-
 ## `src/quickstart.ts` — `ratel({ platform })` quickstart
 
 Starts `MockPlatform` behind a local HTTP server, calls `ratel({ platform: { baseUrl, apiKey } })`,
