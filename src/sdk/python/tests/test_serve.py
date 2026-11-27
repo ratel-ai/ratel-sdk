@@ -501,6 +501,7 @@ def test_validate_run_request_agrees_with_the_protocol_vector(vector: dict[str, 
         assert errors[0].path == vector["path"]
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="sys.stdlib_module_names is 3.10+")
 def test_serve_imports_only_the_standard_library() -> None:
     tree = ast.parse(SERVE_FILE.read_text())
     names = {
