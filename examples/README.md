@@ -23,6 +23,8 @@ mcp-chat/         Interactive REPL against an MCP-backed agent (Vercel AI SDK + 
 pydantic-ai/      Ratel + Pydantic AI (Python) — top-K filtering + capability tools in the agent loop
 telemetry-ts/     Ratel telemetry — emit ratel.* spans via the OpenTelemetry JS SDK
 telemetry-python/ Ratel telemetry — emit ratel.* spans via the OpenTelemetry Python SDK
+sandbox-demo-agent/   A support agent as a Docker image for Ratel: serve(run), tool modes, ratel.yaml (TS)
+sandbox-command-agent/ A command-mode agent image with no Ratel SDK: stdin to stdout (Python)
 ```
 
 ## Conventions

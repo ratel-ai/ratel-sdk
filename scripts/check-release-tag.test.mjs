@@ -58,6 +58,9 @@ function makeRepo(version = "0.2.0", pyVersion = version) {
   write("src/rankers/python/pyproject.toml", `[project]\nname = "ratel-ai-rankers-plugin"\nversion = "${pyVersion}"\n`);
   write("src/rankers/python/native/Cargo.toml", cargo("ratel-rankers-python-native"));
   write("src/rankers/python/CHANGELOG.md", changelog(version));
+  // cli: the `ratel` CLI — an independent npm unit.
+  write("src/cli/ts/package.json", json("@ratel-ai/cli"));
+  write("src/cli/ts/CHANGELOG.md", changelog(version));
 
   return { root, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -74,6 +77,7 @@ test("parseTag splits prefix and version for every unit", () => {
   assert.deepEqual(parseTag("mastra-v0.1.0-rc.1"), { unit: "mastra", version: "0.1.0-rc.1" });
   assert.deepEqual(parseTag("rankers-ts-v0.1.0-rc.1"), { unit: "rankers-ts", version: "0.1.0-rc.1" });
   assert.deepEqual(parseTag("rankers-py-v0.1.0"), { unit: "rankers-py", version: "0.1.0" });
+  assert.deepEqual(parseTag("cli-v0.1.0-rc.1"), { unit: "cli", version: "0.1.0-rc.1" });
 });
 
 test("parseTag rejects the old lockstep tag and unknown prefixes", () => {

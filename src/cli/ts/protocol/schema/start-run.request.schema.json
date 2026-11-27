@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/start-run.request.schema.json",
+  "title": "StartRunRequest",
+  "description": "POST {RATEL_BASE_URL}/sandbox-runs with a project key. It runs the newest ready version of the agent `name`, or the version `versionId`. 202 answers a sandbox-run.",
+  "type": "object",
+  "required": ["input"],
+  "anyOf": [{ "required": ["name"] }, { "required": ["versionId"] }],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "versionId": { "type": "string", "minLength": 1 },
+    "input": { "description": "Any JSON." },
+    "params": { "$ref": "run-request.schema.json#/properties/params" },
+    "tools": { "$ref": "run-request.schema.json#/properties/tools" }
+  }
+}

@@ -54,6 +54,14 @@ describe("Transport", () => {
     expect(platformErr.reason).toBe("version_conflict");
   });
 
+  it("keeps the parsed body of a refusal", async () => {
+    const body = { error: "limit_reached", message: "The limit x (2) is reached.", limit: "x" };
+    const stub = fetchStub(() => Response.json(body, { status: 429 }));
+    const t = new Transport({ ...OPTS, fetch: stub.fetch });
+    const err = (await t.request("POST", "/x").catch((e: unknown) => e)) as PlatformError;
+    expect(err.body).toEqual(body);
+  });
+
   it("keeps a display-sentence error body as the message and maps code by status", async () => {
     const stub = fetchStub(() =>
       Response.json({ error: "Invalid or revoked API key." }, { status: 401 }),

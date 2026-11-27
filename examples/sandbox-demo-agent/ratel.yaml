@@ -1,0 +1,28 @@
+# The configuration of the agent on Ratel. The Dockerfile holds its environment.
+name: support-demo
+image:
+  dockerfile: Dockerfile
+  context: .
+run:
+  mode: http
+  port: 8080
+  timeoutSeconds: 120
+input:
+  example:
+    message: My desk lamp of order A100 never worked. Can I have a refund?
+params:
+  model:
+    type: enum
+    options: [claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5]
+    default: claude-sonnet-5-5
+    description: The model of the agent.
+  tone:
+    type: string
+    default: friendly
+    description: The tone of the answers.
+secrets: [ANTHROPIC_API_KEY]
+tools:
+  lookup_order: { mode: live }        # read-only: it runs for real
+  refund_order: { mode: simulated }   # a side effect: it answers from its fake handler
+network:
+  allow: [api.anthropic.com]

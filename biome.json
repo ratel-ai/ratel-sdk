@@ -13,7 +13,9 @@
       "src/telemetry/**/*.js",
       "src/rankers/**/*.ts",
       "src/rankers/**/*.tsx",
-      "src/rankers/**/*.js"
+      "src/rankers/**/*.js",
+      "src/cli/**/*.ts",
+      "src/cli/**/*.js"
     ]
   },
   "formatter": {
