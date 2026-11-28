@@ -25,6 +25,7 @@ telemetry-ts/     Ratel telemetry — emit ratel.* spans via the OpenTelemetry J
 telemetry-python/ Ratel telemetry — emit ratel.* spans via the OpenTelemetry Python SDK
 sandbox-demo-agent/   A support agent as a Docker image for Ratel: serve(run), tool modes, ratel.yaml (TS)
 sandbox-command-agent/ A command-mode agent image with no Ratel SDK: stdin to stdout (Python)
+sandbox-python-agent/  A support agent as a Docker image for Ratel: ratel_ai.serve, tool modes (Python)
 ```
 
 ## Conventions

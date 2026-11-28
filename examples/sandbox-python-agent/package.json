@@ -1,0 +1,13 @@
+{
+  "name": "@ratel-ai/example-sandbox-python-agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Python agent image for Ratel: serve(run) and tool modes of ratel_ai.serve.",
+  "scripts": {
+    "vendor": "node -e \"const fs=require('node:fs');fs.mkdirSync('vendor/ratel_ai',{recursive:true});fs.copyFileSync('../../src/sdk/python/ratel_ai/serve.py','vendor/ratel_ai/serve.py');fs.writeFileSync('vendor/ratel_ai/__init__.py','')\"",
+    "test": "pnpm vendor && PYTHONPATH=vendor python3 -m unittest -v test_agent.py"
+  },
+  "devDependencies": {
+    "@ratel-ai/cli": "workspace:*"
+  }
+}
