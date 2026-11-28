@@ -160,7 +160,7 @@ jobs:
       - name: Build native
         run: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target ${{ matrix.target }} --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: glibc-bindings-${{ matrix.triple }}
           path: src/sdk/ts/native/ratel-sdk.${{ matrix.triple }}.node

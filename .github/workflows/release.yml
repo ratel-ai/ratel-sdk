@@ -144,7 +144,7 @@ jobs:
       - name: Build native
         run: ${{ matrix.build }}
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.triple }}
           path: |
@@ -386,7 +386,7 @@ jobs:
           args: --release --out dist
           sccache: 'true'
       - name: Upload wheel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.triple }}
           path: src/sdk/python/dist/*.whl
@@ -408,7 +408,7 @@ jobs:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: src/sdk/python/dist/*.tar.gz
@@ -797,7 +797,7 @@ jobs:
       - name: Build native
         run: pnpm --filter @ratel-ai/rankers-plugin exec napi build --release --platform --target ${{ matrix.target }} --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rankers-bindings-${{ matrix.triple }}
           path: |
@@ -962,7 +962,7 @@ jobs:
           args: --release --out dist
           sccache: 'true'
       - name: Upload wheel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rankers-wheels-${{ matrix.triple }}
           path: src/rankers/python/dist/*.whl
@@ -984,7 +984,7 @@ jobs:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rankers-wheels-sdist
           path: src/rankers/python/dist/*.tar.gz
