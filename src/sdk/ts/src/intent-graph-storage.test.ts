@@ -1,15 +1,32 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import {
+  chmod,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  unlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { renameControl } = vi.hoisted(() => ({ renameControl: { failNext: false } }));
+const { renameControl } = vi.hoisted(() => ({
+  renameControl: {
+    failNext: false,
+    barrier: null as null | (() => Promise<void>),
+  },
+}));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
     rename: async (from: string, to: string) => {
+      if (renameControl.barrier) await renameControl.barrier();
       if (renameControl.failNext) {
         renameControl.failNext = false;
         throw new Error("injected rename failure");
@@ -151,14 +168,14 @@ describe("LocalFileIntentGraphStorage", () => {
 
     const storage = new LocalFileIntentGraphStorage({ path });
     await storage.save(IntentGraph.fromJson(graphJson(1)));
-    expect(stat(path).then((s) => s.mode & 0o777)).resolves.toBe(0o600);
+    await expect(stat(path).then((s) => s.mode & 0o777)).resolves.toBe(0o600);
 
     // A file an older build wrote 0644 is tightened by the next save, because
     // the mode lands on the temp file that the rename puts in its place.
     await chmod(path, 0o644);
     await storage.load();
     await storage.save(IntentGraph.fromJson(graphJson(2)));
-    expect(stat(path).then((s) => s.mode & 0o777)).resolves.toBe(0o600);
+    await expect(stat(path).then((s) => s.mode & 0o777)).resolves.toBe(0o600);
   });
 
   it("removes the temp file when the rename fails", async () => {
@@ -175,6 +192,193 @@ describe("LocalFileIntentGraphStorage", () => {
     const entries = await readdir(join(path, ".."));
     expect(entries.filter((entry) => entry.startsWith(".tmp-"))).toEqual([]);
   });
+
+  it("keeps the original error when releasing the lock also fails", async () => {
+    // Removing the lock file mid-save makes the release unlink fail too.
+    // The rename failure is the root cause, so it must not be masked.
+    const path = await tempPath();
+    const storage = new LocalFileIntentGraphStorage({ path });
+
+    renameControl.barrier = async () => {
+      await unlink(`${path}.lock`);
+    };
+    renameControl.failNext = true;
+    try {
+      await expect(storage.save(IntentGraph.fromJson(graphJson(1)))).rejects.toThrow(
+        "injected rename failure",
+      );
+    } finally {
+      renameControl.barrier = null;
+      renameControl.failNext = false;
+    }
+  });
+
+  it("rejects a concurrent save instead of silently overwriting another writer", async () => {
+    const path = await tempPath();
+    const writerA = new LocalFileIntentGraphStorage({ path });
+    const writerB = new LocalFileIntentGraphStorage({ path });
+
+    const base = IntentGraph.fromJson(graphJson(1));
+    await writerA.save(base);
+    await writerB.load();
+
+    let firstRenameReached!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      firstRenameReached = resolve;
+    });
+
+    let releaseFirstRename!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseFirstRename = resolve;
+    });
+
+    let first = true;
+    renameControl.barrier = async () => {
+      if (!first) return;
+      first = false;
+      firstRenameReached();
+      await gate;
+    };
+
+    try {
+      const saveA = writerA.save(IntentGraph.fromJson(graphJson(2)));
+      await reached;
+
+      const saveB = writerB.save(IntentGraph.fromJson(graphJson(3)));
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+      expect(await stat(`${path}.lock`).then((s) => s.isFile())).toBe(true);
+
+      releaseFirstRename();
+
+      const results = await Promise.allSettled([saveA, saveB]);
+
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(
+        results.filter(
+          (result) =>
+            result.status === "rejected" && result.reason instanceof StaleIntentGraphError,
+        ),
+      ).toHaveLength(1);
+
+      expect(JSON.parse(await readFile(path, "utf8")).rev).toBe(2);
+    } finally {
+      releaseFirstRename();
+      renameControl.barrier = null;
+    }
+  });
+
+  it("records its owner in the lock while a save holds it", async () => {
+    const path = await tempPath();
+    const storage = new LocalFileIntentGraphStorage({ path });
+
+    let owner: unknown;
+    renameControl.barrier = async () => {
+      owner = JSON.parse(await readFile(`${path}.lock`, "utf8"));
+    };
+    try {
+      await storage.save(IntentGraph.fromJson(graphJson(1)));
+    } finally {
+      renameControl.barrier = null;
+    }
+
+    expect(owner).toEqual({ pid: process.pid, host: hostname() });
+    await expect(stat(`${path}.lock`)).rejects.toThrow();
+  });
+
+  it("times out on a lock held by a live process, and names the owner", async () => {
+    const path = await tempPath();
+    const lockPath = `${path}.lock`;
+    const owner = JSON.stringify({ pid: process.pid, host: hostname() });
+    await writeFile(lockPath, owner);
+
+    const storage = new LocalFileIntentGraphStorage({ path });
+    const error = await storage.save(IntentGraph.fromJson(graphJson(1))).catch((e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain(`timed out waiting for intent graph lock at ${lockPath}`);
+    expect(error.message).toContain(`pid ${process.pid} on host ${hostname()}`);
+    expect(error.message).toContain("no longer running");
+    await expect(readFile(path, "utf8")).rejects.toThrow();
+    expect(await readFile(lockPath, "utf8")).toBe(owner);
+  });
+
+  it("takes over a lock left by a dead process on this host", async () => {
+    const path = await tempPath();
+    await writeFile(`${path}.lock`, JSON.stringify({ pid: deadPid(), host: hostname() }));
+
+    await new LocalFileIntentGraphStorage({ path }).save(IntentGraph.fromJson(graphJson(1)));
+
+    expect(JSON.parse(await readFile(path, "utf8")).rev).toBe(1);
+    expect(await readdir(join(path, ".."))).toEqual(["intent-graph.json"]);
+  });
+
+  it("lets only one of two waiters take over the same dead lock", async () => {
+    const path = await tempPath();
+    await writeFile(`${path}.lock`, JSON.stringify({ pid: deadPid(), host: hostname() }));
+
+    const results = await Promise.allSettled([
+      new LocalFileIntentGraphStorage({ path }).save(IntentGraph.fromJson(graphJson(1))),
+      new LocalFileIntentGraphStorage({ path }).save(IntentGraph.fromJson(graphJson(2))),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(
+      results.filter(
+        (result) => result.status === "rejected" && result.reason instanceof StaleIntentGraphError,
+      ),
+    ).toHaveLength(1);
+    expect(await readdir(join(path, ".."))).toEqual(["intent-graph.json"]);
+  });
+
+  it("does not take over a lock from another host, even if the pid is dead here", async () => {
+    const path = await tempPath();
+    await expectSaveWaitsOnLock(
+      path,
+      JSON.stringify({ pid: deadPid(), host: "another-host.invalid" }),
+    );
+  });
+
+  it("takes over an ownerless lock once it is older than the grace period", async () => {
+    const path = await tempPath();
+    const lockPath = `${path}.lock`;
+    await writeFile(lockPath, "");
+    const longAgo = new Date(Date.now() - 60_000);
+    await utimes(lockPath, longAgo, longAgo);
+
+    await new LocalFileIntentGraphStorage({ path }).save(IntentGraph.fromJson(graphJson(1)));
+
+    expect(JSON.parse(await readFile(path, "utf8")).rev).toBe(1);
+    await expect(stat(lockPath)).rejects.toThrow();
+  });
+
+  it("does not take over a fresh lock whose owner is not written yet", async () => {
+    const path = await tempPath();
+    await expectSaveWaitsOnLock(path, "");
+    await expectSaveWaitsOnLock(await tempPath(), "{not json");
+  });
+
+  /** A save blocks on a lock with `contents` and leaves it alone until it goes away. */
+  async function expectSaveWaitsOnLock(path: string, contents: string): Promise<void> {
+    const lockPath = `${path}.lock`;
+    await writeFile(lockPath, contents);
+
+    let settled = false;
+    const save = new LocalFileIntentGraphStorage({ path })
+      .save(IntentGraph.fromJson(graphJson(1)))
+      .finally(() => {
+        settled = true;
+      });
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 200));
+    expect(settled).toBe(false);
+    expect(await readFile(lockPath, "utf8")).toBe(contents);
+
+    await unlink(lockPath);
+    await save;
+    expect(JSON.parse(await readFile(path, "utf8")).rev).toBe(1);
+  }
 
   it("raises StaleIntentGraphError when the on-disk rev moved since load()", async () => {
     const path = await tempPath();
@@ -210,6 +414,13 @@ describe("LocalFileIntentGraphStorage", () => {
     );
   });
 });
+
+/** The pid of a process that has already exited and been reaped. */
+function deadPid(): number {
+  const child = spawnSync(process.execPath, ["-e", ""]);
+  if (child.pid === undefined) throw new Error("could not spawn a child process");
+  return child.pid;
+}
 
 describe("signS3Request (SigV4)", () => {
   const baseRequest = {
