@@ -16,11 +16,15 @@ sends them with `urllib`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import re
+import secrets
 import socket
+import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -53,6 +57,15 @@ _AWS_ERROR_MESSAGE_RE = re.compile(r"<Message>([^<]*)</Message>")
 
 #: Default idle timeout, matching botocore's ``connect_timeout``/``read_timeout``.
 DEFAULT_IDLE_TIMEOUT_S = 60.0
+
+#: How long a save waits for another writer's lock before it gives up.
+_LOCK_TIMEOUT_S = 5.0
+#: How often a waiting save checks the lock again.
+_LOCK_RETRY_S = 0.02
+#: How old a lock with no readable owner must be before a waiter removes it.
+#: The owner is written right after the lock is created, so a younger lock can
+#: belong to a writer that has not written its owner yet.
+_OWNERLESS_LOCK_GRACE_S = 10.0
 
 
 def _rev_of(serialized: str) -> int:
@@ -102,6 +115,9 @@ class LocalFileIntentGraphStorage:
 
     Writes atomically (temp file + `os.replace`) so a crash mid-write cannot
     leave a truncated file.
+
+    Concurrent saves are coordinated across instances using the same path.
+    Callers should not overlap load() and save() on one instance.
     """
 
     def __init__(self, path: str | os.PathLike[str]) -> None:
@@ -127,18 +143,34 @@ class LocalFileIntentGraphStorage:
 
         body = graph.to_json()
         rev = _rev_of(body)
+        expected_rev = self._last_known_rev
 
-        disk_rev = await asyncio.to_thread(self._read_disk_rev)
-        if disk_rev != self._last_known_rev:
-            expected = self._last_known_rev if self._last_known_rev is not None else "none"
-            found = disk_rev if disk_rev is not None else "none"
-            raise StaleIntentGraphError(
-                f"intent graph at {self._path} changed since load() (on-disk rev {found}, "
-                f"expected {expected}); load() again and reapply your changes before saving"
-            )
+        await asyncio.to_thread(self._save_locked, body, rev, expected_rev)
 
-        await asyncio.to_thread(self._write_atomic, body)
-        self._last_known_rev = rev
+    def _save_locked(self, body: str, rev: int, expected_rev: int | None) -> None:
+        """Keep revision checking and replacement under one filesystem lock."""
+        lock_path = Path(f"{self._path}.lock")
+        _acquire_local_graph_lock(lock_path)
+
+        try:
+            disk_rev = self._read_disk_rev()
+            if disk_rev != expected_rev:
+                expected = expected_rev if expected_rev is not None else "none"
+                found = disk_rev if disk_rev is not None else "none"
+                raise StaleIntentGraphError(
+                    f"intent graph at {self._path} changed since load() "
+                    f"(on-disk rev {found}, expected {expected}); "
+                    "load() again and reapply your changes before saving"
+                )
+
+            self._write_atomic(body)
+            self._last_known_rev = rev
+        except BaseException:
+            # A failed release must not mask the error already in flight.
+            with contextlib.suppress(OSError):
+                lock_path.unlink()
+            raise
+        lock_path.unlink()
 
     def _read_disk_rev(self) -> int | None:
         try:
@@ -158,6 +190,156 @@ class LocalFileIntentGraphStorage:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
             raise
+
+
+@dataclass(frozen=True)
+class _LockOwner:
+    """The writer that holds a lock, as recorded in the lock file."""
+
+    pid: int
+    host: str
+
+
+@dataclass(frozen=True)
+class _LockState:
+    """What a waiter found when it examined an existing lock."""
+
+    owner: _LockOwner | None
+    stale: bool
+
+
+def _acquire_local_graph_lock(lock_path: Path) -> None:
+    """Serialize local graph writes across instances and processes.
+
+    The lock is a file at ``<path>.lock``, created exclusively, that records
+    its owner as ``{pid, host}``. A waiter removes a lock whose owner crashed:
+
+    - the owner is on this host and its pid is no longer running, or
+    - the lock has no readable owner and is older than a grace period (the
+      writer crashed between creating the lock and writing its owner).
+
+    To remove a stale lock, a waiter first renames it to a unique tombstone,
+    so only one waiter can take it. It then examines the tombstone again: if
+    another waiter replaced the stale lock with a live one in the meantime, it
+    puts that lock back.
+
+    Limits: a lock from a different host is never removed, because its pid
+    cannot be checked from here. If the pid of a crashed owner was reused by
+    an unrelated process, the lock looks live. On Windows, the pid is not
+    checked at all. In these cases the save times out, and the error names
+    the lock and its owner so that an operator can delete it.
+    """
+    deadline = time.monotonic() + _LOCK_TIMEOUT_S
+
+    while True:
+        if _try_create_lock(lock_path):
+            return
+
+        state = _examine_lock(lock_path)
+        if state is None:
+            continue  # Released while we looked: try again now.
+        if state.stale:
+            _take_over_stale_lock(lock_path)
+            continue
+
+        if time.monotonic() >= deadline:
+            raise TimeoutError(
+                f"timed out waiting for intent graph lock at {lock_path} "
+                f"(held by {_describe_lock_owner(state.owner)}); "
+                "if that process is no longer running, delete the lock file and retry"
+            )
+        time.sleep(_LOCK_RETRY_S)
+
+
+def _try_create_lock(lock_path: Path) -> bool:
+    """Create the lock and record this process as its owner. `False` if it exists."""
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        return False
+
+    owner = json.dumps({"pid": os.getpid(), "host": socket.gethostname()})
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(owner)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            lock_path.unlink()
+        raise
+    return True
+
+
+def _examine_lock(lock_path: Path) -> _LockState | None:
+    """Read the owner of the lock at `lock_path`. `None` if the lock is gone."""
+    try:
+        modified = lock_path.stat().st_mtime
+        text = lock_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError):
+        # We cannot read the owner (e.g. another user's lock): never remove it.
+        return _LockState(owner=None, stale=False)
+
+    owner = _parse_lock_owner(text)
+    if owner is None:
+        return _LockState(owner=None, stale=time.time() - modified > _OWNERLESS_LOCK_GRACE_S)
+    stale = owner.host == socket.gethostname() and not _is_process_alive(owner.pid)
+    return _LockState(owner=owner, stale=stale)
+
+
+def _take_over_stale_lock(lock_path: Path) -> None:
+    """Remove a stale lock without racing another waiter that does the same.
+
+    Only the lock that this waiter renamed is deleted. If the renamed lock is
+    no longer stale, another waiter replaced the stale lock first, and the
+    renamed lock is put back.
+    """
+    tombstone = Path(f"{lock_path}.stale-{os.getpid()}-{secrets.token_hex(6)}")
+    try:
+        os.rename(lock_path, tombstone)
+    except FileNotFoundError:
+        return  # Another waiter took it over first.
+
+    state = _examine_lock(tombstone)
+    if state is not None and not state.stale:
+        os.replace(tombstone, lock_path)
+        return
+    with contextlib.suppress(FileNotFoundError):
+        tombstone.unlink()
+
+
+def _parse_lock_owner(text: str) -> _LockOwner | None:
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(value, dict):
+        return None
+    pid = value.get("pid")
+    host = value.get("host")
+    # A pid of 0 or less would make `os.kill` signal a process group.
+    if type(pid) is not int or pid <= 0:
+        return None
+    if not isinstance(host, str) or not host:
+        return None
+    return _LockOwner(pid=pid, host=host)
+
+
+def _is_process_alive(pid: int) -> bool:
+    if sys.platform == "win32":
+        # `os.kill` on Windows terminates the process instead of probing it.
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # The process exists, but belongs to another user.
+    return True
+
+
+def _describe_lock_owner(owner: _LockOwner | None) -> str:
+    return f"pid {owner.pid} on host {owner.host}" if owner else "an unknown owner"
 
 
 @dataclass(frozen=True)
