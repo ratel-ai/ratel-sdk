@@ -1,0 +1,15 @@
+# A command-mode agent: Ratel writes the request on stdin and reads the response on stdout.
+name: command-demo
+run:
+  mode: command
+  command: [python, agent.py]
+  timeoutSeconds: 30
+input:
+  example:
+    text: Ratel runs this image with no SDK in it
+params:
+  style:
+    type: enum
+    options: [plain, shout, reverse]
+    default: plain
+    description: How the agent writes the reply.

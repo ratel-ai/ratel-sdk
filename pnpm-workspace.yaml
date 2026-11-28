@@ -4,4 +4,5 @@ packages:
   - 'src/adapters/ts-mastra'
   - 'src/telemetry/ts'
   - 'src/rankers/ts'
+  - 'src/cli/ts'
   - 'examples/*'

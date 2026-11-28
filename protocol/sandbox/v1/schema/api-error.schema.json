@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/api-error.schema.json",
+  "title": "ApiError",
+  "description": "The body of each refused call of the platform API (push and runs): a code and a sentence. A refusal over a limit names it. The container answers with error.schema.json instead.",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "description": "A stable code, e.g. invalid, not_found, not_configured, limit_reached, bundle_refused." },
+    "message": { "type": "string" },
+    "limit": { "type": "string" },
+    "max": { "type": "number" },
+    "current": { "type": "number" }
+  },
+  "if": { "properties": { "error": { "const": "limit_reached" } } },
+  "then": { "required": ["message", "limit", "max", "current"] }
+}

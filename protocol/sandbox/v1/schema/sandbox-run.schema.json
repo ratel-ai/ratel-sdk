@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/sandbox-run.schema.json",
+  "title": "SandboxRun",
+  "description": "A run on Ratel: the answer of POST {RATEL_BASE_URL}/sandbox-runs (202) and GET {RATEL_BASE_URL}/sandbox-runs/{id} (200).",
+  "type": "object",
+  "required": ["runId", "versionId", "status"],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "versionId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["queued", "running", "completed", "failed"] },
+    "input": { "description": "Any JSON." },
+    "params": { "type": "object" },
+    "output": { "description": "Any JSON. Set when the run completed." },
+    "toolCalls": { "$ref": "run-response.schema.json#/properties/toolCalls" },
+    "usage": { "$ref": "run-response.schema.json#/properties/usage" },
+    "error": { "$ref": "error.schema.json#/$defs/errorBody" },
+    "logs": { "type": "string", "description": "The container logs, redacted and capped." },
+    "url": { "type": "string", "pattern": "^https?://" }
+  },
+  "if": { "properties": { "status": { "const": "failed" } } },
+  "then": { "required": ["error"] }
+}

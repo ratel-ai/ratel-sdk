@@ -12,6 +12,9 @@ response. The platform, `@ratel-ai/sdk/serve` and the `ratel` CLI build against 
 | `run-response` | The body of a 200 answer (HTTP mode), or a JSON object on stdout (command mode) |
 | `error` | The body of each non-200 answer: `{"error": {"code", "message"}}` |
 | `ratel-yaml` | The parsed `ratel.yaml` of an agent |
+| `create-version.request`, `create-version.response`, `version` | The push API (below) |
+| `start-run.request`, `sandbox-run` | The runs API (below) |
+| `api-error` | The body of each refused call of the platform API: `{"error": code, "message"}` |
 
 ## HTTP mode (default)
 
@@ -79,6 +82,32 @@ network:
 Unknown fields are refused, so a typo fails before a build. The default of an `enum`
 parameter must be one of its `options`: `verify.mjs` checks this rule in `ratelYamlRules`.
 The smoke check of each version runs `input.example` with simulated tools.
+
+## Platform API
+
+The `ratel` CLI calls these routes with a project key (`Authorization: Bearer $RATEL_API_KEY`).
+`RATEL_BASE_URL` is the API root, with `/api/v1` (default `https://app.ratel.sh/api/v1`).
+
+Push (`ratel push`):
+
+1. `POST /sandboxes/versions` with a `create-version.request`: the parsed `ratel.yaml`, the image
+   digest, the git commit and the SHA-256 and size of the tarball. 201 answers a
+   `create-version.response` with the upload target.
+2. `PUT <upload.url>` with `upload.headers` sends the gzip of `docker save`. The key goes only
+   when `upload.authorize` is true and the URL has the origin of `RATEL_BASE_URL`.
+3. `POST /sandboxes/versions/{id}/finalize` queues the preparation and answers 202 with a `version`.
+4. `GET /sandboxes/versions/{id}` answers the `version`. Its status goes `uploaded`, `preparing`,
+   then `ready` or `failed`. `smoke` holds the result of the smoke check, with the container logs
+   and the contract error when it failed.
+
+Runs (`ratel run`):
+
+- `POST /sandbox-runs` with a `start-run.request` runs the newest ready version of `name` (or
+  `versionId`) and answers 202 with a `sandbox-run`.
+- `GET /sandbox-runs/{id}` answers the `sandbox-run`. Its status goes `queued`, `running`, then
+  `completed` (with `output`, `toolCalls`, `usage`) or `failed` (with `error` and `logs`).
+
+The client sends no redirect: a redirect is an error, so the key never goes to another origin.
 
 ## Compatibility
 

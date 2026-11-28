@@ -18,7 +18,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-export const SCHEMAS = ['run-request', 'run-response', 'error', 'ratel-yaml'];
+export const SCHEMAS = [
+  'run-request', 'run-response', 'error', 'ratel-yaml',
+  'api-error', 'create-version.request', 'create-version.response', 'version', 'start-run.request', 'sandbox-run',
+];
+
+const CARRIES_CONFIG = new Set(['create-version.request', 'version']);
 
 const ANNOTATIONS = new Set([
   '$schema', '$id', '$defs', '$comment', 'title', 'description', 'default', 'examples',
@@ -32,7 +37,12 @@ export function validate(schemaName, doc) {
   const root = loadSchema(`${schemaName}.schema.json`);
   const errors = [];
   check(root, doc, '', { root, errors });
-  if (schemaName === 'ratel-yaml' && errors.length === 0) errors.push(...ratelYamlRules(doc));
+  if (errors.length === 0) {
+    if (schemaName === 'ratel-yaml') errors.push(...ratelYamlRules(doc));
+    else if (CARRIES_CONFIG.has(schemaName) && doc.config) {
+      errors.push(...ratelYamlRules(doc.config).map((e) => ({ ...e, path: `/config${e.path}` })));
+    }
+  }
   return errors;
 }
 

@@ -1,0 +1,13 @@
+# Changelog
+
+All notable changes to `@ratel-ai/cli` are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this package adheres to [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Added
+
+- `ratel push`: validate `ratel.yaml`, build (or take) the Docker image of an agent, upload it to Ratel as a gzip tarball with the parsed `ratel.yaml`, and wait for the smoke check of the version.
+- `ratel run --local`: start the image with local Docker and send one request per the run contract `protocol/sandbox/v1` (HTTP mode or command mode). A contract error prints the container logs and the exact error.
+- `ratel run`: run the newest ready version of the agent on Ratel and print the output.
