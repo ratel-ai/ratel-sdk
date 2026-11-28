@@ -333,10 +333,30 @@ serve(run)                                           # $PORT, default 8080, on 0
 a raised error answers 500, both with `{"error": {"code", "message"}}`. Each run sets the mode of
 each tool (default `simulated`): `simulated` answers from `fake` (none: `ToolCallError` with the code
 `no_fake`), `recorded` from the fixture with the same normalized arguments (none: `no_fixture`),
-`live` from `execute`. The response lists each call with its mode. Outside a run, a tool runs
-`execute`. `current_run()` gives the run id and the traceparent, and `record_usage()` adds model
-usage. The values of the secrets in `$RATEL_SECRET_NAMES` are redacted from each response. See
+`live` from `execute`. The response lists each call with its mode. In a process with no server of
+`serve`, a tool runs `execute`. `current_run()` gives the run id and the traceparent, and
+`record_usage()` adds model usage. The values of the secrets in `$RATEL_SECRET_NAMES` are redacted
+from each response. See
 [`examples/sandbox-python-agent`](../../../examples/sandbox-python-agent/README.md).
+
+### Tools on a worker thread
+
+The scope of a run is in a `ContextVar`. `asyncio` tasks and `asyncio.to_thread` copy it. A thread
+of `ThreadPoolExecutor` or `loop.run_in_executor` does not. While a server of `serve` is open, a
+tool call with no run scope fails with `ToolCallError` and the code `no_run_scope`. It never runs
+`execute`, so a `simulated` tool cannot do its real side effect. Carry the scope into the thread
+with `contextvars.copy_context().run`:
+
+```python
+import contextvars
+from concurrent.futures import ThreadPoolExecutor
+
+def run(args: RunArgs) -> dict:
+    with ThreadPoolExecutor() as pool:
+        context = contextvars.copy_context()         # one copy for each submitted call
+        future = pool.submit(context.run, refund_order, order_id="A100")
+        return future.result()
+```
 
 ## Ratel Platform
 

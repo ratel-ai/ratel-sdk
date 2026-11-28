@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import contextvars
 import json
 import shutil
 import subprocess
@@ -13,6 +14,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
@@ -454,6 +456,76 @@ def test_a_tool_refuses_a_fake_that_is_not_async_like_execute() -> None:
 
 
 def test_outside_a_run_a_tool_runs_the_real_function() -> None:
+    real_calls.clear()
+    assert refund_order(id="1") == {"refunded": "1", "real": True}
+    assert real_calls == [{"id": "1"}]
+
+
+def test_a_simulated_tool_on_a_worker_thread_fails_and_never_runs_the_real_function(
+    start: Callable[..., str],
+) -> None:
+    def run(args: RunArgs) -> Any:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            try:
+                return pool.submit(refund_order, id="42").result()
+            except ToolCallError as error:
+                return {"code": error.code, "message": str(error)}
+
+    real_calls.clear()
+    base = start(run)
+    body = post(base, request(tools={"refund_order": {"mode": "simulated"}}))[1]
+    assert real_calls == []
+    assert body["output"]["code"] == "no_run_scope"
+    assert "refund_order" in body["output"]["message"]
+    assert "copy_context" in body["output"]["message"]
+
+
+def test_a_worker_thread_with_the_copied_context_applies_the_mode(
+    start: Callable[..., str],
+) -> None:
+    def run(args: RunArgs) -> Any:
+        context = contextvars.copy_context()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(context.run, lambda: refund_order(id="42")).result()
+
+    real_calls.clear()
+    base = start(run)
+    body = post(base, request(tools={"refund_order": {"mode": "simulated"}}))[1]
+    assert real_calls == []
+    assert body["output"] == {"refunded": "42", "real": False}
+    assert body["toolCalls"] == [
+        {
+            "name": "refund_order",
+            "args": {"id": "42"},
+            "mode": "simulated",
+            "result": {"refunded": "42", "real": False},
+        }
+    ]
+
+
+def test_an_async_tool_with_no_run_scope_fails_while_a_server_runs(
+    start: Callable[..., str],
+) -> None:
+    calls: list[str] = []
+
+    async def execute(sku: str) -> str:
+        calls.append(sku)
+        return "real"
+
+    async def fake(sku: str) -> str:
+        return "fake"
+
+    lookup = tool("lookup", execute=execute, fake=fake)
+    start(lambda args: None)
+    with pytest.raises(ToolCallError) as raised:
+        asyncio.run(lookup(sku="a"))
+    assert raised.value.code == "no_run_scope"
+    assert calls == []
+
+
+def test_a_tool_runs_the_real_function_again_after_the_server_closes() -> None:
+    handle = start_server(lambda args: None, port=0, host="127.0.0.1")
+    handle.close()
     real_calls.clear()
     assert refund_order(id="1") == {"refunded": "1", "real": True}
     assert real_calls == [{"id": "1"}]

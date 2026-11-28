@@ -108,7 +108,7 @@ class ContractError:
 
 
 class ToolCallError(Exception):
-    """A failed tool call. `code` is `no_fake`, `no_fixture` or `tool_failed`."""
+    """A failed tool call. `code` is `no_fake`, `no_fixture`, `no_run_scope` or `tool_failed`."""
 
     def __init__(self, code: str, message: str) -> None:
         """A failed call with its code."""
@@ -148,6 +148,11 @@ class _RunScope:
 _scope: contextvars.ContextVar[_RunScope | None] = contextvars.ContextVar(
     "ratel_run_scope", default=None
 )
+
+# The servers of `serve` that are open in this process. While one is open, a tool call with no
+# run scope fails: it must never run the real function in place of a simulated one.
+_open_servers = 0
+_open_servers_lock = threading.Lock()
 
 
 def serve(
@@ -216,13 +221,16 @@ def tool(name: str, execute: F, fake: Callable[..., Any] | None = None) -> F:
       no fixture, the call fails with the code `no_fixture`.
     - `live` runs `execute`.
 
-    The response lists each call with its mode. Outside a run, the tool runs `execute`. Call the
-    tool with keyword arguments or with one mapping. When `execute` is async, the tool is async
-    and `fake` must be async too.
+    The response lists each call with its mode. Call the tool with keyword arguments or with one
+    mapping. When `execute` is async, the tool is async and `fake` must be async too.
+
+    In a process with no server of `serve`, the tool runs `execute`. While a server is open, a
+    call with no run scope fails with the code `no_run_scope` and never runs `execute`. A worker
+    thread does not get the scope of the run: carry it with `contextvars.copy_context().run`.
 
     Args:
         name: The name of the tool, as `ratel.yaml` and the run request name it.
-        execute: The real function. It runs in mode `live`, and outside a run.
+        execute: The real function. It runs in mode `live`, and in a process with no server.
         fake: The fake handler. It answers in mode `simulated` and never has side effects.
     """
     if not callable(execute):
@@ -237,6 +245,7 @@ def tool(name: str, execute: F, fake: Callable[..., Any] | None = None) -> F:
         async def call_async(*args: Any, **kwargs: Any) -> Any:
             scope = _scope.get()
             if scope is None:
+                _refuse_without_scope(name)
                 return await execute(*args, **kwargs)
             call = _ToolCall(name, scope, _call_args(name, args, kwargs))
             try:
@@ -251,6 +260,7 @@ def tool(name: str, execute: F, fake: Callable[..., Any] | None = None) -> F:
     def call_sync(*args: Any, **kwargs: Any) -> Any:
         scope = _scope.get()
         if scope is None:
+            _refuse_without_scope(name)
             return execute(*args, **kwargs)
         call = _ToolCall(name, scope, _call_args(name, args, kwargs))
         try:
@@ -377,9 +387,30 @@ def _make_server(
     Handler.run = staticmethod(run)
     Handler.redactor = redactor
     Handler.max_body = max_body_bytes
-    server = ThreadingHTTPServer((host, _port_from_env() if port is None else port), Handler)
+    server = _Server((host, _port_from_env() if port is None else port), Handler)
     server.daemon_threads = True
     return server
+
+
+class _Server(ThreadingHTTPServer):
+    """A server of `serve`. It counts as open from its start to `server_close`."""
+
+    _counted = False
+
+    def server_activate(self) -> None:
+        super().server_activate()
+        global _open_servers
+        with _open_servers_lock:
+            _open_servers += 1
+            self._counted = True
+
+    def server_close(self) -> None:
+        global _open_servers
+        with _open_servers_lock:
+            if self._counted:
+                _open_servers -= 1
+                self._counted = False
+        super().server_close()
 
 
 class _RunHandler(BaseHTTPRequestHandler):
@@ -561,6 +592,18 @@ class _ToolCall:
         self.scope.tool_calls.append(
             {"name": self.name, "args": self.args, "mode": self.mode, **outcome}
         )
+
+
+def _refuse_without_scope(name: str) -> None:
+    """Fail a call with no run scope while a server is open. With no server, do nothing."""
+    if _open_servers == 0:
+        return
+    raise ToolCallError(
+        "no_run_scope",
+        f"The tool {name} was called with no run scope while a server of serve is open. "
+        "A worker thread does not get the scope of the run: "
+        "call the tool through contextvars.copy_context().run.",
+    )
 
 
 def _answer_sync(
