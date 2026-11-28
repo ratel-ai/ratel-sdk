@@ -9,6 +9,6 @@
     "test": "pnpm -r test"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.13"
+    "@biomejs/biome": "^2.6.9"
   }
 }
