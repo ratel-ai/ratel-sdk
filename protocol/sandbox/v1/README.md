@@ -29,6 +29,12 @@ stdout is the answer: a JSON object with `output` is a `run-response`, and any o
 output as a string. An exit code other than 0 is a failed run, and Ratel keeps stderr as the
 logs. Command mode has no tool control.
 
+## Environment
+
+Ratel starts each container with the values of the secrets of `ratel.yaml` as environment
+variables, and sets `RATEL_SECRET_NAMES` to their names, separated by commas. A server never
+returns the value of a secret: `@ratel-ai/sdk/serve` redacts them from each response.
+
 ## Request
 
 `{v: 1, runId, input, params, tools: {<name>: {mode}}, fixtures: [{tool, args, result}], traceparent?}`
