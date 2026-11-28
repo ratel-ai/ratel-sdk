@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntentGraph, ratel } from "../../index.js";
-import { attachIntentGraphSync } from "./intent-graph-sync.js";
+import { attachIntentGraphSync, type IntentGraphSyncError } from "./intent-graph-sync.js";
 
 const require = createRequire(import.meta.url);
 const installedSdkVersion: string = (require("@ratel-ai/sdk/package.json") as { version: string })
@@ -150,6 +150,156 @@ describe("attachIntentGraphSync against the real @ratel-ai/sdk", () => {
   it("fromJson throws on malformed JSON and on an unknown schema version", () => {
     expect(() => IntentGraph.fromJson("not json")).toThrow();
     expect(() => IntentGraph.fromJson('{"v":999,"rev":0,"clusters":[]}')).toThrow();
+  });
+
+  describe("a stored graph this build cannot read (e.g. a newer schema version)", () => {
+    /** The seed graph re-labelled as a future wire version, which native fromJson rejects. */
+    function futureVersionGraph(seedGraph: IntentGraph): unknown {
+      return { ...(JSON.parse(seedGraph.toJson()) as Record<string, unknown>), v: 2 };
+    }
+
+    function captureUnhandledRejections(): { reasons: unknown[]; stop: () => void } {
+      const reasons: unknown[] = [];
+      const listener = (reason: unknown): void => {
+        reasons.push(reason);
+      };
+      process.on("unhandledRejection", listener);
+      return { reasons, stop: () => process.off("unhandledRejection", listener) };
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("fails the initial load open and retries, instead of rejecting attach", async () => {
+      vi.useFakeTimers();
+      const { runtime, seedGraph } = await buildSeedGraph();
+      const errors: IntentGraphSyncError[] = [];
+      let call = 0;
+      const fetchImpl = (async () => {
+        call += 1;
+        const graph = call === 1 ? futureVersionGraph(seedGraph) : JSON.parse(seedGraph.toJson());
+        return jsonResponse({ sourceId: "billing-agent", rev: seedGraph.rev, graph });
+      }) as typeof fetch;
+
+      const sync = await attachIntentGraphSync(runtime, {
+        apiKey: "rtl_test",
+        fetch: fetchImpl,
+        random: () => 1,
+        onError: (error) => errors.push(error),
+      });
+
+      expect(sync.status).toBe("error");
+      expect(errors).toEqual([expect.objectContaining({ kind: "network", status: null })]);
+      expect(sync.graph.rev).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(call).toBe(2);
+      expect(sync.status).toBe("idle");
+      expect(sync.graph.rev).toBe(seedGraph.rev);
+      await sync.close();
+    });
+
+    it("a consume-mode poll keeps the current graph and polls again, with no unhandled rejection", async () => {
+      vi.useFakeTimers();
+      const unhandled = captureUnhandledRejections();
+      try {
+        const { runtime, seedGraph } = await buildSeedGraph();
+        let call = 0;
+        const fetchImpl = (async () => {
+          call += 1;
+          const graph = call === 2 ? futureVersionGraph(seedGraph) : JSON.parse(seedGraph.toJson());
+          return jsonResponse(
+            { sourceId: "platform", rev: seedGraph.rev, graph },
+            { headers: { ETag: `"e${call}"` } },
+          );
+        }) as typeof fetch;
+        const replaced: IntentGraph[] = [];
+
+        const sync = await attachIntentGraphSync(runtime, {
+          apiKey: "rtl_test",
+          fetch: fetchImpl,
+          mode: "consume",
+          graphKey: "platform",
+          pollIntervalMs: 15_000,
+          random: () => 1,
+          onReplaced: (graph) => replaced.push(graph),
+        });
+        const loaded = sync.graph;
+
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(call).toBe(2);
+        expect(sync.status).toBe("error");
+        expect(sync.graph).toBe(loaded);
+        expect(replaced).toHaveLength(0);
+
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(call).toBe(3);
+        expect(sync.status).toBe("idle");
+        expect(replaced).toHaveLength(1);
+
+        await sync.close();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(unhandled.reasons).toEqual([]);
+      } finally {
+        unhandled.stop();
+      }
+    });
+
+    it("a push-mode re-fetch after a 409 retries on backoff, with no unhandled rejection", async () => {
+      vi.useFakeTimers();
+      const unhandled = captureUnhandledRejections();
+      try {
+        const { runtime, seedGraph } = await buildSeedGraph();
+        const methods: string[] = [];
+        let gets = 0;
+        const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+          const method = init?.method ?? "GET";
+          methods.push(method);
+          if (method === "PUT") return jsonResponse({ error: "stale_graph" }, { status: 409 });
+          gets += 1;
+          if (gets === 1) return jsonResponse({ error: "not_found" }, { status: 404 });
+          const graph = gets === 2 ? futureVersionGraph(seedGraph) : JSON.parse(seedGraph.toJson());
+          return jsonResponse(
+            { sourceId: "billing-agent", rev: seedGraph.rev, graph },
+            { headers: { ETag: '"platform"' } },
+          );
+        }) as typeof fetch;
+        const replaced: IntentGraph[] = [];
+
+        const sync = await attachIntentGraphSync(runtime, {
+          apiKey: "rtl_test",
+          fetch: fetchImpl,
+          debounceMs: 10,
+          random: () => 1,
+          onReplaced: (graph) => replaced.push(graph),
+        });
+        runtime.tools.catalog.experimentalEnableAdaptiveRanking(sync.graph);
+        runtime.tools.catalog.experimentalRecordBaselineTurn({
+          query: "roll back the production deploy right now",
+          invoked: ["deploy_rollback"],
+        });
+
+        await sync.flush();
+        expect(methods).toEqual(["GET", "PUT", "GET"]);
+        expect(sync.status).toBe("error");
+        expect(replaced).toHaveLength(0);
+
+        // The backoff retry re-sends the save; Platform rejects it as stale again,
+        // and this time the re-fetched graph is readable and adopted.
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(methods).toEqual(["GET", "PUT", "GET", "PUT", "GET"]);
+        expect(sync.status).toBe("idle");
+        expect(replaced).toHaveLength(1);
+        expect(sync.graph.rev).toBe(seedGraph.rev);
+
+        await sync.close();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(unhandled.reasons).toEqual([]);
+      } finally {
+        unhandled.stop();
+      }
+    });
   });
 
   (supportsLearnFalse ? it : it.skip)(

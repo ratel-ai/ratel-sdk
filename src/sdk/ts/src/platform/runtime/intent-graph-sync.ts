@@ -85,7 +85,7 @@ export interface IntentGraphSync {
 interface GetOk {
   readonly kind: "ok";
   readonly etag: string | null;
-  readonly graphJson: string;
+  readonly graph: IntentGraphType;
 }
 type GetOutcome =
   | GetOk
@@ -273,11 +273,15 @@ export async function attachIntentGraphSync(
     if (response.status === 200) {
       const body = await safeJson(response);
       if (body === undefined || body.graph === undefined) return { kind: "network" };
-      return {
-        kind: "ok",
-        etag: response.headers.get("etag"),
-        graphJson: JSON.stringify(body.graph),
-      };
+      let stored: IntentGraphType;
+      try {
+        stored = IntentGraphCtor.fromJson(JSON.stringify(body.graph));
+      } catch {
+        // A graph this build cannot read (malformed, or a newer schema version)
+        // is a failed load: it retries, and the graph in use stays as it is.
+        return { kind: "network" };
+      }
+      return { kind: "ok", etag: response.headers.get("etag"), graph: stored };
     }
     const body = await safeJson(response);
     const errorCode = typeof body?.error === "string" ? body.error : undefined;
@@ -452,7 +456,7 @@ export async function attachIntentGraphSync(
    * rejects a save as stale (409) and when a delayed initial load finally
    * discovers a stored graph after local usage accumulated during an outage. */
   function adoptGraphFromPlatform(outcome: GetOk): void {
-    graph = IntentGraphCtor.fromJson(outcome.graphJson);
+    graph = outcome.graph;
     etag = outcome.etag;
     savedRev = graph.rev;
     loaded = true;
@@ -502,7 +506,7 @@ export async function attachIntentGraphSync(
         adoptGraphFromPlatform(outcome);
       } else {
         // The very first attempt: nothing has been exposed to the app yet.
-        graph = IntentGraphCtor.fromJson(outcome.graphJson);
+        graph = outcome.graph;
         etag = outcome.etag;
         savedRev = graph.rev;
         loaded = true;
@@ -693,7 +697,7 @@ export async function attachIntentGraphSync(
         if (firstAttemptDone) {
           adoptGraphFromPlatform(outcome);
         } else {
-          graph = IntentGraphCtor.fromJson(outcome.graphJson);
+          graph = outcome.graph;
           etag = outcome.etag;
           loaded = true;
           status = "idle";
