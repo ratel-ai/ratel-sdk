@@ -141,6 +141,7 @@ export class Transport {
     const startedAt = Date.now();
 
     let response: Response;
+    let text: string;
     try {
       response = await this.fetchImpl(url, {
         method,
@@ -148,6 +149,8 @@ export class Transport {
         body: bodyInit,
         signal: AbortSignal.timeout(opts.timeoutMs ?? this.timeoutMs),
       });
+      // The body streams after the headers, so a reset or timeout can still fail here.
+      text = await response.text();
     } catch (err) {
       const message = errorMessage(err);
       this.log?.({
@@ -165,7 +168,6 @@ export class Transport {
     }
 
     let json: unknown = null;
-    const text = await response.text();
     if (text.length > 0) {
       try {
         json = JSON.parse(text);

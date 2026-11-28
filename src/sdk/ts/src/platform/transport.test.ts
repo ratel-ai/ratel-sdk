@@ -81,6 +81,43 @@ describe("Transport", () => {
     expect(err.message).toContain("socket hangup");
   });
 
+  it("wraps a body read failure after the headers arrived as network_error", async () => {
+    const events: PlatformLogEvent[] = [];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"partial":'));
+        controller.error(new Error("connection reset"));
+      },
+    });
+    const stub = fetchStub(() => new Response(body, { status: 200 }));
+    const t = new Transport({ ...OPTS, fetch: stub.fetch, logger: (e) => events.push(e) });
+    const err = (await t.request("GET", "/x").catch((e: unknown) => e)) as PlatformError;
+    expect(err).toBeInstanceOf(PlatformError);
+    expect(err.code).toBe("network_error");
+    expect(err.status).toBeNull();
+    expect(err.message).toContain("connection reset");
+    expect(events.map((e) => e.phase)).toEqual(["request", "error"]);
+  });
+
+  it("wraps a timeout while reading the body as network_error", async () => {
+    // The body never ends on its own; only the request's timeout signal fails it.
+    const stub = fetchStub((_url, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason));
+        },
+      });
+      return new Response(body, { status: 200 });
+    });
+    const t = new Transport({ ...OPTS, fetch: stub.fetch });
+    const err = (await t
+      .request("GET", "/x", { timeoutMs: 5 })
+      .catch((e: unknown) => e)) as PlatformError;
+    expect(err).toBeInstanceOf(PlatformError);
+    expect(err.code).toBe("network_error");
+    expect(err.status).toBeNull();
+  });
+
   it("returns statuses listed in acceptStatuses instead of throwing", async () => {
     const stub = fetchStub(() => new Response(null, { status: 304, headers: { etag: '"e"' } }));
     const t = new Transport({ ...OPTS, fetch: stub.fetch });
