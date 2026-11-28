@@ -674,8 +674,27 @@ def _fixture_reader(
 
 
 def _normalize(value: Any) -> str:
-    """JSON with sorted object keys: equal arguments give equal text."""
-    return json.dumps(_to_json(value), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    """JSON with sorted object keys and one text for each number: equal arguments give equal text.
+
+    JSON has one number type, so `10.0` and `10` are the same argument.
+    """
+    return json.dumps(
+        _whole_floats_as_ints(_to_json(value)),
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _whole_floats_as_ints(value: Any) -> Any:
+    """The JSON value with each float of a whole value as an int, at each depth. A bool stays."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_whole_floats_as_ints(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _whole_floats_as_ints(item) for key, item in value.items()}
+    return value
 
 
 def _to_json(value: Any) -> Any:

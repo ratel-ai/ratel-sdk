@@ -350,6 +350,45 @@ def test_recorded_matches_args_whatever_the_order_of_their_keys(
     assert body["output"] == [1]
 
 
+def charge_run(**call_args: Any) -> Callable[[RunArgs], Any]:
+    charge = tool("charge", execute=lambda **args: {"real": True})
+
+    def run(args: RunArgs) -> Any:
+        try:
+            return charge(**call_args)
+        except ToolCallError as error:
+            return {"code": error.code}
+
+    return run
+
+
+def test_recorded_matches_a_float_with_a_whole_value_to_an_integer(
+    start: Callable[..., str],
+) -> None:
+    base = start(charge_run(amount=10.0))
+    fixture = {"tool": "charge", "args": {"amount": 10}, "result": {"charged": True}}
+    body = post(base, request(tools={"charge": {"mode": "recorded"}}, fixtures=[fixture]))[1]
+    assert body["output"] == {"charged": True}
+
+
+def test_recorded_matches_a_nested_float_with_a_whole_value(start: Callable[..., str]) -> None:
+    base = start(charge_run(order={"lines": [{"qty": 2.0, "price": 9.5}]}))
+    fixture = {
+        "tool": "charge",
+        "args": {"order": {"lines": [{"qty": 2, "price": 9.5}]}},
+        "result": {"charged": True},
+    }
+    body = post(base, request(tools={"charge": {"mode": "recorded"}}, fixtures=[fixture]))[1]
+    assert body["output"] == {"charged": True}
+
+
+def test_recorded_does_not_match_true_to_one(start: Callable[..., str]) -> None:
+    base = start(charge_run(capture=True))
+    fixture = {"tool": "charge", "args": {"capture": 1}, "result": {"charged": True}}
+    body = post(base, request(tools={"charge": {"mode": "recorded"}}, fixtures=[fixture]))[1]
+    assert body["output"] == {"code": "no_fixture"}
+
+
 def test_the_last_equal_fixture_repeats(start: Callable[..., str]) -> None:
     fixtures = [{"tool": "refund_order", "args": {"id": "42"}, "result": {"from": "only"}}]
     body = run_with(start, {"refund_order": {"mode": "recorded"}}, fixtures)
